@@ -37,6 +37,9 @@ export const addEntry = mutation({
     methodOrAccount: v.optional(v.string()),
     amountCents: v.number(),
     date: v.number(),
+    // Optional Phase 1+ controls.
+    needsReview: v.optional(v.boolean()),
+    excludeFromTotals: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -55,9 +58,11 @@ export const addEntry = mutation({
     const tags = cleanTags(args.tags);
 
     const now = Date.now();
-    const needsReview = !category;
+    const needsReview = args.needsReview ?? !category;
 
-    await ctx.db.insert("entries", {
+    const excludeFromTotals = args.excludeFromTotals ?? false;
+
+    const insertedId = await ctx.db.insert("entries", {
       userId,
       type: args.type,
       bucket,
@@ -68,11 +73,14 @@ export const addEntry = mutation({
       amountCents,
       date: args.date,
       needsReview,
+      excludeFromTotals,
+      occurredAt: args.date,
+      enteredAt: now,
       createdAt: now,
       updatedAt: now,
     });
 
-    return { ok: true };
+    return { ok: true, id: insertedId };
   },
 });
 
@@ -87,6 +95,7 @@ export const updateEntry = mutation({
     amountCents: v.optional(v.number()),
     date: v.optional(v.number()),
     needsReview: v.optional(v.boolean()),
+    excludeFromTotals: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -106,10 +115,16 @@ export const updateEntry = mutation({
       if (!Number.isFinite(cents) || cents <= 0) throw new Error("Amount must be > 0");
       patch.amountCents = cents;
     }
-    if (args.date !== undefined) patch.date = args.date;
+    if (args.date !== undefined) {
+      patch.date = args.date;
+      // Keep richer timestamp aligned unless you've already started using a different occurredAt.
+      patch.occurredAt = args.date;
+    }
 
     if (args.needsReview !== undefined) patch.needsReview = args.needsReview;
     else if (args.category !== undefined) patch.needsReview = !cleanStr(args.category);
+
+    if (args.excludeFromTotals !== undefined) patch.excludeFromTotals = args.excludeFromTotals;
 
     await ctx.db.patch(args.id, patch);
     return { ok: true };
@@ -133,6 +148,8 @@ export const listInbox = query({
     const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 60, 10), 200);
 
+    // Inbox is intentionally simple for Phase 1:
+    // show anything explicitly marked needsReview.
     return await ctx.db
       .query("entries")
       .withIndex("by_user_needsReview_date", q =>

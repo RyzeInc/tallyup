@@ -30,6 +30,7 @@ export default function SummaryPage() {
     const categorySpend = new Map<string, number>();
 
     for (const e of all) {
+      if (e.excludeFromTotals) continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
 

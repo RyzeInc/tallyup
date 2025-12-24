@@ -14,8 +14,21 @@ export default defineSchema({
     note: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
 
+    // Money is stored as *integer cents* (validated in mutations).
     amountCents: v.number(),
-    date: v.number(), // local midnight timestamp
+
+    // Local-midnight timestamp of when the money event occurred (used for indexes/filtering).
+    // Kept as "date" for backwards compatibility with existing UI.
+    date: v.number(),
+
+    // Optional richer timestamps for future-proofing.
+    // occurredAt: exact event time (can equal `date` in Phase 1)
+    // enteredAt: when the user logged it
+    occurredAt: v.optional(v.number()),
+    enteredAt: v.optional(v.number()),
+
+    // Safety valve so totals don't get wrecked by transfers/reimbursed noise.
+    excludeFromTotals: v.optional(v.boolean()),
 
     needsReview: v.boolean(),
 

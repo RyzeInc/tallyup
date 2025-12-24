@@ -1,13 +1,11 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import TagChips from "@/components/TagChips";
 import {
   DEFAULT_BUCKETS,
-  DEFAULT_TAGS,
   EntryType,
   cacheKey,
   dollarsToCents,
@@ -29,10 +27,18 @@ export default function LogPage() {
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg?: string }>({ kind: "idle" });
+  const [showMore, setShowMore] = useState(false);
+
+  const [status, setStatus] = useState<
+    { kind: "idle" } |
+    { kind: "ok"; msg: string; undoId?: string } |
+    { kind: "err"; msg: string }
+  >({ kind: "idle" });
+
+  const lastSavedRef = useRef<{ type: EntryType; bucket: string; category?: string; note?: string; methodOrAccount?: string; amount: string } | null>(null);
 
   const addEntry = useMutation(api.entries.addEntry);
+  const deleteEntry = useMutation(api.entries.deleteEntry);
 
   const serverBuckets = useQuery(api.entries.listBuckets, { type });
   const effectiveBuckets = useMemo(() => {
@@ -71,11 +77,10 @@ export default function LogPage() {
     const ts = yyyymmddToLocalMidnightTs(date);
 
     try {
-      await addEntry({
+      const res = await addEntry({
         type,
         bucket: effectiveBucket,
         category: category.trim() ? category.trim() : undefined,
-        tags: tags.length ? tags : undefined,
         note: note.trim() ? note.trim() : undefined,
         methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
         amountCents: cents,
@@ -91,17 +96,50 @@ export default function LogPage() {
         } catch {}
       }
 
+      lastSavedRef.current = {
+        type,
+        bucket: effectiveBucket,
+        category: category.trim() ? category.trim() : undefined,
+        note: note.trim() ? note.trim() : undefined,
+        methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
+        amount,
+      };
+
       setAmount("");
       setCategory("");
       setNote("");
       setMethodOrAccount("");
-      setTags([]);
 
-      setStatus({ kind: "ok", msg: "Saved." });
-      setTimeout(() => setStatus({ kind: "idle" }), 1200);
+      const undoId = (res as any)?.id as string | undefined;
+      setStatus({ kind: "ok", msg: "Saved.", undoId });
+      setTimeout(() => setStatus({ kind: "idle" }), 5000);
     } catch (e: any) {
       setStatus({ kind: "err", msg: e?.message ?? "Failed to save." });
     }
+  }
+
+  async function onUndo() {
+    if (status.kind !== "ok" || !status.undoId) return;
+    try {
+      await deleteEntry({ id: status.undoId as any });
+      setStatus({ kind: "ok", msg: "Undone." });
+      setTimeout(() => setStatus({ kind: "idle" }), 1200);
+    } catch (e: any) {
+      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo." });
+    }
+  }
+
+  function duplicateLast() {
+    const last = lastSavedRef.current;
+    if (!last) return;
+    setType(last.type);
+    setBucket(last.bucket === "Other" ? "Other" : last.bucket);
+    if (last.bucket !== "Other") setCustomBucket("");
+    setAmount(last.amount);
+    setCategory(last.category ?? "");
+    setNote(last.note ?? "");
+    setMethodOrAccount(last.methodOrAccount ?? "");
+    setShowMore(Boolean(last.methodOrAccount));
   }
 
   return (
@@ -148,6 +186,23 @@ export default function LogPage() {
           placeholder="$0.00"
           className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-lg outline-none focus:border-neutral-500"
         />
+
+        <div className="mb-4 flex gap-2">
+          <button
+            type="button"
+            onClick={duplicateLast}
+            className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
+          >
+            Duplicate last
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMore((s) => !s)}
+            className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
+          >
+            {showMore ? "Less" : "More"}
+          </button>
+        </div>
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
@@ -199,20 +254,19 @@ export default function LogPage() {
           ))}
         </datalist>
 
-        <div className="mb-3">
-          <div className="text-xs text-neutral-400 mb-2">Tags (optional)</div>
-          <TagChips value={tags} onChange={setTags} options={DEFAULT_TAGS as unknown as string[]} />
-        </div>
-
-        <label className="block text-xs text-neutral-400 mb-1">
-          {type === "expense" ? "Payment method (optional)" : "Account received on (optional)"}
-        </label>
-        <input
-          value={methodOrAccount}
-          onChange={(e) => setMethodOrAccount(e.target.value)}
-          placeholder={type === "expense" ? "e.g., Debit, Discover, Checking" : "e.g., Checking, Cash"}
-          className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
-        />
+        {showMore ? (
+          <>
+            <label className="block text-xs text-neutral-400 mb-1">
+              {type === "expense" ? "Payment method (optional)" : "Account received on (optional)"}
+            </label>
+            <input
+              value={methodOrAccount}
+              onChange={(e) => setMethodOrAccount(e.target.value)}
+              placeholder={type === "expense" ? "e.g., Debit, Discover, Checking" : "e.g., Checking, Cash"}
+              className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+            />
+          </>
+        ) : null}
 
         <label className="block text-xs text-neutral-400 mb-1">Note (optional)</label>
         <textarea
@@ -230,9 +284,18 @@ export default function LogPage() {
           Save
         </button>
 
-        <div className="mt-3 min-h-[1.25rem] text-sm">
+        <div className="mt-3 min-h-[1.25rem] text-sm flex items-center gap-3">
           {status.kind === "ok" ? <span className="text-emerald-400">{status.msg}</span> : null}
           {status.kind === "err" ? <span className="text-rose-400">{status.msg}</span> : null}
+          {status.kind === "ok" && status.undoId ? (
+            <button
+              type="button"
+              onClick={onUndo}
+              className="text-xs text-neutral-300 underline underline-offset-4 hover:text-white"
+            >
+              Undo
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-6 text-xs text-neutral-500">
