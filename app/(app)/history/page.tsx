@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import EntryCard from "@/components/EntryCard";
+import RecurringModal from "@/components/RecurringModal";
 import { EntryType, startOfMonthLocalTs, startOfWeekLocalTs, todayYYYYMMDD, yyyymmddToLocalMidnightTs } from "@/components/utils";
 
 export default function HistoryPage() {
@@ -33,6 +34,8 @@ export default function HistoryPage() {
     endDate,
     limit: 400,
   }) as any[] | undefined;
+
+  const [selected, setSelected] = useState<any | null>(null);
 
   return (
     <div>
@@ -92,17 +95,28 @@ export default function HistoryPage() {
                 key={e._id}
                 entry={e}
                 rightSlot={
-                  <button
-                    onClick={() => deleteEntry({ id: e._id })}
-                    className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelected(e)}
+                      className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
+                    >
+                      Make recurring
+                    </button>
+
+                    <button
+                      onClick={() => deleteEntry({ id: e._id })}
+                      className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 }
               />
             ))}
           </div>
         )}
+
+        {selected ? <RecurringModal entry={selected} onClose={() => setSelected(null)} onCreated={(id) => setSelected(null)} /> : null}
       </SignedIn>
     </div>
   );

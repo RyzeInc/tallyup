@@ -9,10 +9,12 @@ import {
   EntryType,
   cacheKey,
   dollarsToCents,
+  centsToDollars,
   todayYYYYMMDD,
   uniqCaseInsensitive,
   yyyymmddToLocalMidnightTs,
 } from "@/components/utils";
+import RecurringModal from "@/components/RecurringModal";
 
 export default function LogPage() {
   const { user } = useUser();
@@ -141,6 +143,8 @@ export default function LogPage() {
     setMethodOrAccount(last.methodOrAccount ?? "");
     setShowMore(Boolean(last.methodOrAccount));
   }
+
+  const [selected, setSelected] = useState<any | null>(null);
 
   return (
     <div>
@@ -288,15 +292,44 @@ export default function LogPage() {
           {status.kind === "ok" ? <span className="text-emerald-400">{status.msg}</span> : null}
           {status.kind === "err" ? <span className="text-rose-400">{status.msg}</span> : null}
           {status.kind === "ok" && status.undoId ? (
-            <button
-              type="button"
-              onClick={onUndo}
-              className="text-xs text-neutral-300 underline underline-offset-4 hover:text-white"
-            >
-              Undo
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onUndo}
+                className="text-xs text-neutral-300 underline underline-offset-4 hover:text-white"
+              >
+                Undo
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  // build a minimal entry object for the modal
+                  const last = lastSavedRef.current;
+                  if (!last || !status.undoId) return;
+                  setSelected({
+                    _id: status.undoId,
+                    type: last.type,
+                    bucket: last.bucket,
+                    category: last.category,
+                    note: last.note,
+                    methodOrAccount: last.methodOrAccount,
+                    amountCents: dollarsToCents(last.amount),
+                  });
+                }}
+                className="ml-3 rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200"
+              >
+                Make recurring
+              </button>
+            </>
           ) : null}
         </div>
+
+        <div className="mt-6 text-xs text-neutral-500">
+          If you skip Category, it goes to Inbox so you can finish later.
+        </div>
+
+        {selected ? <RecurringModal entry={selected} onClose={() => setSelected(null)} /> : null}
 
         <div className="mt-6 text-xs text-neutral-500">
           If you skip Category, it goes to Inbox so you can finish later.

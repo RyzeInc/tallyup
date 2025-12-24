@@ -5,6 +5,7 @@ Short, actionable notes to help an AI contributor be productive immediately.
 ## Quick start (dev)
 - Install deps and run Next dev: `npm install` then `npm run dev` (or `pnpm dev`/`yarn dev`).
 - Convex (DB + server functions) is required for full local behavior: run `npx convex dev` in a separate terminal. The Convex CLI prints a URL — set `NEXT_PUBLIC_CONVEX_URL` to that URL for the Next app (`app/ConvexClientProvider.tsx` throws if it's missing).
+- Convex actions do not have direct DB access. In `action` functions use `ctx.runQuery(...)` and `ctx.runMutation(...)` to call queries/mutations (don't use `ctx.db` inside actions).
 - Clerk auth is required for end-to-end Convex mutations. For local development: configure Clerk dev keys or run without auth and mock `ctx.auth.getUserIdentity()` when testing server functions.
 - Lint: `npm run lint` (ESLint configured via `eslint.config.mjs`).
 
@@ -23,6 +24,14 @@ TallyUp is an *event-first* personal financial truth engine focused on awareness
 - Buckets & Tags: Defaults in `components/utils.ts` (DEFAULT_BUCKETS, DEFAULT_TAGS); buckets are free-text (normalized on queries/filters) and used heavily in UX (summary buckets pie, filters in log).
 - Money & Dates: Use `amountCents` (integer cents) and the helpers in `components/utils.ts` (`dollarsToCents`, `centsToDollars`, `yyyymmddToLocalMidnightTs`, `startOfWeekLocalTs`).
 - Summary & insights: Summary calculations live in `app/(app)/summary/page.tsx` — replicate its approach when building new analytics: aggregate event-level data, preserve outliers, avoid smoothing into monthly salary.
+
+## Recurring series & matching (current implementation)
+- Data: A `recurringRules` table stores series/matcher information (now expanded to include fields like `displayName`, `autolinkEnabled`, cadence guidance, amountMode, min/max/tolerance, and `confidence`). Entries link to a recurring series using `entries.recurringRuleId` (typed `v.id("recurringRules")`).
+- Detection: A detector prototype lives in `convex/detector.ts` (`detectRecurringCandidatesFromEntries`) which groups by `(type,bucket,category)`, analyzes intervals and amount variability, and returns candidates with `amountMode` and `amountTolerancePercent`.
+- Autolink: `addEntry` (in `convex/entries.ts`) now performs a simple autolink pass: it queries active series with `autolinkEnabled` and links the best match when criteria (bucket/category/amount tolerance) are satisfied. This is intentionally conservative — adjust thresholds in server logic as needed.
+- Backfill: `convex/recurring.ts` implements a `backfillRecurringRules` action that creates series from strong candidates and can link matching historical entries (dry-run support provided in the action args).
+
+Notes: The repo favors a "Series (user-facing)" mindset backed by matcher fields; if you prefer a 2-table model (Series + Matchers) that is still straightforward to add later, but currently the series object contains matching knobs for Phase 1.
 
 ## Implementation checklist (when adding features)
 1. Server: add/modify Convex queries/mutations in `convex/` following patterns in `entries.ts` and validate inputs server-side.

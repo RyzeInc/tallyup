@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as detector from "../detector.js";
 import type * as entries from "../entries.js";
+import type * as recurring from "../recurring.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +19,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  detector: typeof detector;
   entries: typeof entries;
+  recurring: typeof recurring;
 }>;
 
 /**

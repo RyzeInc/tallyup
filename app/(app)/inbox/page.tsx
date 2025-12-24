@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import EntryCard from "@/components/EntryCard";
 import TagChips from "@/components/TagChips";
+import RecurringModal from "@/components/RecurringModal";
 import { DEFAULT_TAGS, cacheKey, uniqCaseInsensitive } from "@/components/utils";
 
 export default function InboxPage() {
@@ -36,6 +37,8 @@ export default function InboxPage() {
     ]).slice(0, 60);
   }, [localExpenseCats, expenseCats, incomeCats]);
 
+  const [selected, setSelected] = useState<any | null>(null);
+
   return (
     <div>
       <div className="mb-4">
@@ -62,11 +65,13 @@ export default function InboxPage() {
         ) : (
           <div className="space-y-3">
             {inbox.map((e) => (
-              <InboxItem key={e._id} entry={e} onUpdate={updateEntry} catSuggestions={catSuggestions} />
+              <InboxItem key={e._id} entry={e} onUpdate={updateEntry} catSuggestions={catSuggestions} onMakeRecurring={() => setSelected(e)} />
             ))}
           </div>
         )}
       </SignedIn>
+
+      {selected ? <RecurringModal entry={selected} onClose={() => setSelected(null)} /> : null}
     </div>
   );
 }
@@ -75,10 +80,12 @@ function InboxItem({
   entry,
   onUpdate,
   catSuggestions,
+  onMakeRecurring,
 }: {
   entry: any;
   onUpdate: (args: any) => Promise<any>;
   catSuggestions: string[];
+  onMakeRecurring?: () => void;
 }) {
   const [category, setCategory] = useState(entry.category ?? "");
   const [tags, setTags] = useState<string[]>(entry.tags ?? []);
@@ -106,13 +113,22 @@ function InboxItem({
     <EntryCard
       entry={entry}
       rightSlot={
-        <button
-          onClick={done}
-          disabled={busy}
-          className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-900 disabled:opacity-60"
-        >
-          Done
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onMakeRecurring?.()}
+            className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200"
+          >
+            Make recurring
+          </button>
+
+          <button
+            onClick={done}
+            disabled={busy}
+            className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-900 disabled:opacity-60"
+          >
+            Done
+          </button>
+        </div>
       }
     >
       <div className="space-y-3">

@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 async function requireUserId(ctx: any): Promise<string> {
@@ -79,6 +79,64 @@ export const addEntry = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    // Autolink: if any active recurring rule matches this entry and autolinkEnabled is true,
+    // link the entry to the best matching rule and update lastMatchedAt.
+    try {
+      const activeRules = await ctx.db
+        .query("recurringRules")
+        .withIndex("by_user_active", q => q.eq("userId", userId).eq("active", true))
+        .order("desc")
+        .take(200);
+
+      const bucketLower = (bucket ?? "").trim().toLowerCase();
+      const categoryLower = (category ?? "").trim().toLowerCase();
+
+      let bestRule: any = null;
+      let bestScore = 0;
+
+      for (const r of activeRules) {
+        if (r.type !== args.type) continue;
+        if (!r.autolinkEnabled) continue;
+
+        // Filter by bucket/category if present
+        if (r.bucket && (r.bucket ?? "").trim().toLowerCase() !== bucketLower) continue;
+        if (r.category && (r.category ?? "").trim().toLowerCase() !== categoryLower) continue;
+
+        // Amount matching
+        let amountMatchScore = 0;
+        if (r.amountCents !== undefined && r.amountCents !== null) {
+          const tol = r.amountTolerancePercent ?? 0;
+          const diff = Math.abs(amountCents - r.amountCents);
+          const ok = tol > 0 ? diff <= Math.max(1, Math.round((r.amountCents * tol) / 100)) : diff === 0;
+          amountMatchScore = ok ? 1 : 0;
+        } else if (r.minAmountCents !== undefined || r.maxAmountCents !== undefined) {
+          const min = r.minAmountCents ?? -Infinity;
+          const max = r.maxAmountCents ?? Infinity;
+          amountMatchScore = amountCents >= min && amountCents <= max ? 1 : 0;
+        } else {
+          // no amount constraint
+          amountMatchScore = 1;
+        }
+
+        if (!amountMatchScore) continue;
+
+        // Basic scoring: use rule.confidence as primary score
+        const score = (r.confidence ?? 0) + (r.autolinkEnabled ? 5 : 0);
+        if (score > bestScore) {
+          bestScore = score;
+          bestRule = r;
+        }
+      }
+
+      if (bestRule) {
+        await ctx.db.patch(insertedId, { recurringRuleId: bestRule._id, updatedAt: Date.now() });
+        await ctx.db.patch(bestRule._id, { lastMatchedAt: Date.now(), updatedAt: Date.now() });
+      }
+    } catch (e) {
+      // Do not block insert on autolink failures
+      console.error("Autolink error:", e);
+    }
 
     return { ok: true, id: insertedId };
   },
@@ -265,5 +323,49 @@ export const listBuckets = query({
       if (out.length >= 30) break;
     }
     return out;
+  },
+});
+
+// Public helper to list recent entries across users (used by backfill actions).
+export const listRecentEntries = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 5000, 100), 5000);
+    return await ctx.db.query("entries").order("desc").take(limit);
+  },
+});
+
+// Internal query used by server actions to fetch entries for a specific user (bypasses auth checks).
+export const listEntriesForUser = internalQuery({
+  args: {
+    userId: v.string(),
+    type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 2000, 20), 2000);
+    const start = args.startDate ?? 0;
+    const end = args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000;
+
+    let rows: any[] = [];
+    if (args.type) {
+      rows = await ctx.db
+        .query("entries")
+        .withIndex("by_user_type_date", q =>
+          q.eq("userId", args.userId).eq("type", args.type!).gte("date", start).lt("date", end)
+        )
+        .order("desc")
+        .take(limit);
+    } else {
+      rows = await ctx.db
+        .query("entries")
+        .withIndex("by_user_date", q => q.eq("userId", args.userId).gte("date", start).lt("date", end))
+        .order("desc")
+        .take(limit);
+    }
+
+    return rows;
   },
 });
