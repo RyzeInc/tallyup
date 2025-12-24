@@ -29,9 +29,18 @@ export default function BottomNav() {
             return tabsCtx ? (
               <button
                 key={t.href}
-                onClick={() => tabsCtx.navigate(t.key)}
-                className={["flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-xs", active ? "" : "text-neutral-400 hover:text-neutral-200"].join(" ")}
+                onClick={() => {
+                  // micro interaction: immediate visual feedback while navigating
+                  const el = window.event?.currentTarget as HTMLElement | undefined;
+                  if (el) el.style.transform = "scale(0.98)";
+                  requestAnimationFrame(() => {
+                    if (el) el.style.transform = "";
+                  });
+                  tabsCtx.navigate(t.key);
+                }}
+                className={["flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-xs transition-transform duration-100", active ? "" : "text-neutral-400 hover:text-neutral-200"].join(" ")}
                 style={active ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)" } : undefined}
+                aria-pressed={active}
               >
                 <span className="text-lg leading-none">{t.icon}</span>
                 <span>{t.label}</span>

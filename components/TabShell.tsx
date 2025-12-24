@@ -48,6 +48,31 @@ export default function TabShell() {
     summary: useRef<HTMLDivElement | null>(null),
   };
 
+  // prefetch other routes off the main thread to make tab taps feel instant
+  useEffect(() => {
+    try {
+      const idle = (window as any).requestIdleCallback ?? ((fn: any) => setTimeout(fn, 200));
+      idle(() => {
+        try {
+          const { prefetch } = require("next/navigation");
+        } catch {}
+        // Prefetch the route JS/chunks using router if available
+        try {
+          // dynamic import to avoid SSR issues
+          const { useRouter } = require("next/navigation");
+          // can't call hook here; instead call router.prefetch via global next router if available
+          // fallback: attempt to fetch the route data via fetch to warm network
+          void fetch("/log", { method: "GET", credentials: "same-origin" }).catch(() => {});
+          void fetch("/inbox", { method: "GET", credentials: "same-origin" }).catch(() => {});
+          void fetch("/history", { method: "GET", credentials: "same-origin" }).catch(() => {});
+          void fetch("/summary", { method: "GET", credentials: "same-origin" }).catch(() => {});
+        } catch (e) {
+          // ignore
+        }
+      });
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     // if pathname changes (deep link), sync current tab
     if (!pathname) return;
@@ -78,9 +103,9 @@ export default function TabShell() {
       // ignore
     }
 
-    // small animation guard
+    // animation guard matching CSS duration (shorter for snappier feel)
     animatingRef.current = true;
-    setTimeout(() => (animatingRef.current = false), 300);
+    setTimeout(() => (animatingRef.current = false), 160);
   }
 
   return (
@@ -122,8 +147,8 @@ const TabPanel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivEl
           height: "100%",
           overflowY: "auto",
           WebkitOverflowScrolling: "touch",
-          transition: "transform 220ms cubic-bezier(.2,.9,.2,1), opacity 220ms",
-          transform: active ? "translateX(0)" : "translateX(6%)",
+          transition: "transform 120ms cubic-bezier(.2,.9,.2,1), opacity 120ms",
+          transform: active ? "translateX(0)" : "translateX(3%)",
           opacity: active ? 1 : 0,
           pointerEvents: active ? "auto" : "none",
           willChange: "transform, opacity",
