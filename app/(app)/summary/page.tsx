@@ -70,7 +70,7 @@ export default function SummaryPage() {
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
           <div className="text-2xl font-semibold tracking-tight">Summary</div>
-          <div className="mt-1 text-sm text-neutral-400">Micro-dashboard.</div>
+          <div className="mt-1 text-sm text-neutral-400">Your micro-dashboard.</div>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setMode("week")} className={pill(mode === "week")} style={mode === "week" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Week</button>
@@ -93,8 +93,8 @@ export default function SummaryPage() {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <Tile title="Income" value={centsToDollars(computed.income)} sub={label} accent="emerald" />
-              <Tile title="Spending" value={centsToDollars(computed.expense)} sub={label} accent="rose" />
+              <Tile title="Received" value={centsToDollars(computed.income)} sub={label} accent="emerald" />
+              <Tile title="Spent" value={centsToDollars(computed.expense)} sub={label} accent="rose" />
               <Tile title="Net" value={centsToDollars(computed.net)} sub={label} accent="sky" />
               <Tile title="Needs Review" value={`${inbox.length}`} sub="entries" accent="amber" />
             </div>

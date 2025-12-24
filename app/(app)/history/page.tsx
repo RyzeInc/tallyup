@@ -41,7 +41,7 @@ export default function HistoryPage() {
     <div>
       <div className="mb-4">
         <div className="text-2xl font-semibold tracking-tight">History</div>
-        <div className="mt-1 text-sm text-neutral-400">Filter + delete.</div>
+        <div className="mt-1 text-sm text-neutral-400">Filter & explore your past.</div>
         <div className="mt-2 text-sm text-neutral-400">Tip: Use "Make recurring" to save repetitive transactions — autolink won't be enabled unless you explicitly confirm it.</div>
       </div>
 
@@ -58,14 +58,14 @@ export default function HistoryPage() {
         <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4 space-y-3">
           <div className="grid grid-cols-3 gap-2">
             <button onClick={() => setType("all")} className={pill(type === "all")} style={type === "all" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>All</button>
-            <button onClick={() => setType("expense")} className={pill(type === "expense")} style={type === "expense" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Expense</button>
-            <button onClick={() => setType("income")} className={pill(type === "income")} style={type === "income" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Income</button>
+            <button onClick={() => setType("expense")} className={pill(type === "expense")} style={type === "expense" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Spent</button>
+            <button onClick={() => setType("income")} className={pill(type === "income")} style={type === "income" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Received</button>
           </div>
 
           <input
             value={bucket}
             onChange={(e) => setBucket(e.target.value)}
-            placeholder="Filter by bucket (optional)"
+            placeholder="Which part of your life? (optional)"
             className="w-full rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-sm outline-none focus:border-neutral-600"
           />
 

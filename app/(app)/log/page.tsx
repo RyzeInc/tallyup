@@ -149,8 +149,8 @@ export default function LogPage() {
   return (
     <div>
       <div className="mb-4">
-        <div className="text-2xl font-semibold tracking-tight">Log</div>
-        <div className="mt-1 text-sm text-neutral-400">Capture now. Refine later.</div>
+        <div className="text-2xl font-semibold tracking-tight">Quick add</div>
+        <div className="mt-1 text-sm text-neutral-400">Just the basics — you can finish later</div>
       </div>
 
       <SignedOut>
@@ -171,7 +171,7 @@ export default function LogPage() {
             }`}
             style={type === "expense" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}
           >
-            Expense
+            Spent
           </button>
           <button
             onClick={() => setType("income")}
@@ -180,16 +180,16 @@ export default function LogPage() {
             }`}
             style={type === "income" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}
           >
-            Income
+            Received
           </button>
         </div>
 
-        <label className="block text-xs text-neutral-400 mb-1">Amount</label>
+        <label className="block text-xs text-neutral-400 mb-1">How much was it?</label>
         <input
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           inputMode="decimal"
-          placeholder="$0.00"
+          placeholder="$0 — tap to edit"
           className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-lg outline-none focus:border-neutral-500"
         />
 
@@ -199,20 +199,20 @@ export default function LogPage() {
             onClick={duplicateLast}
             className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
           >
-            Duplicate last
+            Use last one
           </button>
           <button
             type="button"
             onClick={() => setShowMore((s) => !s)}
             className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
           >
-            {showMore ? "Less" : "More"}
+            {showMore ? "Less" : "Options"}
           </button>
         </div>
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">When</label>
+            <label className="block text-xs text-neutral-400 mb-1">When was this?</label>
             <input
               type="date"
               value={date}
@@ -222,7 +222,7 @@ export default function LogPage() {
           </div>
 
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Bucket / Purpose</label>
+            <label className="block text-xs text-neutral-400 mb-1">Which part of your life?</label>
             <select
               value={bucket}
               onChange={(e) => setBucket(e.target.value)}
