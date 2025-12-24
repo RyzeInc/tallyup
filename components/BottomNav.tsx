@@ -9,7 +9,7 @@ const tabs = [
   { href: "/inbox", label: "Review", icon: "✉", key: "inbox" },
   { href: "/history", label: "Activity", icon: "≡", key: "history" },
   { href: "/summary", label: "Overview", icon: "▦", key: "summary" },
-  { href: "/recurring", label: "Patterns", icon: "🔁", key: "patterns" },
+  { href: "/profile", label: "Profile", icon: "🔁", key: "profile" },
 ];
 
 export default function BottomNav() {

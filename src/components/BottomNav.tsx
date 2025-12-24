@@ -8,7 +8,7 @@ const tabs = [
   { href: "/inbox", label: "Review", icon: "✉" },
   { href: "/history", label: "Activity", icon: "≡" },
   { href: "/summary", label: "Overview", icon: "▦" },
-  { href: "/recurring", label: "Patterns", icon: "🔁" },
+  { href: "/profile", label: "Profile", icon: "🔁" },
 ];
 
 export default function BottomNav() {

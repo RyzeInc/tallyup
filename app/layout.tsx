@@ -4,6 +4,7 @@ import ConvexClientProvider from "./ConvexClientProvider";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/components/ToastProvider";
 import { OptimisticLinksProvider } from "@/components/OptimisticLinksProvider";
+import AuthGate from "@/components/AuthGate";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -13,7 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ThemeProvider>
             <ToastProvider>
               <OptimisticLinksProvider>
-                <ConvexClientProvider>{children}</ConvexClientProvider>
+                {/* Require sign-in for the app; show SignIn UI when SignedOut */}
+                <AuthGate>
+                  <ConvexClientProvider>{children}</ConvexClientProvider>
+                </AuthGate>
               </OptimisticLinksProvider>
             </ToastProvider>
           </ThemeProvider>

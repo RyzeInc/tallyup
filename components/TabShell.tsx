@@ -6,22 +6,22 @@ import LogPage from "@/app/(app)/log/page";
 import InboxPage from "@/app/(app)/inbox/page";
 import HistoryPage from "@/app/(app)/history/page";
 import SummaryPage from "@/app/(app)/summary/page";
-import RecurringPage from "@/app/(app)/recurring/page";
+import ProfilePage from "@/app/(app)/profile/page";
 
-export type TabKey = "log" | "inbox" | "history" | "summary" | "patterns";
+export type TabKey = "log" | "inbox" | "history" | "summary" | "profile";
 const hrefToKey: Record<string, TabKey> = {
   "/log": "log",
   "/inbox": "inbox",
   "/history": "history",
   "/summary": "summary",
-  "/recurring": "patterns",
+  "/profile": "profile",
 };
 const keyToHref: Record<TabKey, string> = {
   log: "/log",
   inbox: "/inbox",
   history: "/history",
   summary: "/summary",
-  patterns: "/recurring",
+  profile: "/profile",
 };
 
 const TabsContext = createContext<{
@@ -43,35 +43,31 @@ export default function TabShell() {
   const animatingRef = useRef(false);
 
   // scroll positions per tab
-  const scrollMap = useRef<Record<TabKey, number>>({ log: 0, inbox: 0, history: 0, summary: 0, patterns: 0 });
+  const scrollMap = useRef<Record<TabKey, number>>({ log: 0, inbox: 0, history: 0, summary: 0, profile: 0 });
   const containerRefs: Record<TabKey, React.RefObject<HTMLDivElement | null>> = {
     log: useRef<HTMLDivElement | null>(null),
     inbox: useRef<HTMLDivElement | null>(null),
     history: useRef<HTMLDivElement | null>(null),
     summary: useRef<HTMLDivElement | null>(null),
-    patterns: useRef<HTMLDivElement | null>(null),
+    profile: useRef<HTMLDivElement | null>(null),
   };
 
   // prefetch other routes off the main thread to make tab taps feel instant
+  // NOTE: avoid aggressive fetch() of full routes (can trigger SSR of pages like /history)
   useEffect(() => {
     try {
       const idle = (window as any).requestIdleCallback ?? ((fn: any) => setTimeout(fn, 200));
       idle(() => {
         try {
           const { prefetch } = require("next/navigation");
-        } catch {}
-        // Prefetch the route JS/chunks using router if available
-        try {
-          // dynamic import to avoid SSR issues
-          const { useRouter } = require("next/navigation");
-          // can't call hook here; instead call router.prefetch via global next router if available
-          // fallback: attempt to fetch the route data via fetch to warm network
-          void fetch("/log", { method: "GET", credentials: "same-origin" }).catch(() => {});
-          void fetch("/inbox", { method: "GET", credentials: "same-origin" }).catch(() => {});
-          void fetch("/history", { method: "GET", credentials: "same-origin" }).catch(() => {});
-          void fetch("/summary", { method: "GET", credentials: "same-origin" }).catch(() => {});
+          // If available, prefetch only the small route bundle for the Add page to keep taps instant
+          if (typeof prefetch === "function") {
+            try {
+              prefetch("/log");
+            } catch {}
+          }
         } catch (e) {
-          // ignore
+          // don't warm network via fetch() — it's been too aggressive in dev
         }
       });
     } catch (e) {}
@@ -126,9 +122,10 @@ export default function TabShell() {
         </TabPanel>
         <TabPanel key="summary" id="summary" active={current === "summary"} ref={containerRefs.summary} role="region">
           <SummaryPage />
-        </TabPanel>          <TabPanel key="patterns" id="patterns" active={current === "patterns"} ref={containerRefs.patterns} role="region">
-            <RecurringPage />
-          </TabPanel>      </div>
+        </TabPanel>
+        <TabPanel key="profile" id="profile" active={current === "profile"} ref={containerRefs.profile} role="region">
+          <ProfilePage />
+        </TabPanel>      </div>
       <style jsx>{`
         .tab-shell { position: relative; min-height: 60vh; }
       `}</style>
