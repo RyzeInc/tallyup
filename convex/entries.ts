@@ -1,8 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-function requireUserId(ctx: any): string {
-  const identity = ctx.auth.getUserIdentity();
+async function requireUserId(ctx: any): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
   return identity.subject;
 }
@@ -39,7 +39,7 @@ export const addEntry = mutation({
     date: v.number(),
   },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
 
     const bucket = args.bucket.trim();
     if (!bucket) throw new Error("Bucket is required.");
@@ -89,7 +89,7 @@ export const updateEntry = mutation({
     needsReview: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
 
@@ -119,7 +119,7 @@ export const updateEntry = mutation({
 export const deleteEntry = mutation({
   args: { id: v.id("entries") },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
     await ctx.db.delete(args.id);
@@ -130,7 +130,7 @@ export const deleteEntry = mutation({
 export const listInbox = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 60, 10), 200);
 
     return await ctx.db
@@ -152,7 +152,7 @@ export const listEntries = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 300, 20), 800);
 
     const start = args.startDate ?? 0;
@@ -192,7 +192,7 @@ export const listCategories = query({
     bucket: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
 
     const rows = await ctx.db
       .query("entries")
@@ -222,7 +222,7 @@ export const listCategories = query({
 export const listBuckets = query({
   args: { type: v.optional(v.union(v.literal("expense"), v.literal("income"))) },
   handler: async (ctx, args) => {
-    const userId = requireUserId(ctx);
+    const userId = await requireUserId(ctx);
 
     const rows = args.type
       ? await ctx.db
