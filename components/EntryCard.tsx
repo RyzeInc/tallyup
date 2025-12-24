@@ -21,12 +21,12 @@ export default function EntryCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-lg font-semibold">
-            <span className={isExpense ? "text-rose-400" : "text-emerald-400"}>
+            <span style={{ color: isExpense ? "var(--destructive-foreground)" : "var(--success-foreground)", fontWeight: 600 }}>
               {isExpense ? "-" : "+"}
               {centsToDollars(entry.amountCents)}
             </span>
             {(entry.recurringRuleId || isOptimistic) ? (
-              <span className="ml-3 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Recurring</span>
+              <span className="ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: "var(--success)", color: "var(--success-foreground)" }}>Recurring</span>
             ) : null}
           </div>
           <div className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>

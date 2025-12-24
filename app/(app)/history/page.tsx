@@ -49,7 +49,7 @@ export default function HistoryPage() {
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
           <div className="text-sm text-neutral-300 mb-3">Sign in to view history.</div>
           <SignInButton mode="modal">
-            <button className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-neutral-900">Sign in</button>
+            <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
@@ -57,9 +57,9 @@ export default function HistoryPage() {
       <SignedIn>
         <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4 space-y-3">
           <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setType("all")} className={pill(type === "all")}>All</button>
-            <button onClick={() => setType("expense")} className={pill(type === "expense")}>Expense</button>
-            <button onClick={() => setType("income")} className={pill(type === "income")}>Income</button>
+            <button onClick={() => setType("all")} className={pill(type === "all")} style={type === "all" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>All</button>
+            <button onClick={() => setType("expense")} className={pill(type === "expense")} style={type === "expense" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Expense</button>
+            <button onClick={() => setType("income")} className={pill(type === "income")} style={type === "income" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Income</button>
           </div>
 
           <input
@@ -70,9 +70,9 @@ export default function HistoryPage() {
           />
 
           <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setRange("week")} className={pill(range === "week")}>This Week</button>
-            <button onClick={() => setRange("month")} className={pill(range === "month")}>This Month</button>
-            <button onClick={() => setRange("custom")} className={pill(range === "custom")}>Custom</button>
+            <button onClick={() => setRange("week")} className={pill(range === "week")} style={range === "week" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Week</button>
+            <button onClick={() => setRange("month")} className={pill(range === "month")} style={range === "month" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Month</button>
+            <button onClick={() => setRange("custom")} className={pill(range === "custom")} style={range === "custom" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Custom</button>
           </div>
 
           {range === "custom" ? (
@@ -126,7 +126,7 @@ export default function HistoryPage() {
 function pill(active: boolean) {
   return [
     "rounded-xl border px-3 py-2 text-xs font-semibold",
-    active ? "bg-white text-neutral-900 border-white" : "bg-neutral-950/40 border-neutral-800 text-neutral-200 hover:border-neutral-600",
+    active ? "" : "bg-neutral-950/40 border-neutral-800 text-neutral-200 hover:border-neutral-600",
   ].join(" ");
 }
 function dateInput() {

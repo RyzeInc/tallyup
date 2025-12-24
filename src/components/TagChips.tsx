@@ -27,9 +27,10 @@ export default function TagChips({
             className={[
               "rounded-full px-3 py-1 text-xs border",
               active
-                ? "bg-white text-neutral-900 border-white"
+                ? "bg-neutral-900/40 text-neutral-200 border-neutral-800"
                 : "bg-neutral-900/40 text-neutral-200 border-neutral-800 hover:border-neutral-600",
             ].join(" ")}
+            style={active ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}
           >
             {tag}
           </button>

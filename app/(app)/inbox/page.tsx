@@ -51,7 +51,7 @@ export default function InboxPage() {
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
           <div className="text-sm text-neutral-300 mb-3">Sign in to view your inbox.</div>
           <SignInButton mode="modal">
-            <button className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-neutral-900">Sign in</button>
+            <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
@@ -125,7 +125,8 @@ function InboxItem({
           <button
             onClick={done}
             disabled={busy}
-            className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-900 disabled:opacity-60"
+            className="rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-60"
+            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
           >
             Done
           </button>

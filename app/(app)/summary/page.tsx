@@ -73,8 +73,8 @@ export default function SummaryPage() {
           <div className="mt-1 text-sm text-neutral-400">Micro-dashboard.</div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setMode("week")} className={pill(mode === "week")}>This Week</button>
-          <button onClick={() => setMode("month")} className={pill(mode === "month")}>This Month</button>
+          <button onClick={() => setMode("week")} className={pill(mode === "week")} style={mode === "week" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Week</button>
+          <button onClick={() => setMode("month")} className={pill(mode === "month")} style={mode === "month" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Month</button>
         </div>
       </div>
 
@@ -82,7 +82,7 @@ export default function SummaryPage() {
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
           <div className="text-sm text-neutral-300 mb-3">Sign in to view summary.</div>
           <SignInButton mode="modal">
-            <button className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-neutral-900">Sign in</button>
+            <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
@@ -148,7 +148,7 @@ export default function SummaryPage() {
 function pill(active: boolean) {
   return [
     "rounded-xl border px-3 py-2 text-xs font-semibold",
-    active ? "bg-white text-neutral-900 border-white" : "bg-neutral-900/30 border-neutral-800 text-neutral-200 hover:border-neutral-600",
+    active ? "" : "bg-neutral-900/30 border-neutral-800 text-neutral-200 hover:border-neutral-600",
   ].join(" ");
 }
 
@@ -163,16 +163,16 @@ function Tile({
   sub: string;
   accent: "emerald" | "rose" | "sky" | "amber";
 }) {
-  const accentClass =
-    accent === "emerald" ? "text-emerald-400" :
-    accent === "rose" ? "text-rose-400" :
-    accent === "sky" ? "text-sky-400" :
-    "text-amber-400";
+  const accentStyle =
+    accent === "emerald" ? { color: "var(--success-foreground)" } :
+    accent === "rose" ? { color: "#d1617a" } :
+    accent === "sky" ? { color: "#60a5fa" } :
+    { color: "#f59e0b" };
 
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
+    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)", color: "var(--card-foreground)" }}>
       <div className="text-xs text-neutral-400">{title}</div>
-      <div className={`mt-2 text-xl font-semibold ${accentClass}`}>{value}</div>
+      <div className="mt-2 text-xl font-semibold" style={accentStyle}>{value}</div>
       <div className="mt-1 text-xs text-neutral-500">{sub}</div>
     </div>
   );

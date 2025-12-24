@@ -13,16 +13,16 @@ export default function EntryCard({
 }) {
   const isExpense = entry.type === "expense";
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
+    <div className="rounded-2xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-lg font-semibold">
-            <span className={isExpense ? "text-rose-400" : "text-emerald-400"}>
+            <span style={{ color: isExpense ? "var(--destructive-foreground)" : "var(--success-foreground)", fontWeight: 600 }}>
               {isExpense ? "-" : "+"}
               {centsToDollars(entry.amountCents)}
             </span>
           </div>
-          <div className="mt-1 text-sm text-neutral-300">
+          <div className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>
             <span className="font-medium">{entry.bucket}</span>
             {entry.category ? (
               <span className="text-neutral-400"> · {entry.category}</span>
@@ -40,7 +40,8 @@ export default function EntryCard({
           {entry.tags.map((t: string) => (
             <span
               key={t}
-              className="rounded-full border border-neutral-800 bg-neutral-950/40 px-2 py-0.5 text-[11px] text-neutral-300"
+              className="rounded-full border px-2 py-0.5 text-[11px]"
+              style={{ borderColor: "var(--border)", backgroundColor: "transparent", color: "var(--muted-foreground)" }}
             >
               {t}
             </span>

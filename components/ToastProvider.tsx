@@ -31,10 +31,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`rounded-2xl border px-3 py-2 shadow-lg transition-all duration-150 ${
-              t.kind === "success" ? "bg-emerald-50 text-emerald-900 border-emerald-200" : t.kind === "error" ? "bg-rose-50 text-rose-900 border-rose-200" : "bg-white text-neutral-900 border-neutral-200"
-            }`}
-            style={{ boxShadow: "0 6px 18px rgba(0,0,0,0.12)" }}
+            className="rounded-2xl border px-3 py-2 shadow-lg transition-all duration-150"
+            style={{
+              boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+              backgroundColor: t.kind === "success" ? "var(--success)" : t.kind === "error" ? "var(--destructive)" : "var(--card)",
+              color: t.kind === "success" ? "var(--success-foreground)" : t.kind === "error" ? "var(--destructive-foreground)" : "var(--card-foreground)",
+              borderColor: "var(--border)",
+            }}
           >
             <div className="text-sm font-semibold">{t.title}</div>
             {t.body ? <div className="text-xs mt-1 opacity-80">{t.body}</div> : null}

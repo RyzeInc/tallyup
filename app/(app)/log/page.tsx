@@ -157,7 +157,7 @@ export default function LogPage() {
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
           <div className="text-sm text-neutral-300 mb-3">Sign in to start logging.</div>
           <SignInButton mode="modal">
-            <button className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-neutral-900">Sign in</button>
+            <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
@@ -167,16 +167,18 @@ export default function LogPage() {
           <button
             onClick={() => setType("expense")}
             className={`rounded-2xl border px-3 py-2 text-sm font-semibold ${
-              type === "expense" ? "bg-white text-neutral-900 border-white" : "bg-neutral-900/30 border-neutral-800 text-neutral-200"
+              type === "expense" ? "" : "bg-neutral-900/30 border-neutral-800 text-neutral-200"
             }`}
+            style={type === "expense" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}
           >
             Expense
           </button>
           <button
             onClick={() => setType("income")}
             className={`rounded-2xl border px-3 py-2 text-sm font-semibold ${
-              type === "income" ? "bg-white text-neutral-900 border-white" : "bg-neutral-900/30 border-neutral-800 text-neutral-200"
+              type === "income" ? "" : "bg-neutral-900/30 border-neutral-800 text-neutral-200"
             }`}
+            style={type === "income" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}
           >
             Income
           </button>
@@ -283,13 +285,14 @@ export default function LogPage() {
 
         <button
           onClick={onSave}
-          className="w-full rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-neutral-900 hover:opacity-95 active:opacity-90"
+          className="w-full rounded-2xl px-4 py-3 text-sm font-semibold hover:opacity-95 active:opacity-90"
+          style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
         >
           Save
         </button>
 
         <div className="mt-3 min-h-[1.25rem] text-sm flex items-center gap-3">
-          {status.kind === "ok" ? <span className="text-emerald-400">{status.msg}</span> : null}
+          {status.kind === "ok" ? <span style={{ color: "var(--success-foreground)" }}>{status.msg}</span> : null}
           {status.kind === "err" ? <span className="text-rose-400">{status.msg}</span> : null}
           {status.kind === "ok" && status.undoId ? (
             <>
