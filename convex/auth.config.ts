@@ -4,7 +4,7 @@ export default {
   providers: [
     {
       domain: "https://tidy-swift-32.clerk.accounts.dev",
-      applicationID: "convex",
-    },
-  ],
+      applicationID: "convex"
+    }
+  ]
 } satisfies AuthConfig;
