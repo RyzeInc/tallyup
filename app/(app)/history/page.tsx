@@ -4,8 +4,12 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import EntryCard from "@/components/EntryCard";
 import RecurringModal from "@/components/RecurringModal";
+import ActivityTable from "@/components/activity/ActivityTable";
+import FilterBar from "@/components/activity/FilterBar";
+import DateRangeControl from "@/components/activity/DateRangeControl";
+import EmptyState from "@/components/ui/EmptyState";
+import PageHeader from "@/components/ui/PageHeader";
 import { EntryType, startOfMonthLocalTs, startOfWeekLocalTs, todayYYYYMMDD, yyyymmddToLocalMidnightTs } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -15,6 +19,8 @@ export default function HistoryPage() {
 
   const [type, setType] = useState<"all" | EntryType>(() => (searchParams.get("type") as any) ?? "all");
   const [bucket, setBucket] = useState<string>(() => searchParams.get("bucket") ?? "");
+  const q = searchParams.get("q") ?? "";
+  const reviewOnly = searchParams.get("review") === "1";
 
   const [range, setRange] = useState<"week" | "month" | "custom">(() => (searchParams.get("range") as any) ?? "month");
   const [from, setFrom] = useState(() => searchParams.get("from") ?? todayYYYYMMDD());
@@ -46,23 +52,70 @@ export default function HistoryPage() {
     return { startDate: Math.min(s, e), endDate: Math.max(s, e) };
   }, [range, from, to]);
 
-  const entries = useQuery(api.entries.listEntries, {
+  // paginated entries: cursor-based pages from server
+  const [pages, setPages] = useState<any[][]>([]);
+  const [seenIds, setSeenIds] = useState<Record<string, boolean>>({});
+  const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
+  const [cursorList, setCursorList] = useState<Array<number | undefined>>([undefined]);
+
+  const currentCursor = cursorList[cursorList.length - 1];
+
+  const categoryParam = searchParams.get("category") ?? undefined;
+  const tagParam = searchParams.get("tag") ?? undefined;
+
+  const pageResult = useQuery(api.entries.listEntriesPaged, {
     type: type === "all" ? undefined : type,
-    bucket: bucket.trim() ? bucket : undefined,
+    buckets: bucket.trim() ? [bucket] : undefined,
+    categories: categoryParam ? [categoryParam] : undefined,
+    tags: tagParam ? [tagParam] : undefined,
     startDate,
     endDate,
-    limit: 400,
-  }) as any[] | undefined;
+    needsReview: reviewOnly ? true : undefined,
+    search: q ? q : undefined,
+    limit: 60,
+    cursorDate: currentCursor,
+  }) as any | undefined;
+
+  // when filters change, reset pages
+  useEffect(() => {
+    setPages([]);
+    setNextCursor(undefined);
+    setCursorList([undefined]);
+    setSeenIds({});
+  }, [type, bucket, range, from, to]);
+
+  // append page result when it arrives
+  useEffect(() => {
+    if (!pageResult?.rows) return;
+    const newRows: any[] = [];
+    const seen = { ...seenIds };
+    for (const r of pageResult.rows) {
+      if (!seen[r._id]) {
+        newRows.push(r);
+        seen[r._id] = true;
+      }
+    }
+    if (newRows.length) setPages((p) => [...p, newRows]);
+    setSeenIds(seen);
+    setNextCursor(pageResult.nextCursor);
+  }, [pageResult]);
+
+  const allEntries = pages.flat();
 
   const [selected, setSelected] = useState<any | null>(null);
 
+  async function loadMore() {
+    if (!nextCursor) return;
+    setCursorList((c) => [...c, nextCursor]);
+  }
+
   return (
     <div>
-      <div className="mb-4">
-        <div className="text-2xl font-semibold tracking-tight">History</div>
-        <div className="mt-1 text-sm text-neutral-400">Filter & explore your past.</div>
-        <div className="mt-2 text-sm text-neutral-400">Tip: Use "Save as pattern" to save repetitive transactions — auto-apply won't be enabled unless you explicitly confirm it.</div>
-      </div>
+      <PageHeader
+        title="Activity"
+        subtitle="Filter & explore your past."
+        actions={<div className="text-sm text-neutral-400">Tip: Use "Save as pattern" to save repetitive transactions.</div>}
+      />
 
       <SignedOut>
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
@@ -74,65 +127,36 @@ export default function HistoryPage() {
       </SignedOut>
 
       <SignedIn>
-        <div className="mb-4 rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4 space-y-3">
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setType("all")} className={pill(type === "all")} style={type === "all" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>All</button>
-            <button onClick={() => setType("expense")} className={pill(type === "expense")} style={type === "expense" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Spent</button>
-            <button onClick={() => setType("income")} className={pill(type === "income")} style={type === "income" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Received</button>
+        <div className="mb-4">
+          <FilterBar buckets={[]} />
+          <div className="mt-3">
+            <DateRangeControl range={range} setRange={(r) => setRange(r as any)} from={from} to={to} setFrom={setFrom} setTo={setTo} />
           </div>
-
-          <input
-            value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
-            placeholder="Which part of your life? (optional)"
-            className="w-full rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-sm outline-none focus:border-neutral-600"
-          />
-
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={() => setRange("week")} className={pill(range === "week")} style={range === "week" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Week</button>
-            <button onClick={() => setRange("month")} className={pill(range === "month")} style={range === "month" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Month</button>
-            <button onClick={() => setRange("custom")} className={pill(range === "custom")} style={range === "custom" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>Custom</button>
-          </div>
-
-          {range === "custom" ? (
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={dateInput()} />
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={dateInput()} />
-            </div>
-          ) : null}
         </div>
 
-        {!entries ? (
+        {pages.length === 0 ? (
           <div className="text-sm text-neutral-400">Loading…</div>
-        ) : entries.length === 0 ? (
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4 text-sm text-neutral-300">
-            No entries in this range.
-          </div>
+        ) : allEntries.length === 0 ? (
+          <EmptyState title="No entries" subtitle="No entries in this range." />
         ) : (
           <div className="space-y-3">
-            {entries.map((e) => (
-              <EntryCard
-                key={e._id}
-                entry={e}
-                rightSlot={
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setSelected(e)}
-                      className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
-                    >
-                      Save as pattern
-                    </button>
+            <ActivityTable
+              entries={allEntries}
+              onDelete={(id) => deleteEntry({ id })}
+              onSavePattern={(e) => setSelected(e)}
+              onBulkComplete={() => {
+                // reset pages to refresh from server
+                setPages([]);
+                setCursorList([undefined]);
+                setSeenIds({});
+              }}
+            />
 
-                    <button
-                      onClick={() => deleteEntry({ id: e._id })}
-                      className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                }
-              />
-            ))}
+            {nextCursor ? (
+              <div className="mt-2 text-center">
+                <button onClick={loadMore} className="rounded-md px-4 py-2 border">Load more</button>
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -144,10 +168,10 @@ export default function HistoryPage() {
 
 function pill(active: boolean) {
   return [
-    "rounded-xl border px-3 py-2 text-xs font-semibold",
-    active ? "" : "bg-neutral-950/40 border-neutral-800 text-neutral-200 hover:border-neutral-600",
+    "rounded-full px-3 py-1 text-xs font-semibold",
+    active ? "bg-accent text-accent-foreground" : "border text-neutral-700",
   ].join(" ");
 }
 function dateInput() {
-  return "w-full rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-sm outline-none focus:border-neutral-600";
+  return "w-full rounded-xl border px-3 py-2 text-sm";
 }

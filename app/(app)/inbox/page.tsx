@@ -111,6 +111,8 @@ function InboxItem({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const suggestions = useQuery(api.entries.entrySuggestions, { id: entry._id }) as any[] | undefined;
+
   async function done() {
     setBusy(true);
     setErr(null);
@@ -172,6 +174,28 @@ function InboxItem({
           <div className="mb-2 text-xs text-neutral-400">Tags</div>
           <TagChips value={tags} onChange={setTags} options={DEFAULT_TAGS as unknown as string[]} />
         </div>
+
+        {suggestions && suggestions.length ? (
+          <div className="mt-2 flex gap-2 items-center text-sm">
+            {suggestions.map((s: any, idx: number) => (
+              <div key={idx} className="rounded-md border px-3 py-1" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-neutral-400">{s.reason}</div>
+                  <div className="text-sm font-medium">{s.kind === "rule" ? s.reason : `${s.value}`}</div>
+                  {s.kind === "category" ? (
+                    <button className="ml-2 text-xs underline" onClick={() => { setCategory(s.value); done(); }}>Apply</button>
+                  ) : null}
+                  {s.kind === "tag" ? (
+                    <button className="ml-2 text-xs underline" onClick={() => { setTags((t) => Array.from(new Set([...t, s.value]))); done(); }}>Apply</button>
+                  ) : null}
+                  {s.kind === "rule" ? (
+                    <button className="ml-2 text-xs underline" onClick={() => onMakeRecurring?.()}>Save as pattern</button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {err ? <div className="text-xs text-rose-400">{err}</div> : null}
       </div>

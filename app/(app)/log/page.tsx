@@ -191,6 +191,8 @@ export default function LogPage() {
 
         <label className="block text-xs text-neutral-400 mb-1">How much was it?</label>
         <CurrencyInput
+          id="amount"
+          ariaLabel="Amount"
           valueCents={amountCents ?? undefined}
           onChange={(c) => {
             setAmountCents(c);
@@ -222,22 +224,24 @@ export default function LogPage() {
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="w-full rounded-xl border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
             />
           </div>
 
           <div>
             <label className="block text-xs text-neutral-400 mb-1">Which part of your life?</label>
             <select
-              value={bucket}
-              onChange={(e) => setBucket(e.target.value)}
-              className="w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
-            >
-              {effectiveBuckets.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
+                value={bucket}
+                onChange={(e) => setBucket(e.target.value)}
+                className="w-full rounded-xl border px-3 py-2 text-sm"
+                style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+              >
+                <option value="Personal">Personal</option>
+                <option value="Work">Work</option>
+                <option value="Shared">Shared</option>
+                <option value="Business">Business</option>
+                <option value="Other">Other</option>
             </select>
           </div>
         </div>
@@ -257,7 +261,8 @@ export default function LogPage() {
           onChange={(e) => setCategory(e.target.value)}
           list="cat-suggestions"
           placeholder="Start typing… (auto-remembers)"
-          className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+          className="mb-4 w-full rounded-xl border px-3 py-2 text-sm"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
         />
         <datalist id="cat-suggestions">
           {mergedCats.map((c) => (
@@ -274,7 +279,8 @@ export default function LogPage() {
               value={methodOrAccount}
               onChange={(e) => setMethodOrAccount(e.target.value)}
               placeholder={type === "expense" ? "e.g., Debit, Discover, Checking" : "e.g., Checking, Cash"}
-              className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="mb-4 w-full rounded-xl border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
             />
           </>
         ) : null}
@@ -285,7 +291,8 @@ export default function LogPage() {
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           placeholder="Quick context (why / who / reimbursable / client / etc.)"
-          className="mb-4 w-full resize-none rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+          className="mb-4 w-full resize-none rounded-xl border px-3 py-2 text-sm"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
         />
 
         <button

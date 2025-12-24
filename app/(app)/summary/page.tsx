@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { centsToDollars, startOfMonthLocalTs, startOfWeekLocalTs } from "@/components/utils";
+import PageHeader from "@/components/ui/PageHeader";
+import StatCard from "@/components/ui/StatCard";
 
 type RangeMode = "week" | "month";
 const COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#f472b6", "#fbbf24", "#94a3b8"];
@@ -67,16 +69,16 @@ export default function SummaryPage() {
 
   return (
     <div>
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <div className="text-2xl font-semibold tracking-tight">Summary</div>
-          <div className="mt-1 text-sm text-neutral-400">Your micro-dashboard.</div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => setMode("week")} className={pill(mode === "week")} style={mode === "week" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Week</button>
-          <button onClick={() => setMode("month")} className={pill(mode === "month")} style={mode === "month" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Month</button>
-        </div>
-      </div>
+      <PageHeader
+        title="Overview"
+        subtitle="Your micro-dashboard."
+        actions={
+          <div className="flex gap-2">
+            <button onClick={() => setMode("week")} className={pill(mode === "week")} style={mode === "week" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Week</button>
+            <button onClick={() => setMode("month")} className={pill(mode === "month")} style={mode === "month" ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}>This Month</button>
+          </div>
+        }
+      />
 
       <SignedOut>
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
@@ -93,49 +95,53 @@ export default function SummaryPage() {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3">
-              <Tile title="Received" value={centsToDollars(computed.income)} sub={label} accent="emerald" />
-              <Tile title="Spent" value={centsToDollars(computed.expense)} sub={label} accent="rose" />
-              <Tile title="Net" value={centsToDollars(computed.net)} sub={label} accent="sky" />
-              <Tile title="Needs Review" value={`${inbox.length}`} sub="entries" accent="amber" />
+              <StatCard title="Received" value={centsToDollars(computed.income)} sub={label} />
+              <StatCard title="Spent" value={centsToDollars(computed.expense)} sub={label} />
+              <StatCard title="Net" value={centsToDollars(computed.net)} sub={label} />
+              <StatCard title="Needs Review" value={`${inbox.length}`} sub="entries" />
             </div>
 
-            <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
-              <div className="text-sm font-semibold">Spending by Bucket</div>
-              <div className="mt-3 flex gap-4">
-                <div className="h-32 w-32 rounded-full border border-neutral-800" style={{ backgroundImage: donut }} />
-                <div className="flex-1 space-y-2">
-                  {computed.bucketFinal.map(([name, v], i) => (
-                    <div key={name} className="flex items-center justify-between gap-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                        <span className="text-neutral-200">{name}</span>
-                      </div>
-                      <span className="text-neutral-300">{centsToDollars(v)}</span>
+            <div className="mt-4">
+              <div className="grid grid-cols-1 gap-3">
+                <div className="rounded-2xl border p-4" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)", color: "var(--card-foreground)" }}>
+                  <div className="text-sm font-semibold">Spending by Bucket</div>
+                  <div className="mt-3 flex gap-4">
+                    <div className="h-32 w-32 rounded-full" style={{ backgroundImage: donut }} />
+                    <div className="flex-1 space-y-2">
+                      {computed.bucketFinal.map(([name, v], i) => (
+                        <div key={name} className="flex items-center justify-between gap-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                            <span className="text-neutral-700">{name}</span>
+                          </div>
+                          <span className="text-neutral-700">{centsToDollars(v)}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="mt-4 rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-semibold">Top Spending Categories</div>
-                <div className="text-xs text-neutral-500">{label}</div>
-              </div>
-              <div className="mt-3 space-y-2">
-                {computed.topCats.length === 0 ? (
-                  <div className="text-sm text-neutral-400">No spending yet.</div>
-                ) : (
-                  computed.topCats.map(([c, v], idx) => (
-                    <div key={c} className="flex items-center justify-between text-sm">
-                      <div className="text-neutral-200">
-                        <span className="text-neutral-500 mr-2">{idx + 1}.</span>
-                        {c}
-                      </div>
-                      <div className="text-neutral-300">{centsToDollars(v)}</div>
-                    </div>
-                  ))
-                )}
+                <div className="rounded-2xl border p-4" style={{ backgroundColor: "var(--card)", borderColor: "var(--border)", color: "var(--card-foreground)" }}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold">Top Spending Categories</div>
+                    <div className="text-xs text-neutral-500">{label}</div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {computed.topCats.length === 0 ? (
+                      <div className="text-sm text-neutral-400">No spending yet.</div>
+                    ) : (
+                      computed.topCats.map(([c, v], idx) => (
+                        <div key={c} className="flex items-center justify-between text-sm">
+                          <div className="text-neutral-700">
+                            <span className="text-neutral-500 mr-2">{idx + 1}.</span>
+                            {c}
+                          </div>
+                          <div className="text-neutral-700">{centsToDollars(v)}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </>

@@ -12,9 +12,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if ((e.key === "l" || e.key === "L") && (e.metaKey || e.ctrlKey) === false) {
-        // open log page
-        router.push("/log");
+      if (e.defaultPrevented) return;
+      const key = typeof e.key === "string" ? e.key.toLowerCase() : "";
+      if ((key === "l" || key === "n") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const active = document.activeElement as HTMLElement | null;
+        const isInput = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.getAttribute("role") === "textbox");
+        if (!isInput) {
+          e.preventDefault();
+          // open log page
+          router.push("/log");
+        }
       }
     }
     window.addEventListener("keydown", onKey);

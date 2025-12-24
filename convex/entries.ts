@@ -200,6 +200,21 @@ export const deleteEntry = mutation({
   },
 });
 
+export const bulkMarkReviewed = mutation({
+  args: { ids: v.array(v.id("entries")) },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const ops: Array<any> = [];
+    for (const id of args.ids) {
+      const existing = await ctx.db.get(id);
+      if (!existing || existing.userId !== userId) continue;
+      ops.push(ctx.db.patch(id, { needsReview: false, updatedAt: Date.now() }));
+    }
+    await Promise.all(ops);
+    return { ok: true, count: ops.length };
+  },
+});
+
 export const listInbox = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -258,6 +273,99 @@ export const listEntries = query({
     }
 
     return rows;
+  },
+});
+
+export const listEntriesPaged = query({
+  args: {
+    type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
+    buckets: v.optional(v.array(v.string())),
+    categories: v.optional(v.array(v.string())),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+    needsReview: v.optional(v.boolean()),
+    tags: v.optional(v.array(v.string())),
+    search: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    // cursor is the last date seen (ms since epoch). When provided, fetch rows with date < cursor
+    cursorDate: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 60, 10), 200);
+
+    const start = args.startDate ?? 0;
+    const end = args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000;
+
+    const useTypeIndex = !!args.type;
+    const cursorDate = args.cursorDate;
+
+    const takeFactor = 3; // heuristic: fetch extra to account for server-side filters
+    const take = limit * takeFactor;
+
+    let fetched: any[] = [];
+
+    if (useTypeIndex) {
+      const q = ctx.db
+        .query("entries")
+        .withIndex("by_user_type_date", q => {
+          let qq = q.eq("userId", userId).eq("type", args.type!);
+          const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
+          qq = qq.gte("date", start).lt("date", upper);
+          return qq;
+        })
+        .order("desc")
+        .take(take);
+      fetched = await q;
+    } else {
+      const q = ctx.db
+        .query("entries")
+        .withIndex("by_user_date", q => {
+          let qq = q.eq("userId", userId);
+          const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
+          qq = qq.gte("date", start).lt("date", upper);
+          return qq;
+        })
+        .order("desc")
+        .take(take);
+      fetched = await q;
+    }
+
+    // server-side filtering for fields that can't be indexed
+    const bucketsSet = args.buckets?.map((s: string) => s.trim().toLowerCase());
+    const categoriesSet = args.categories?.map((s: string) => s.trim().toLowerCase());
+    const tagsSet = args.tags?.map((s: string) => s.trim().toLowerCase());
+    const search = args.search?.trim().toLowerCase();
+
+    const out: any[] = [];
+    for (const r of fetched) {
+      if (args.needsReview !== undefined && r.needsReview !== args.needsReview) continue;
+      if (bucketsSet && bucketsSet.length) {
+        if (!r.bucket) continue;
+        const b = (r.bucket ?? "").toLowerCase();
+        if (!bucketsSet.includes(b)) continue;
+      }
+      if (categoriesSet && categoriesSet.length) {
+        const c = (r.category ?? "").toLowerCase();
+        if (!categoriesSet.includes(c)) continue;
+      }
+      if (tagsSet && tagsSet.length) {
+        const rs = (r.tags ?? []).map((t: string) => (t ?? "").toLowerCase());
+        let ok = false;
+        for (const t of tagsSet) if (rs.includes(t)) { ok = true; break; }
+        if (!ok) continue;
+      }
+      if (search) {
+        const hay = ((r.note ?? "") + " " + (r.category ?? "") + " " + (r.tags ?? []).join(" ")).toLowerCase();
+        if (!hay.includes(search)) continue;
+      }
+      out.push(r);
+      if (out.length >= limit) break;
+    }
+
+    const nextCursor = out.length ? out[out.length - 1].date : undefined;
+
+    return { rows: out, nextCursor };
   },
 });
 
@@ -332,6 +440,51 @@ export const listRecentEntries = query({
   handler: async (ctx, args) => {
     const limit = Math.min(Math.max(args.limit ?? 5000, 100), 5000);
     return await ctx.db.query("entries").order("desc").take(limit);
+  },
+});
+
+export const entrySuggestions = query({
+  args: { id: v.id("entries") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const entry = await ctx.db.get(args.id);
+    if (!entry || entry.userId !== userId) throw new Error("Not found");
+
+    const text = ((entry.note ?? "") + " " + (entry.methodOrAccount ?? "") + " " + (entry.bucket ?? "") + " " + (entry.category ?? "")).toLowerCase();
+
+    const suggestions: any[] = [];
+
+    // commodity merchant heuristics
+    const subs = ["netflix", "spotify", "hulu", "disney", "apple", "amazon prime", "prime video", "youtube premium"];
+    for (const s of subs) {
+      if (text.includes(s)) {
+        suggestions.push({ kind: "tag", value: "Subscription", reason: `note contains ${s}`, confidence: 70 });
+        suggestions.push({ kind: "category", value: "Subscription", reason: `note contains ${s}`, confidence: 70 });
+        break;
+      }
+    }
+
+    // candidate recurring detection: fetch recent entries for user in the last year
+    const cutoff = Date.now() - 365 * 24 * 60 * 60 * 1000;
+    const rows = await ctx.db.query("entries").withIndex("by_user_date", q => q.eq("userId", userId).gte("date", cutoff)).order("desc").take(2000);
+
+    // Convert rows to detector.Entry
+    const recent: any[] = rows.map((r: any) => ({ _id: r._id, date: r.date, amountCents: r.amountCents, type: r.type, bucket: r.bucket, category: r.category, tags: r.tags }));
+
+    try {
+      const det = (await import("./detector")) as any;
+      const candidates = det.detectRecurringCandidatesFromEntries(recent as any[]);
+      for (const c of candidates) {
+        // if this entry is part of the candidate examples, suggest creating a rule
+        if ((c.exampleEntryIds || []).includes(args.id)) {
+          suggestions.push({ kind: "rule", value: c, reason: "Repeating pattern detected", confidence: c.confidence ?? 50 });
+        }
+      }
+    } catch (e) {
+      // ignore detector errors
+    }
+
+    return suggestions;
   },
 });
 
