@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
-  { href: "/log", label: "Add", icon: "＋" },
-  { href: "/inbox", label: "Review", icon: "✉" },
-  { href: "/history", label: "Activity", icon: "≡" },
-  { href: "/summary", label: "Overview", icon: "▦" },
-  { href: "/profile", label: "Profile", icon: "🔁" },
+  { href: "/overview", label: "Overview", icon: "▦" },
+  { href: "/activity", label: "Activity", icon: "≡" },
+  { href: "/review", label: "Review", icon: "✉" },
+  { href: "/rules", label: "Rules", icon: "⚙" },
+  { href: "/insights", label: "Insights", icon: "📊" },
+  { href: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
 export default function BottomNav() {
@@ -17,9 +18,9 @@ export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur">
       <div className="mx-auto max-w-md px-6 py-3">
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-6 gap-2">
           {tabs.map((t) => {
-            const active = pathname === t.href;
+            const active = pathname === t.href || pathname?.startsWith(t.href + "/");
             return (
               <Link
                 key={t.href}

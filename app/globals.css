@@ -7,47 +7,78 @@
 
 :root {
   --radius: 0.625rem;
-  /* Light theme palette (user requested)
-     Background: #FFF8DE
-     Cards / surfaces: #D0E8C5
-     Borders / dividers: #C5D3E8
-     Primary / active: #A6AEBF
-     Success: #A6F1E0
-  */
-  --background: #FFF8DE;
-  --foreground: #0b1220; /* dark text for readability */
-  --card: #D0E8C5;
-  --card-foreground: #0b1220;
-  --popover: #F7F3E6;
-  --popover-foreground: #0b1220;
-  --primary: #A6AEBF;
-  --primary-foreground: #0b1220;
-  --secondary: #E6EDF6;
-  --secondary-foreground: #0b1220;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+
+  /* Spacing scale (px) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-medium: 200ms;
+  --easing-standard: cubic-bezier(.2,.9,.2,1);
+
+  /* Light theme palette (tuned for calm fintech feel) */
+  --bg: #FFF8DE;
+  --surface: #FFFFFF;
+  --surface-2: #F7F3E6;
+  --border: #E6E9EE;
+  --text: #0b1220;
+  --text-muted: #58606a;
+
+  --accent: #5e97d1;
+  --accent-foreground: #ffffff;
+
+  --success: #0ea5a0;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: #F6F8FA;
+  --card-foreground: var(--text);
+  --popover: var(--surface-2);
+  --popover-foreground: var(--text);
+  --primary: var(--accent);
+  --primary-foreground: var(--accent-foreground);
+  --secondary: #f3f6f9;
+  --secondary-foreground: #253138;
   --muted: #F2F4F7;
-  --muted-foreground: #51606f;
-  --accent: #BBD0E8;
-  --accent-foreground: #0b1220;
-  --destructive: #FDE1E1;
-  --destructive-foreground: #7a1f1f;
-  --border: #C5D3E8;
+  --muted-foreground: var(--text-muted);
   --input: #FFFDF6;
-  --ring: #A6AEBF;
-  --success: #A6F1E0;
-  --success-foreground: #04473b;
+  --ring: var(--accent);
+  --success-foreground: #052827;
   --chart-1: #4e7a5e;
   --chart-2: #4f7aa0;
   --chart-3: #6b7aa8;
   --chart-4: #b4c8a9;
   --chart-5: #9dcab1;
-  --sidebar: #FFF8DE;
-  --sidebar-foreground: #0b1220;
-  --sidebar-primary: #A6AEBF;
-  --sidebar-primary-foreground: #0b1220;
+  --sidebar: var(--bg);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--accent-foreground);
   --sidebar-accent: #BBD0E8;
   --sidebar-accent-foreground: #0b1220;
-  --sidebar-border: #C5D3E8;
-  --sidebar-ring: #A6AEBF;
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* Money typography */
+  --money-font-feature-settings: "tnum" 1;
+
+  /* Back-compat (existing variables) */
+  --radius: var(--radius-md);
+
+  /* Keep older palette hints for now */
+  --primary-foreground: var(--primary-foreground);
+  --card-foreground: var(--card-foreground);
+  --success: var(--success);
+
 }
 
 .dark {
@@ -84,4 +115,11 @@
 body {
   background-color: var(--background);
   color: var(--foreground);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--money-font-feature-settings);
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
 }

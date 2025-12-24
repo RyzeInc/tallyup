@@ -15,12 +15,14 @@ import {
   yyyymmddToLocalMidnightTs,
 } from "@/components/utils";
 import RecurringModal from "@/components/RecurringModal";
+import CurrencyInput from "@/components/ui/CurrencyInput";
 
 export default function LogPage() {
   const { user } = useUser();
 
   const [type, setType] = useState<EntryType>("expense");
   const [amount, setAmount] = useState("");
+  const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayYYYYMMDD());
 
   const [bucket, setBucket] = useState<string>(DEFAULT_BUCKETS[0]);
@@ -73,7 +75,7 @@ export default function LogPage() {
   async function onSave() {
     setStatus({ kind: "idle" });
 
-    const cents = dollarsToCents(amount);
+    const cents = amountCents ?? dollarsToCents(amount);
     if (!cents || cents <= 0) return setStatus({ kind: "err", msg: "Enter a valid amount > 0." });
 
     const ts = yyyymmddToLocalMidnightTs(date);
@@ -106,6 +108,8 @@ export default function LogPage() {
         methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
         amount,
       };
+      // reset amountCents
+      setAmountCents(null);
 
       setAmount("");
       setCategory("");
@@ -138,6 +142,7 @@ export default function LogPage() {
     setBucket(last.bucket === "Other" ? "Other" : last.bucket);
     if (last.bucket !== "Other") setCustomBucket("");
     setAmount(last.amount);
+    setAmountCents(last.amount ? Math.round(Number(last.amount) * 100) : null);
     setCategory(last.category ?? "");
     setNote(last.note ?? "");
     setMethodOrAccount(last.methodOrAccount ?? "");
@@ -185,12 +190,12 @@ export default function LogPage() {
         </div>
 
         <label className="block text-xs text-neutral-400 mb-1">How much was it?</label>
-        <input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          inputMode="decimal"
-          placeholder="$0 — tap to edit"
-          className="mb-4 w-full rounded-2xl border border-neutral-800 bg-neutral-900/30 px-4 py-3 text-lg outline-none focus:border-neutral-500"
+        <CurrencyInput
+          valueCents={amountCents ?? undefined}
+          onChange={(c) => {
+            setAmountCents(c);
+            setAmount(c ? (c / 100).toFixed(2) : "");
+          }}
         />
 
         <div className="mb-4 flex gap-2">

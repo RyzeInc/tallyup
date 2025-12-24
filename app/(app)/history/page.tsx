@@ -1,20 +1,39 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import EntryCard from "@/components/EntryCard";
 import RecurringModal from "@/components/RecurringModal";
 import { EntryType, startOfMonthLocalTs, startOfWeekLocalTs, todayYYYYMMDD, yyyymmddToLocalMidnightTs } from "@/components/utils";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function HistoryPage() {
-  const [type, setType] = useState<"all" | EntryType>("all");
-  const [bucket, setBucket] = useState<string>("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  const [range, setRange] = useState<"week" | "month" | "custom">("month");
-  const [from, setFrom] = useState(todayYYYYMMDD());
-  const [to, setTo] = useState(todayYYYYMMDD());
+  const [type, setType] = useState<"all" | EntryType>(() => (searchParams.get("type") as any) ?? "all");
+  const [bucket, setBucket] = useState<string>(() => searchParams.get("bucket") ?? "");
+
+  const [range, setRange] = useState<"week" | "month" | "custom">(() => (searchParams.get("range") as any) ?? "month");
+  const [from, setFrom] = useState(() => searchParams.get("from") ?? todayYYYYMMDD());
+  const [to, setTo] = useState(() => searchParams.get("to") ?? todayYYYYMMDD());
+
+  // sync state -> URL
+  useEffect(() => {
+    const p = new URLSearchParams();
+    if (type && type !== "all") p.set("type", type);
+    if (bucket) p.set("bucket", bucket);
+    if (range && range !== "month") p.set("range", range);
+    if (range === "custom") {
+      p.set("from", from);
+      p.set("to", to);
+    }
+    const qs = p.toString();
+    const url = qs ? `/activity?${qs}` : `/activity`;
+    router.replace(url);
+  }, [type, bucket, range, from, to, router]);
 
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
