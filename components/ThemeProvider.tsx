@@ -5,15 +5,25 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 const ThemeContext = createContext<{ theme: "light" | "dark"; toggle: () => void } | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<"light" | "dark">(() => {
+  // Start with a deterministic default so server and initial client render match.
+  // We will read the saved preference on mount and update via effect to avoid hydration mismatches.
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  // On mount, read saved preference (or system preference) and apply it.
+  useEffect(() => {
     try {
       const s = localStorage.getItem("theme");
-      if (s === "dark" || s === "light") return s;
+      if (s === "dark" || s === "light") {
+        setTheme(s);
+        return;
+      }
+      // Fallback: try system preference
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setTheme(prefersDark ? "dark" : "light");
     } catch {}
-    // default to light (more welcoming for money tracking)
-    return "light";
-  });
+  }, []);
 
+  // Persist theme and update document class whenever it changes.
   useEffect(() => {
     try {
       localStorage.setItem("theme", theme);
