@@ -44,6 +44,7 @@ export default function InboxPage() {
       <div className="mb-4">
         <div className="text-2xl font-semibold tracking-tight">Inbox</div>
         <div className="mt-1 text-sm text-neutral-400">Finish labeling to improve accuracy.</div>
+        <div className="mt-2 text-sm text-neutral-400">Tip: You can mark an entry as recurring to link similar future transactions (autolink is optional and requires confirmation).</div>
       </div>
 
       <SignedOut>

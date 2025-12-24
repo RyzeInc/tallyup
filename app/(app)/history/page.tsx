@@ -42,6 +42,7 @@ export default function HistoryPage() {
       <div className="mb-4">
         <div className="text-2xl font-semibold tracking-tight">History</div>
         <div className="mt-1 text-sm text-neutral-400">Filter + delete.</div>
+        <div className="mt-2 text-sm text-neutral-400">Tip: Use "Make recurring" to save repetitive transactions — autolink won't be enabled unless you explicitly confirm it.</div>
       </div>
 
       <SignedOut>
