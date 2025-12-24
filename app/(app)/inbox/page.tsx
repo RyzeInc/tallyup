@@ -14,8 +14,12 @@ export default function InboxPage() {
   const inbox = useQuery(api.entries.listInbox, { limit: 80 }) as any[] | undefined;
 
   // Use both types for suggestions
-  const expenseCats = useQuery(api.entries.listCategories, { type: "expense", bucket: undefined }) as string[] | undefined;
-  const incomeCats = useQuery(api.entries.listCategories, { type: "income", bucket: undefined }) as string[] | undefined;
+  const expenseCats = useQuery(api.entries.listCategories, { type: "expense", bucket: undefined }) as
+    | string[]
+    | undefined;
+  const incomeCats = useQuery(api.entries.listCategories, { type: "income", bucket: undefined }) as
+    | string[]
+    | undefined;
 
   const updateEntry = useMutation(api.entries.updateEntry);
 
@@ -44,14 +48,22 @@ export default function InboxPage() {
       <div className="mb-4">
         <div className="text-2xl font-semibold tracking-tight">Needs review</div>
         <div className="mt-1 text-sm text-neutral-400">A few entries need context.</div>
-        <div className="mt-2 text-sm text-neutral-400">Tip: You can save a pattern to recognize similar future entries (auto-apply is off by default and requires confirmation).</div>
+        <div className="mt-2 text-sm text-neutral-400">
+          Tip: You can save a pattern to recognize similar future entries (auto-apply is off by default and requires
+          confirmation).
+        </div>
       </div>
 
       <SignedOut>
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
-          <div className="text-sm text-neutral-300 mb-3">Sign in to view items that need review.</div>
+          <div className="mb-3 text-sm text-neutral-300">Sign in to view items that need review.</div>
           <SignInButton mode="modal">
-            <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
+            <button
+              className="rounded-xl px-4 py-2 text-sm font-semibold"
+              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+            >
+              Sign in
+            </button>
           </SignInButton>
         </div>
       </SignedOut>
@@ -66,7 +78,13 @@ export default function InboxPage() {
         ) : (
           <div className="space-y-3">
             {inbox.map((e) => (
-              <InboxItem key={e._id} entry={e} onUpdate={updateEntry} catSuggestions={catSuggestions} onMakeRecurring={() => setSelected(e)} />
+              <InboxItem
+                key={e._id}
+                entry={e}
+                onUpdate={updateEntry}
+                catSuggestions={catSuggestions}
+                onMakeRecurring={() => setSelected(e)}
+              />
             ))}
           </div>
         )}
@@ -120,6 +138,10 @@ function InboxItem({
             className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200"
           >
             Save as pattern
+          </button>
+
+          <button
+            onClick={done}
             disabled={busy}
             className="rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-60"
             style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
@@ -131,7 +153,7 @@ function InboxItem({
     >
       <div className="space-y-3">
         <div>
-          <div className="text-xs text-neutral-400 mb-1">Category</div>
+          <div className="mb-1 text-xs text-neutral-400">Category</div>
           <input
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -147,7 +169,7 @@ function InboxItem({
         </div>
 
         <div>
-          <div className="text-xs text-neutral-400 mb-2">Tags</div>
+          <div className="mb-2 text-xs text-neutral-400">Tags</div>
           <TagChips value={tags} onChange={setTags} options={DEFAULT_TAGS as unknown as string[]} />
         </div>
 
