@@ -6,19 +6,22 @@ import LogPage from "@/app/(app)/log/page";
 import InboxPage from "@/app/(app)/inbox/page";
 import HistoryPage from "@/app/(app)/history/page";
 import SummaryPage from "@/app/(app)/summary/page";
+import RecurringPage from "@/app/(app)/recurring/page";
 
-export type TabKey = "log" | "inbox" | "history" | "summary";
+export type TabKey = "log" | "inbox" | "history" | "summary" | "patterns";
 const hrefToKey: Record<string, TabKey> = {
   "/log": "log",
   "/inbox": "inbox",
   "/history": "history",
   "/summary": "summary",
+  "/recurring": "patterns",
 };
 const keyToHref: Record<TabKey, string> = {
   log: "/log",
   inbox: "/inbox",
   history: "/history",
   summary: "/summary",
+  patterns: "/recurring",
 };
 
 const TabsContext = createContext<{
@@ -40,12 +43,13 @@ export default function TabShell() {
   const animatingRef = useRef(false);
 
   // scroll positions per tab
-  const scrollMap = useRef<Record<TabKey, number>>({ log: 0, inbox: 0, history: 0, summary: 0 });
-  const containerRefs = {
+  const scrollMap = useRef<Record<TabKey, number>>({ log: 0, inbox: 0, history: 0, summary: 0, patterns: 0 });
+  const containerRefs: Record<TabKey, React.RefObject<HTMLDivElement | null>> = {
     log: useRef<HTMLDivElement | null>(null),
     inbox: useRef<HTMLDivElement | null>(null),
     history: useRef<HTMLDivElement | null>(null),
     summary: useRef<HTMLDivElement | null>(null),
+    patterns: useRef<HTMLDivElement | null>(null),
   };
 
   // prefetch other routes off the main thread to make tab taps feel instant
@@ -122,8 +126,9 @@ export default function TabShell() {
         </TabPanel>
         <TabPanel key="summary" id="summary" active={current === "summary"} ref={containerRefs.summary} role="region">
           <SummaryPage />
-        </TabPanel>
-      </div>
+        </TabPanel>          <TabPanel key="patterns" id="patterns" active={current === "patterns"} ref={containerRefs.patterns} role="region">
+            <RecurringPage />
+          </TabPanel>      </div>
       <style jsx>{`
         .tab-shell { position: relative; min-height: 60vh; }
       `}</style>

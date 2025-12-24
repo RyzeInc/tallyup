@@ -10,7 +10,7 @@ Short, actionable notes to help an AI contributor be productive immediately.
 - Lint: `npm run lint` (ESLint configured via `eslint.config.mjs`).
 
 ## Product vision (short)
-TallyUp is an *event-first* personal financial truth engine focused on awareness (not optimization). Treat each inflow/outflow as a first-class event and surface volatility, not smooth averages. Implement features in ways that preserve event detail (timestamps, origin, tags, buckets) and support psychological honesty (flag uncertain events, surface `needsReview`, avoid collapsing irregular income into steady monthly metrics).
+TallyUp is an *event-first* personal financial truth engine focused on awareness (not optimization). Treat each inflow/outflow as a first-class event and surface volatility, not smooth averages. Implement features in ways that preserve event detail (timestamps, origin, tags, areas) and support psychological honesty (flag uncertain events, surface `needsReview`, avoid collapsing irregular income into steady monthly metrics).
 
 ## High level architecture
 - Next.js App Router (app/) is the web app. Pages live in `app/(app)/` (e.g., `summary`, `log`, `history`, `inbox`).
@@ -21,14 +21,14 @@ TallyUp is an *event-first* personal financial truth engine focused on awareness
 ## How product concepts map to code (act immediately useful)
 - Event model: `convex/schema.ts` table `entries` stores each event (fields: `type`, `bucket`, `category`, `tags`, `amountCents`, `date`, `needsReview`, `createdAt`/`updatedAt`). Treat these as immutable events when possible; updates patch existing docs via `convex/entries.ts` mutations.
 - Needs review / Inbox: `needsReview` is set when `category` is missing; used by `listInbox` in `convex/entries.ts` and displayed in `app/(app)/inbox/page.tsx`.
-- Buckets & Tags: Defaults in `components/utils.ts` (DEFAULT_BUCKETS, DEFAULT_TAGS); buckets are free-text (normalized on queries/filters) and used heavily in UX (summary buckets pie, filters in log).
+- Areas & Tags: Defaults in `components/utils.ts` (DEFAULT_BUCKETS, DEFAULT_TAGS); areas are free-text (normalized on queries/filters) and used heavily in UX (summary areas pie, filters in add).
 - Money & Dates: Use `amountCents` (integer cents) and the helpers in `components/utils.ts` (`dollarsToCents`, `centsToDollars`, `yyyymmddToLocalMidnightTs`, `startOfWeekLocalTs`).
 - Summary & insights: Summary calculations live in `app/(app)/summary/page.tsx` — replicate its approach when building new analytics: aggregate event-level data, preserve outliers, avoid smoothing into monthly salary.
 
 ## Recurring series & matching (current implementation)
 - Data: A `recurringRules` table stores series/matcher information (now expanded to include fields like `displayName`, `autolinkEnabled`, cadence guidance, amountMode, min/max/tolerance, and `confidence`). Entries link to a recurring series using `entries.recurringRuleId` (typed `v.id("recurringRules")`).
-- Detection: A detector prototype lives in `convex/detector.ts` (`detectRecurringCandidatesFromEntries`) which groups by `(type,bucket,category)`, analyzes intervals and amount variability, and returns candidates with `amountMode` and `amountTolerancePercent`.
-- Autolink: `addEntry` (in `convex/entries.ts`) now performs a simple autolink pass: it queries active series with `autolinkEnabled` and links the best match when criteria (bucket/category/amount tolerance) are satisfied. This is intentionally conservative — adjust thresholds in server logic as needed.
+- Detection: A detector prototype lives in `convex/detector.ts` (`detectRecurringCandidatesFromEntries`) which groups by `(type,area,category)`, analyzes intervals and amount variability, and returns candidates with `amountMode` and `amountTolerancePercent`. (UI exposes these as Areas to keep language friendly)
+- Auto-apply: `addEntry` (in `convex/entries.ts`) now performs a conservative auto-apply pass: it queries active patterns with `autolinkEnabled` (server flag) and links the best match when criteria (area/category/amount tolerance) are satisfied. This is intentionally conservative — adjust thresholds in server logic as needed.
 - Backfill: `convex/recurring.ts` implements a `backfillRecurringRules` action that creates series from strong candidates and can link matching historical entries (dry-run support provided in the action args).
 
 Notes: The repo favors a "Series (user-facing)" mindset backed by matcher fields; if you prefer a 2-table model (Series + Matchers) that is still straightforward to add later, but currently the series object contains matching knobs for Phase 1.

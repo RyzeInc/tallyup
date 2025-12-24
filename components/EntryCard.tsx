@@ -26,7 +26,7 @@ export default function EntryCard({
               {centsToDollars(entry.amountCents)}
             </span>
             {(entry.recurringRuleId || isOptimistic) ? (
-              <span className="ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: "var(--success)", color: "var(--success-foreground)" }}>Recurring</span>
+              <span className="ml-3 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: "var(--success)", color: "var(--success-foreground)" }}>Pattern</span>
             ) : null}
           </div>
           <div className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>
@@ -34,7 +34,7 @@ export default function EntryCard({
             {entry.category ? (
               <span className="text-neutral-400"> · {entry.category}</span>
             ) : (
-              <span className="text-neutral-500"> · Unlabeled</span>
+              <span className="text-neutral-500"> · Needs review</span>
             )}
           </div>
           {entry.note ? <div className="mt-1 text-xs text-neutral-500">{entry.note}</div> : null}

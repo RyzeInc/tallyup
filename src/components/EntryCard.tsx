@@ -27,7 +27,7 @@ export default function EntryCard({
             {entry.category ? (
               <span className="text-neutral-400"> · {entry.category}</span>
             ) : (
-              <span className="text-neutral-500"> · Unlabeled</span>
+              <span className="text-neutral-500"> · Needs review</span>
             )}
           </div>
           {entry.note ? <div className="mt-1 text-xs text-neutral-500">{entry.note}</div> : null}

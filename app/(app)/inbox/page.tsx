@@ -42,14 +42,14 @@ export default function InboxPage() {
   return (
     <div>
       <div className="mb-4">
-        <div className="text-2xl font-semibold tracking-tight">Inbox</div>
-        <div className="mt-1 text-sm text-neutral-400">Finish labeling to improve accuracy.</div>
-        <div className="mt-2 text-sm text-neutral-400">Tip: You can mark an entry as recurring to link similar future transactions (autolink is optional and requires confirmation).</div>
+        <div className="text-2xl font-semibold tracking-tight">Needs review</div>
+        <div className="mt-1 text-sm text-neutral-400">A few entries need context.</div>
+        <div className="mt-2 text-sm text-neutral-400">Tip: You can save a pattern to recognize similar future entries (auto-apply is off by default and requires confirmation).</div>
       </div>
 
       <SignedOut>
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
-          <div className="text-sm text-neutral-300 mb-3">Sign in to view your inbox.</div>
+          <div className="text-sm text-neutral-300 mb-3">Sign in to view items that need review.</div>
           <SignInButton mode="modal">
             <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
           </SignInButton>
@@ -119,11 +119,7 @@ function InboxItem({
             onClick={() => onMakeRecurring?.()}
             className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200"
           >
-            Make recurring
-          </button>
-
-          <button
-            onClick={done}
+            Save as pattern
             disabled={busy}
             className="rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-60"
             style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}

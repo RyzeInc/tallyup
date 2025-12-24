@@ -149,8 +149,8 @@ export default function LogPage() {
   return (
     <div>
       <div className="mb-4">
-        <div className="text-2xl font-semibold tracking-tight">Quick add</div>
-        <div className="mt-1 text-sm text-neutral-400">Just the basics — you can finish later</div>
+        <div className="text-2xl font-semibold tracking-tight">Add entry</div>
+        <div className="mt-1 text-sm text-neutral-400">Just the basics — review anytime.</div>
       </div>
 
       <SignedOut>
@@ -199,7 +199,7 @@ export default function LogPage() {
             onClick={duplicateLast}
             className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
           >
-            Use last one
+            Use last
           </button>
           <button
             type="button"
@@ -322,20 +322,20 @@ export default function LogPage() {
                 }}
                 className="ml-3 rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200"
               >
-                Make recurring
+                Save as pattern
               </button>
             </>
           ) : null}
         </div>
 
         <div className="mt-6 text-xs text-neutral-500">
-          If you skip Category, it goes to Inbox so you can finish later.
+          If you skip Category, it goes to Review so you can finish later.
         </div>
 
         {selected ? <RecurringModal entry={selected} onClose={() => setSelected(null)} /> : null}
 
         <div className="mt-6 text-xs text-neutral-500">
-          If you skip Category, it goes to Inbox so you can finish later.
+          If you skip Category, it goes to Review so you can finish later.
         </div>
       </SignedIn>
     </div>

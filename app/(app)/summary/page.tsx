@@ -38,7 +38,7 @@ export default function SummaryPage() {
         const b = (e.bucket ?? "Other").trim() || "Other";
         bucketSpend.set(b, (bucketSpend.get(b) ?? 0) + e.amountCents);
 
-        const c = (e.category ?? "Unlabeled").trim() || "Unlabeled";
+        const c = (e.category ?? "Needs review").trim() || "Needs review";
         categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
       }
     }

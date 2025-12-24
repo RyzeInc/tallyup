@@ -42,7 +42,7 @@ export default function HistoryPage() {
       <div className="mb-4">
         <div className="text-2xl font-semibold tracking-tight">History</div>
         <div className="mt-1 text-sm text-neutral-400">Filter & explore your past.</div>
-        <div className="mt-2 text-sm text-neutral-400">Tip: Use "Make recurring" to save repetitive transactions — autolink won't be enabled unless you explicitly confirm it.</div>
+        <div className="mt-2 text-sm text-neutral-400">Tip: Use "Save as pattern" to save repetitive transactions — auto-apply won't be enabled unless you explicitly confirm it.</div>
       </div>
 
       <SignedOut>
@@ -101,14 +101,14 @@ export default function HistoryPage() {
                       onClick={() => setSelected(e)}
                       className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
                     >
-                      Make recurring
+                      Save as pattern
                     </button>
 
                     <button
                       onClick={() => deleteEntry({ id: e._id })}
                       className="rounded-xl border border-neutral-800 bg-neutral-950/40 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-600"
                     >
-                      Delete
+                      Remove
                     </button>
                   </div>
                 }

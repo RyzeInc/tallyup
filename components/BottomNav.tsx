@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useTabs } from "@/components/TabShell";
 
 const tabs = [
-  { href: "/log", label: "Log", icon: "＋", key: "log" },
-  { href: "/inbox", label: "Inbox", icon: "✉", key: "inbox" },
-  { href: "/history", label: "History", icon: "≡", key: "history" },
-  { href: "/summary", label: "Summary", icon: "▦", key: "summary" },
+  { href: "/log", label: "Add", icon: "＋", key: "log" },
+  { href: "/inbox", label: "Review", icon: "✉", key: "inbox" },
+  { href: "/history", label: "Activity", icon: "≡", key: "history" },
+  { href: "/summary", label: "Overview", icon: "▦", key: "summary" },
+  { href: "/recurring", label: "Patterns", icon: "🔁", key: "patterns" },
 ];
 
 export default function BottomNav() {
@@ -23,7 +24,7 @@ export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 border-t" style={{ borderColor: "var(--border)", backgroundColor: "rgba(255,255,255,0.9)" }}>
       <div className="mx-auto max-w-md px-6 py-3">
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {tabs.map((t) => {
             const active = tabsCtx ? tabsCtx.current === t.key : pathname === t.href;
             return tabsCtx ? (

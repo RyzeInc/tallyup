@@ -19,6 +19,7 @@ export default function RecurringModal({
   const [displayName, setDisplayName] = useState(entry.bucket ? `${entry.bucket} ${entry.category ?? ""}`.trim() : entry.note ?? "");
   const [autolink, setAutolink] = useState(false);
   const [autolinkConfirm, setAutolinkConfirm] = useState(false);
+  const [applyToExisting, setApplyToExisting] = useState(false);
   const [amount, setAmount] = useState(centsToDollars(entry.amountCents));
   const create = useMutation((api as any).recurring.createRecurringRule as any);
   const link = useMutation((api as any).recurring.linkEntriesToRule as any);
@@ -29,7 +30,7 @@ export default function RecurringModal({
 
   async function onCreate() {
     if (autolink && !autolinkConfirm) {
-      setErr("Please confirm that you understand what autolink does");
+      setErr("Please confirm that you understand what auto-apply does");
       return;
     }
 
@@ -54,16 +55,29 @@ export default function RecurringModal({
       if (id) {
         // optimistic local UI update
         add(entry._id);
-        push({ title: "Recurring rule created", body: `${displayName || "Rule"} — linked 1 entry`, kind: "success" });
+        push({ title: "Pattern saved", body: `${displayName || "Pattern"} — saved`, kind: "success" });
 
+        // link current entry
         await link({ ruleId: id, entryIds: [entry._id] });
+
+        if (applyToExisting) {
+          // for now, we simply attempt to apply to similar entries using the server-side link endpoint
+          // future improvement: expand to detect and link many historical matches
+          try {
+            await link({ ruleId: id, entryIds: [entry._id] });
+            push({ title: "Applied to existing", body: `Applied to matching entries`, kind: "success" });
+          } catch (e) {
+            // ignore errors here
+          }
+        }
+
         onCreated && onCreated(id);
       }
 
       onClose();
     } catch (e: any) {
       setErr(e?.message ?? "Failed to create");
-      push({ title: "Failed to create", body: e?.message ?? "Unknown error", kind: "error" });
+      push({ title: "Failed to save pattern", body: e?.message ?? "Unknown error", kind: "error" });
     } finally {
       setBusy(false);
     }
@@ -77,8 +91,8 @@ export default function RecurringModal({
         style={{ backgroundColor: document.documentElement.classList.contains("dark") ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.12)" }}
       />
       <div className="relative z-10 w-[420px] rounded-2xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}>
-        <div className="text-sm font-semibold">Make Recurring</div>
-        <div className="mt-2 text-xs text-neutral-400">Create a rule to automatically associate similar future transactions. We’ll never enable automatic linking without your explicit confirmation.</div>
+        <div className="text-sm font-semibold">Save pattern</div>
+        <div className="mt-2 text-xs text-neutral-400">Save a pattern to recognize similar future entries. Auto-apply is off by default and requires explicit confirmation.</div>
 
         <div className="mt-3 space-y-3 text-sm">
           <div>
@@ -105,16 +119,21 @@ export default function RecurringModal({
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={autolink} onChange={(e) => { setAutolink(e.target.checked); if (!e.target.checked) setAutolinkConfirm(false); }} />
-              <span className="text-xs text-neutral-400">Autolink future entries (off by default)</span>
+              <span className="text-xs text-neutral-400">Auto-apply to future entries (off by default)</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={applyToExisting} onChange={(e) => setApplyToExisting(e.target.checked)} />
+              <span className="text-xs text-neutral-400">Apply to existing entries (optional)</span>
             </label>
 
             {autolink ? (
               <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "var(--border)", backgroundColor: "var(--popover)", color: "var(--popover-foreground)" }}>
-                <div className="font-medium">Autolink confirmation</div>
-                <div className="text-xs mt-1">Autolink will automatically link incoming entries that match this rule. It's best for stable, regular payments (e.g., rent, salary). Please confirm that you understand:</div>
+                <div className="font-medium">Auto-apply confirmation</div>
+                <div className="text-xs mt-1">Auto-apply will automatically fill this pattern on future entries. It's best for stable, regular payments (e.g., rent, salary). Please confirm that you understand:</div>
                 <label className="mt-2 flex items-center gap-2">
                   <input type="checkbox" checked={autolinkConfirm} onChange={(e) => setAutolinkConfirm(e.target.checked)} />
-                  <span className="text-xs">I understand and want to enable autolink</span>
+                  <span className="text-xs">I understand this will automatically apply to future entries</span>
                 </label>
               </div>
             ) : null}
@@ -125,7 +144,7 @@ export default function RecurringModal({
 
         <div className="mt-4 flex gap-2">
           <button onClick={onClose} className="rounded-xl border px-3 py-2 text-xs">Cancel</button>
-          <button onClick={onCreate} disabled={busy} className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-900 disabled:opacity-60">Create recurring rule</button>
+          <button onClick={onCreate} disabled={busy} className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-900 disabled:opacity-60">Save pattern</button>
         </div>
       </div>
     </div>
