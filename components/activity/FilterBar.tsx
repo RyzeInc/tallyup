@@ -20,11 +20,11 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
-  // fetch categories only when a specific type is selected (server requires `type`)
-  const categories =
-    type === "all"
-      ? undefined
-      : (useQuery(api.entries.listCategories, { type: type as any, bucket: undefined }) as string[] | undefined);
+  // fetch categories (type is optional on the server)
+  const categories = useQuery(api.entries.listCategories, {
+    type: type === "all" ? undefined : (type as any),
+    bucket: undefined,
+  }) as string[] | undefined;
 
   useEffect(() => {
     const t = setTimeout(() => {

@@ -371,17 +371,27 @@ export const listEntriesPaged = query({
 
 export const listCategories = query({
   args: {
-    type: v.union(v.literal("expense"), v.literal("income")),
+    type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
     bucket: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
 
-    const rows = await ctx.db
-      .query("entries")
-      .withIndex("by_user_type_date", q => q.eq("userId", userId).eq("type", args.type))
-      .order("desc")
-      .take(500);
+    // If a type is provided, use the type index for efficiency. Otherwise fall back to the date index.
+    let rows: any[] = [];
+    if (args.type) {
+      rows = await ctx.db
+        .query("entries")
+        .withIndex("by_user_type_date", q => q.eq("userId", userId).eq("type", args.type))
+        .order("desc")
+        .take(500);
+    } else {
+      rows = await ctx.db
+        .query("entries")
+        .withIndex("by_user_date", q => q.eq("userId", userId))
+        .order("desc")
+        .take(500);
+    }
 
     const bucketFilter = args.bucket?.trim().toLowerCase();
     const seen = new Set<string>();
