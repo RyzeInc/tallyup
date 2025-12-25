@@ -93,46 +93,137 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
   return (
     <form onSubmit={onSave}>
-      <div className="mb-3 grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => setType("expense")} className={type === "expense" ? "rounded-full px-3 py-1 text-xs font-semibold bg-accent text-accent-foreground" : "rounded-full px-3 py-1 text-xs font-semibold border text-neutral-700"}>Spent</button>
-        <button type="button" onClick={() => setType("income")} className={type === "income" ? "rounded-full px-3 py-1 text-xs font-semibold bg-accent text-accent-foreground" : "rounded-full px-3 py-1 text-xs font-semibold border text-neutral-700"}>Received</button>
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => setType("expense")}
+          className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+            type === "expense"
+              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+              : "border hover:bg-[var(--surface-subtle)]"
+          }`}
+          style={{
+            borderColor: type === "expense" ? undefined : "var(--border)",
+            color: type === "expense" ? undefined : "var(--text)",
+          }}
+        >
+          Spent
+        </button>
+        <button
+          type="button"
+          onClick={() => setType("income")}
+          className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+            type === "income"
+              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+              : "border hover:bg-[var(--surface-subtle)]"
+          }`}
+          style={{
+            borderColor: type === "income" ? undefined : "var(--border)",
+            color: type === "income" ? undefined : "var(--text)",
+          }}
+        >
+          Received
+        </button>
       </div>
 
-      <label className="block text-xs text-neutral-400 mb-1">Amount</label>
+      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+        Amount
+      </label>
       <CurrencyInput valueCents={amountCents ?? undefined} onChange={(c) => setAmountCents(c)} />
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-neutral-400 mb-1">Date</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }} />
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            Date
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+            style={{
+              borderColor: "var(--border)",
+              backgroundColor: "var(--input)",
+              color: "var(--text)",
+            }}
+          />
         </div>
         <div>
-          <label className="block text-xs text-neutral-400 mb-1">Space</label>
-          <input value={bucket} onChange={(e) => setBucket(e.target.value)} placeholder="Personal" className="w-full rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }} />
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            Space
+          </label>
+          <input
+            value={bucket}
+            onChange={(e) => setBucket(e.target.value)}
+            placeholder="Personal"
+            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+            style={{
+              borderColor: "var(--border)",
+              backgroundColor: "var(--input)",
+              color: "var(--text)",
+            }}
+          />
         </div>
       </div>
 
-      <label className="block text-xs text-neutral-400 mb-1 mt-3">Category (optional)</label>
-      <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category" />
+      <div className="mt-4">
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+          Category (optional)
+        </label>
+        <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category" />
+      </div>
 
       {showMore ? (
-        <>
-          <label className="block text-xs text-neutral-400 mb-1 mt-3">Method / Account (optional)</label>
+        <div className="mt-4">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            Method / Account (optional)
+          </label>
           <Input value={methodOrAccount} onChange={(e) => setMethodOrAccount(e.target.value)} placeholder="e.g., Checking" />
-        </>
+        </div>
       ) : null}
 
-      <label className="block text-xs text-neutral-400 mb-1 mt-3">Note (optional)</label>
-      <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Quick context" />
-
-      <div className="mt-4 flex items-center gap-2">
-        <button type="submit" className="rounded-md px-4 py-2 bg-accent text-accent-foreground">Save</button>
-        <button type="button" onClick={() => setShowMore((s) => !s)} className="rounded-md px-3 py-2 border">{showMore ? "Less" : "More"}</button>
-        <div className="ml-auto text-sm">
-          {status.kind === "ok" ? <span style={{ color: "var(--success-foreground)" }}>{status.msg}</span> : null}
-          {status.kind === "err" ? <span className="text-danger">{status.msg}</span> : null}
-        </div>
+      <div className="mt-4">
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+          Note (optional)
+        </label>
+        <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Quick context" />
       </div>
+
+      <div className="mt-5 flex items-center gap-3">
+        <button
+          type="submit"
+          className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors"
+          style={{
+            backgroundColor: "var(--accent)",
+            color: "var(--accent-foreground)",
+          }}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowMore((s) => !s)}
+          className="rounded-lg px-4 py-2.5 text-sm font-medium border transition-colors hover:bg-[var(--surface-subtle)]"
+          style={{
+            borderColor: "var(--border)",
+            color: "var(--text)",
+          }}
+        >
+          {showMore ? "Less" : "More"}
+        </button>
+      </div>
+
+      {/* Status feedback */}
+      {status.kind !== "idle" && (
+        <div className="mt-3 text-center text-sm">
+          {status.kind === "ok" && (
+            <span style={{ color: "var(--success)" }}>{status.msg}</span>
+          )}
+          {status.kind === "err" && (
+            <span style={{ color: "var(--danger)" }}>{status.msg}</span>
+          )}
+        </div>
+      )}
     </form>
   );
 }

@@ -111,8 +111,13 @@ export default function CurrencyInput({
           onChange?.(cents);
         }
       }}
-      className="w-full rounded-md border px-3 py-2"
-      style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+      className="w-full h-12 rounded-lg border px-3 text-lg font-semibold tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent"
+      style={{
+        borderColor: "var(--border)",
+        backgroundColor: "var(--input)",
+        color: "var(--text)",
+        fontFeatureSettings: "'tnum' 1",
+      }}
     />
   );
 }

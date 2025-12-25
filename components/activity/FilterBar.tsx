@@ -6,6 +6,7 @@ import Input from "@/components/ui/Input";
 import Pill from "@/components/ui/Pill";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import { AlertCircle } from "lucide-react";
 
 export default function FilterBar({ buckets = [] as string[] }: { buckets?: string[] }) {
   const searchParams = useSearchParams();
@@ -16,6 +17,10 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
   const [needsReview, setNeedsReview] = useState(() => (searchParams.get("review") === "1"));
   const [category, setCategory] = useState(() => searchParams.get("category") ?? "");
   const [tag, setTag] = useState(() => searchParams.get("tag") ?? "");
+
+  // Get review count for badge
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const reviewCount = inbox?.length ?? 0;
 
   // fetch categories when a specific type is selected
   const categories = useQuery(api.entries.listCategories, {
@@ -75,12 +80,35 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
         <Input placeholder="Search merchant, note, tag, amount…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Pill active={type === "all"} onClick={() => setTypeAndPush("all")}>All</Pill>
         <Pill active={type === "expense"} onClick={() => setTypeAndPush("expense")}>Spent</Pill>
         <Pill active={type === "income"} onClick={() => setTypeAndPush("income")}>Received</Pill>
-        <button onClick={toggleReview} className={needsReview ? "ml-2 rounded-full px-3 py-1 text-xs font-semibold bg-accent text-accent-foreground" : "ml-2 rounded-full px-3 py-1 text-xs font-semibold border text-neutral-700"}>
-          Needs review
+        
+        {/* Needs Review filter with badge */}
+        <button
+          onClick={toggleReview}
+          className={`relative inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            needsReview ? "bg-[var(--accent-subtle)] border-[var(--accent)]" : "hover:bg-[var(--surface-subtle)]"
+          }`}
+          style={{
+            borderColor: needsReview ? "var(--accent)" : "var(--border)",
+            color: needsReview ? "var(--accent)" : "var(--text)",
+          }}
+        >
+          <AlertCircle className="h-4 w-4" />
+          <span>Needs review</span>
+          {reviewCount > 0 && (
+            <span
+              className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-semibold"
+              style={{
+                backgroundColor: needsReview ? "var(--accent)" : "var(--danger)",
+                color: "#fff",
+              }}
+            >
+              {reviewCount > 99 ? "99+" : reviewCount}
+            </span>
+          )}
         </button>
 
         <div className="ml-2 flex gap-2">

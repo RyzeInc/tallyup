@@ -1,26 +1,36 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { Calendar, ChevronDown, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, X, Calendar } from "lucide-react";
+import { todayYYYYMMDD } from "@/components/utils";
 
-export default function DateRangeControl({
-  range,
-  setRange,
-  from,
-  to,
-  setFrom,
-  setTo,
-}: {
-  range: string;
-  setRange: (r: string) => void;
-  from: string;
-  to: string;
-  setFrom: (s: string) => void;
-  setTo: (s: string) => void;
-}) {
+export type DateRangeMode = "today" | "week" | "month" | "custom";
+
+interface DateRangeChipProps {
+  mode: DateRangeMode;
+  onModeChange: (mode: DateRangeMode) => void;
+  customFrom?: string;
+  customTo?: string;
+  onCustomChange?: (from: string, to: string) => void;
+}
+
+const modeLabels: Record<DateRangeMode, string> = {
+  today: "Today",
+  week: "This Week",
+  month: "This Month",
+  custom: "Custom",
+};
+
+export default function DateRangeChip({
+  mode,
+  onModeChange,
+  customFrom,
+  customTo,
+  onCustomChange,
+}: DateRangeChipProps) {
   const [open, setOpen] = useState(false);
-  const [tempFrom, setTempFrom] = useState(from);
-  const [tempTo, setTempTo] = useState(to);
+  const [tempFrom, setTempFrom] = useState(customFrom ?? todayYYYYMMDD());
+  const [tempTo, setTempTo] = useState(customTo ?? todayYYYYMMDD());
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -34,36 +44,32 @@ export default function DateRangeControl({
   }, [open]);
 
   useEffect(() => {
-    setTempFrom(from);
-    setTempTo(to);
-  }, [from, to]);
+    if (customFrom) setTempFrom(customFrom);
+    if (customTo) setTempTo(customTo);
+  }, [customFrom, customTo]);
 
-  const modeLabels: Record<string, string> = {
-    today: "Today",
-    week: "This Week",
-    month: "This Month",
-    custom: "Custom",
-  };
-
-  function selectMode(m: string) {
-    setRange(m);
-    if (m !== "custom") {
+  function selectMode(m: DateRangeMode) {
+    if (m === "custom") {
+      // Don't close yet, show date pickers
+      onModeChange(m);
+    } else {
+      onModeChange(m);
       setOpen(false);
     }
   }
 
   function applyCustom() {
-    setFrom(tempFrom);
-    setTo(tempTo);
+    onCustomChange?.(tempFrom, tempTo);
     setOpen(false);
   }
 
-  const displayLabel =
-    range === "custom" && from && to ? `${from} – ${to}` : modeLabels[range] || modeLabels.month;
+  const displayLabel = mode === "custom" && customFrom && customTo
+    ? `${customFrom} – ${customTo}`
+    : modeLabels[mode];
 
   return (
     <>
-      {/* Compact chip trigger */}
+      {/* Chip trigger */}
       <button
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
@@ -129,15 +135,15 @@ export default function DateRangeControl({
 
               {/* Options */}
               <div className="space-y-1 mb-4">
-                {["today", "week", "month", "custom"].map((m) => (
+                {(["today", "week", "month", "custom"] as DateRangeMode[]).map((m) => (
                   <button
                     key={m}
                     onClick={() => selectMode(m)}
                     className={`w-full text-left rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-                      range === m ? "bg-[var(--accent-subtle)]" : "hover:bg-[var(--surface-subtle)]"
+                      mode === m ? "bg-[var(--accent-subtle)]" : "hover:bg-[var(--surface-subtle)]"
                     }`}
                     style={{
-                      color: range === m ? "var(--accent)" : "var(--text)",
+                      color: mode === m ? "var(--accent)" : "var(--text)",
                     }}
                   >
                     {modeLabels[m]}
@@ -146,11 +152,8 @@ export default function DateRangeControl({
               </div>
 
               {/* Custom date pickers */}
-              {range === "custom" && (
-                <div
-                  className="space-y-3 border-t pt-4"
-                  style={{ borderColor: "var(--border)" }}
-                >
+              {mode === "custom" && (
+                <div className="space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label
