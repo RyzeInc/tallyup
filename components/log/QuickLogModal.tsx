@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import * as Lucide from "lucide-react";
 import LogForm from "./LogForm";
 
 export default function QuickLogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -72,7 +72,7 @@ export default function QuickLogModal({ open, onClose }: { open: boolean; onClos
               className="rounded-full p-2 hover:bg-[var(--surface-subtle)] transition-colors"
               aria-label="Close"
             >
-              <X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
             </button>
           </div>
 

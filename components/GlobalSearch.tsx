@@ -4,29 +4,17 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import {
-  Search,
-  LayoutGrid,
-  Plus,
-  History,
-  Inbox,
-  BarChart3,
-  Settings,
-  Layers,
-  RefreshCw,
-  ArrowRight,
-  Hash,
-} from "lucide-react";
+import * as Lucide from "lucide-react";
 
 const pages = [
-  { href: "/overview", label: "Overview", icon: LayoutGrid, keywords: ["home", "dashboard"] },
-  { href: "/log", label: "Add Entry", icon: Plus, keywords: ["new", "create", "add", "log"] },
-  { href: "/activity", label: "Transactions", icon: History, keywords: ["history", "activity", "list"] },
-  { href: "/review", label: "Review Queue", icon: Inbox, keywords: ["inbox", "needs review", "uncategorized"] },
-  { href: "/rules", label: "Rules", icon: Layers, keywords: ["patterns", "recurring"] },
-  { href: "/recurring", label: "Recurring", icon: RefreshCw, keywords: ["repeat", "subscription"] },
-  { href: "/insights", label: "Insights", icon: BarChart3, keywords: ["analytics", "charts", "summary"] },
-  { href: "/settings", label: "Settings", icon: Settings, keywords: ["profile", "account", "preferences"] },
+  { href: "/overview", label: "Overview", icon: Lucide.LayoutGrid, keywords: ["home", "dashboard"] },
+  { href: "/log", label: "Add Entry", icon: Lucide.Plus, keywords: ["new", "create", "add", "log"] },
+  { href: "/activity", label: "Transactions", icon: Lucide.History, keywords: ["history", "activity", "list"] },
+  { href: "/review", label: "Review Queue", icon: Lucide.Inbox, keywords: ["inbox", "needs review", "uncategorized"] },
+  { href: "/rules", label: "Rules", icon: Lucide.Layers, keywords: ["patterns", "recurring"] },
+  { href: "/recurring", label: "Recurring", icon: Lucide.RefreshCw, keywords: ["repeat", "subscription"] },
+  { href: "/insights", label: "Insights", icon: Lucide.BarChart3, keywords: ["analytics", "charts", "summary"] },
+  { href: "/settings", label: "Settings", icon: Lucide.Settings, keywords: ["profile", "account", "preferences"] },
 ];
 
 interface GlobalSearchProps {
@@ -153,7 +141,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         >
           {/* Search input */}
           <div className="flex items-center gap-3 px-4 border-b" style={{ borderColor: "var(--border)" }}>
-            <Search className="h-5 w-5 text-[var(--text-tertiary)]" />
+            <Lucide.Search className="h-5 w-5 text-[var(--text-tertiary)]" />
             <input
               ref={inputRef}
               type="text"
@@ -199,7 +187,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                           >
                             <Icon className="h-4 w-4" />
                             <span className="flex-1 text-left">{result.label}</span>
-                            <ArrowRight className="h-4 w-4 opacity-50" />
+                            <Lucide.ArrowRight className="h-4 w-4 opacity-50" />
                           </button>
                         );
                       })}
@@ -228,14 +216,14 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                                 : "text-[var(--text)] hover:bg-[var(--surface-subtle)]"
                             }`}
                           >
-                            <Hash className="h-4 w-4 text-[var(--text-tertiary)]" />
+                            <Lucide.Hash className="h-4 w-4 text-[var(--text-tertiary)]" />
                             <div className="flex-1 text-left">
                               <div className="font-medium">{e.category || e.bucket || "Uncategorized"}</div>
                               <div className="text-xs text-[var(--text-secondary)]">
                                 ${(e.amountCents / 100).toFixed(2)} · {e.type}
                               </div>
                             </div>
-                            <ArrowRight className="h-4 w-4 opacity-50" />
+                            <Lucide.ArrowRight className="h-4 w-4 opacity-50" />
                           </button>
                         );
                       })}

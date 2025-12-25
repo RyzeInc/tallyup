@@ -4,12 +4,12 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import * as Lucide from "lucide-react";
 import { centsToDollars, todayYYYYMMDD, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
 import DateRangeControl from "@/components/activity/DateRangeControl";
 import ChartBarStacked from "@/components/ui/ChartBarStacked";
-import { TrendingUp, TrendingDown, PieChart, BarChart3 } from "lucide-react";
 
-const COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#f472b6", "#fbbf24", "#94a3b8"];
+const COLORS = ["#6366F1", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899", "#06B6D4"];
 
 export default function InsightsPage() {
   const [mode, setMode] = useState<DateRangePreset>("month");
@@ -158,7 +158,7 @@ export default function InsightsPage() {
               style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
             >
               <div className="flex items-center gap-2 mb-4">
-                <PieChart className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                <Lucide.PieChart className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                   Spending by Space
                 </span>
@@ -220,7 +220,7 @@ export default function InsightsPage() {
               style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
             >
               <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                <Lucide.BarChart3 className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                 <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                   Top Categories
                 </span>

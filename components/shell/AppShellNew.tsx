@@ -4,32 +4,18 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { useUser, SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
-import {
-  LayoutGrid,
-  Plus,
-  History,
-  Inbox,
-  BarChart3,
-  Settings,
-  Search,
-  Command,
-  Menu,
-  X,
-  ChevronDown,
-  Layers,
-  RefreshCw,
-} from "lucide-react";
+import * as Lucide from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import GlobalSearch from "@/components/GlobalSearch";
 
 const navItems = [
-  { href: "/overview", label: "Overview", icon: LayoutGrid },
-  { href: "/log", label: "Add Entry", icon: Plus },
-  { href: "/activity", label: "Transactions", icon: History },
-  { href: "/review", label: "Review", icon: Inbox, badge: true },
-  { href: "/rules", label: "Rules", icon: Layers },
-  { href: "/recurring", label: "Recurring", icon: RefreshCw },
-  { href: "/insights", label: "Insights", icon: BarChart3 },
+  { href: "/overview", label: "Overview", icon: Lucide.LayoutGrid },
+  { href: "/log", label: "Add Entry", icon: Lucide.Plus },
+  { href: "/activity", label: "Transactions", icon: Lucide.History },
+  { href: "/review", label: "Review", icon: Lucide.Inbox, badge: true },
+  { href: "/rules", label: "Rules", icon: Lucide.Layers },
+  { href: "/recurring", label: "Recurring", icon: Lucide.RefreshCw },
+  { href: "/insights", label: "Insights", icon: Lucide.BarChart3 },
 ];
 
 const bottomNavItems = [
@@ -142,7 +128,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="font-semibold text-[var(--text)]">TallyUp</span>
               </div>
               <button onClick={closeSidebar} className="p-2 rounded-lg hover:bg-[var(--surface-subtle)]">
-                <X className="h-5 w-5 text-[var(--text-secondary)]" />
+                <Lucide.X className="h-5 w-5 text-[var(--text-secondary)]" />
               </button>
             </div>
             <nav className="px-3 py-4 space-y-1">
@@ -201,7 +187,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setSidebarOpen(true)}
                 className="lg:hidden p-2 rounded-lg hover:bg-[var(--surface-subtle)]"
               >
-                <Menu className="h-5 w-5 text-[var(--text-secondary)]" />
+                <Lucide.Menu className="h-5 w-5 text-[var(--text-secondary)]" />
               </button>
 
               {/* Search button */}
@@ -210,10 +196,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-[var(--surface)] hover:bg-[var(--surface-subtle)] text-[var(--text-secondary)] text-sm transition-colors"
                 style={{ borderColor: "var(--border)" }}
               >
-                <Search className="h-4 w-4" />
+                <Lucide.Search className="h-4 w-4" />
                 <span className="hidden sm:inline">Search...</span>
                 <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-xs font-medium text-[var(--text-tertiary)] bg-[var(--surface-subtle)] rounded">
-                  <Command className="h-3 w-3" />K
+                  <Lucide.Command className="h-3 w-3" />K
                 </kbd>
               </button>
             </div>
@@ -225,7 +211,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 href="/log"
                 className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-sm font-medium transition-colors"
               >
-                <Plus className="h-4 w-4" />
+                <Lucide.Plus className="h-4 w-4" />
                 <span>Add Entry</span>
               </Link>
 

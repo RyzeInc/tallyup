@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { X, Settings, User, BookOpen, FileText, HelpCircle, MessageSquare, Download, Upload } from "lucide-react";
+import * as Lucide from "lucide-react";
 
 interface MoreSheetProps {
   open: boolean;
@@ -24,22 +24,22 @@ const menuGroups: MenuGroup[] = [
   {
     title: "Workflows",
     items: [
-      { href: "/rules", label: "Rules", icon: <BookOpen className="h-5 w-5" /> },
-      { href: "/recurring", label: "Recurring", icon: <FileText className="h-5 w-5" /> },
+      { href: "/rules", label: "Rules", icon: <Lucide.BookOpen className="h-5 w-5" /> },
+      { href: "/recurring", label: "Recurring", icon: <Lucide.FileText className="h-5 w-5" /> },
     ],
   },
   {
     title: "Account",
     items: [
-      { href: "/settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
-      { href: "/profile", label: "Profile", icon: <User className="h-5 w-5" /> },
+      { href: "/settings", label: "Settings", icon: <Lucide.Settings className="h-5 w-5" /> },
+      { href: "/profile", label: "Profile", icon: <Lucide.User className="h-5 w-5" /> },
     ],
   },
   {
     title: "Support",
     items: [
-      { href: "/help", label: "Help", icon: <HelpCircle className="h-5 w-5" /> },
-      { href: "/feedback", label: "Feedback", icon: <MessageSquare className="h-5 w-5" /> },
+      { href: "/help", label: "Help", icon: <Lucide.HelpCircle className="h-5 w-5" /> },
+      { href: "/feedback", label: "Feedback", icon: <Lucide.MessageSquare className="h-5 w-5" /> },
     ],
   },
 ];
@@ -101,7 +101,7 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
 
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+            <h2 className="text-h2" style={{ color: "var(--text)" }}>
               More
             </h2>
             <button
@@ -109,7 +109,7 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
               className="rounded-full p-2 hover:bg-[var(--surface-subtle)] transition-colors"
               aria-label="Close"
             >
-              <X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
             </button>
           </div>
 
@@ -117,10 +117,7 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
           <div className="space-y-6">
             {menuGroups.map((group) => (
               <div key={group.title}>
-                <div
-                  className="text-xs font-medium uppercase tracking-wide mb-2 px-1"
-                  style={{ color: "var(--text-tertiary)" }}
-                >
+                <div className="text-micro mb-3 px-1">
                   {group.title}
                 </div>
                 <div className="space-y-1">
@@ -129,16 +126,16 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
-                      className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-[var(--surface-subtle)] transition-colors"
+                      className="flex items-center gap-3 rounded-xl px-4 py-3.5 hover:bg-[var(--surface-subtle)] transition-colors"
                       style={{ color: "var(--text)" }}
                     >
                       <span style={{ color: "var(--text-secondary)" }}>
                         {item.icon}
                       </span>
-                      <span className="flex-1 text-sm font-medium">{item.label}</span>
+                      <span className="flex-1 text-body font-medium">{item.label}</span>
                       {item.badge !== undefined && item.badge > 0 && (
                         <span
-                          className="rounded-full px-2 py-0.5 text-xs font-medium"
+                          className="rounded-full px-2.5 py-1 text-sm font-semibold"
                           style={{
                             backgroundColor: "var(--accent)",
                             color: "var(--accent-foreground)",
@@ -147,6 +144,10 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
                           {item.badge}
                         </span>
                       )}
+                      <Lucide.ChevronRight
+                        className="h-4 w-4"
+                        style={{ color: "var(--text-tertiary)" }}
+                      />
                     </Link>
                   ))}
                 </div>

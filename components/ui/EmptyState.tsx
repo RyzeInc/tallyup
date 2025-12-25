@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Inbox } from "lucide-react";
+import * as Lucide from "lucide-react";
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -9,24 +9,41 @@ interface EmptyStateProps {
   compact?: boolean;
 }
 
-export default function EmptyState({ icon, title, subtitle, action, compact = false }: EmptyStateProps) {
+export default function EmptyState({
+  icon,
+  title,
+  subtitle,
+  action,
+  compact = false,
+}: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center rounded-xl border bg-[var(--card)] ${
-        compact ? "py-8 px-6" : "py-12 px-8"
+      className={`flex flex-col items-center justify-center text-center rounded-2xl ${
+        compact ? "py-10 px-6" : "py-16 px-8"
       }`}
-      style={{ borderColor: "var(--border)" }}
+      style={{
+        backgroundColor: "var(--surface)",
+        border: "1px solid var(--border)",
+      }}
     >
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-subtle)]">
-        {icon ?? <Inbox className="h-6 w-6 text-[var(--text-tertiary)]" />}
+      <div
+        className="mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+        style={{ backgroundColor: "var(--surface-subtle)" }}
+      >
+        {icon ?? (
+          <Lucide.Inbox
+            className="h-7 w-7"
+            style={{ color: "var(--text-tertiary)" }}
+          />
+        )}
       </div>
-      <h3 className="text-base font-medium text-[var(--text)]">{title}</h3>
+      <h3 className="text-h2" style={{ color: "var(--text)" }}>
+        {title}
+      </h3>
       {subtitle && (
-        <p className="mt-1 text-sm text-[var(--text-secondary)] max-w-sm">
-          {subtitle}
-        </p>
+        <p className="mt-2 text-meta max-w-sm">{subtitle}</p>
       )}
-      {action && <div className="mt-4">{action}</div>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

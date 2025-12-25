@@ -1,6 +1,6 @@
 "use client";
 
-import Lucide from "lucide-react";
+import * as Lucide from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface FABProps {

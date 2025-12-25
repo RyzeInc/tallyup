@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Input from "@/components/ui/Input";
-import Pill from "@/components/ui/Pill";
+import * as Lucide from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { AlertCircle } from "lucide-react";
 
 export default function FilterBar({ buckets = [] as string[] }: { buckets?: string[] }) {
   const searchParams = useSearchParams();
@@ -14,7 +12,7 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
 
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const [type, setType] = useState(() => (searchParams.get("type") as any) ?? "all");
-  const [needsReview, setNeedsReview] = useState(() => (searchParams.get("review") === "1"));
+  const [needsReview, setNeedsReview] = useState(() => searchParams.get("review") === "1");
   const [category, setCategory] = useState(() => searchParams.get("category") ?? "");
   const [tag, setTag] = useState(() => searchParams.get("tag") ?? "");
 
@@ -22,34 +20,37 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
-  // fetch categories when a specific type is selected
-  const categories = useQuery(api.entries.listCategories, {
-    type: type === "all" ? ("expense" as any) : (type as any),
-    bucket: undefined,
-  }) as string[] | undefined;
+  // fetch categories only when a specific type is selected (server requires `type`)
+  const categories =
+    type === "all"
+      ? undefined
+      : (useQuery(api.entries.listCategories, { type: type as any, bucket: undefined }) as string[] | undefined);
 
   useEffect(() => {
     const t = setTimeout(() => {
-      const p = new URLSearchParams(searchParams as any);
-      if (q) p.set("q", q); else p.delete("q");
-      router.replace(`/activity?${p.toString()}`);
+      const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+      if (q) p.set("q", q);
+      else p.delete("q");
+      const qs = p.toString();
+      router.replace(qs ? `/activity?${qs}` : `/activity`);
     }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
   function setTypeAndPush(t: string) {
-    const p = new URLSearchParams(searchParams as any);
-    if (t && t !== "all") p.set("type", t); else p.delete("type");
-    // clear category when type changes
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    if (t && t !== "all") p.set("type", t);
+    else p.delete("type");
     p.delete("category");
-    router.replace(`/activity?${p.toString()}`);
+    const qs = p.toString();
+    router.replace(qs ? `/activity?${qs}` : `/activity`);
     setType(t as any);
     setCategory("");
   }
 
   function toggleReview() {
-    const p = new URLSearchParams(searchParams as any);
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
     if (needsReview) {
       p.delete("review");
       setNeedsReview(false);
@@ -57,88 +58,168 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
       p.set("review", "1");
       setNeedsReview(true);
     }
-    router.replace(`/activity?${p.toString()}`);
+    const qs = p.toString();
+    router.replace(qs ? `/activity?${qs}` : `/activity`);
   }
 
   function setCategoryAndPush(c: string) {
-    const p = new URLSearchParams(searchParams as any);
-    if (c) p.set("category", c); else p.delete("category");
-    router.replace(`/activity?${p.toString()}`);
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    if (c) p.set("category", c);
+    else p.delete("category");
+    const qs = p.toString();
+    router.replace(qs ? `/activity?${qs}` : `/activity`);
     setCategory(c);
   }
 
   function setTagAndPush(tg: string) {
-    const p = new URLSearchParams(searchParams as any);
-    if (tg) p.set("tag", tg); else p.delete("tag");
-    router.replace(`/activity?${p.toString()}`);
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    if (tg) p.set("tag", tg);
+    else p.delete("tag");
+    const qs = p.toString();
+    router.replace(qs ? `/activity?${qs}` : `/activity`);
     setTag(tg);
   }
 
+  const filterChip = (active: boolean) =>
+    `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+      active
+        ? "bg-[var(--accent-subtle)] border-[var(--accent)]"
+        : "hover:bg-[var(--surface-subtle)]"
+    }`;
+
   return (
-    <div className="mb-3 space-y-2">
-      <div className="flex gap-2">
-        <Input placeholder="Search merchant, note, tag, amount…" value={q} onChange={(e) => setQ(e.target.value)} />
+    <div className="space-y-3">
+      {/* Search Input */}
+      <div
+        className="flex items-center gap-3 rounded-xl px-4 py-3"
+        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <Lucide.Search className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
+        <input
+          type="text"
+          placeholder="Search transactions…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="flex-1 bg-transparent text-body outline-none placeholder:text-[var(--text-tertiary)]"
+          style={{ color: "var(--text)" }}
+        />
+        {q && (
+          <button
+            onClick={() => setQ("")}
+            className="shrink-0 rounded-full p-1 transition-colors hover:bg-[var(--surface-subtle)]"
+          >
+            <Lucide.X className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+          </button>
+        )}
       </div>
 
+      {/* Filter Chips Row */}
       <div className="flex flex-wrap items-center gap-2">
-        <Pill active={type === "all"} onClick={() => setTypeAndPush("all")}>All</Pill>
-        <Pill active={type === "expense"} onClick={() => setTypeAndPush("expense")}>Spent</Pill>
-        <Pill active={type === "income"} onClick={() => setTypeAndPush("income")}>Received</Pill>
-        
-        {/* Needs Review filter with badge */}
+        {/* Type Filters */}
         <button
-          onClick={toggleReview}
-          className={`relative inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-            needsReview ? "bg-[var(--accent-subtle)] border-[var(--accent)]" : "hover:bg-[var(--surface-subtle)]"
-          }`}
+          onClick={() => setTypeAndPush("all")}
+          className={filterChip(type === "all")}
           style={{
-            borderColor: needsReview ? "var(--accent)" : "var(--border)",
-            color: needsReview ? "var(--accent)" : "var(--text)",
+            border: `1px solid ${type === "all" ? "var(--accent)" : "var(--border)"}`,
+            color: type === "all" ? "var(--accent)" : "var(--text)",
           }}
         >
-          <AlertCircle className="h-4 w-4" />
-          <span>Needs review</span>
-          {reviewCount > 0 && (
-            <span
-              className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-semibold"
-              style={{
-                backgroundColor: needsReview ? "var(--accent)" : "var(--danger)",
-                color: "#fff",
-              }}
-            >
-              {reviewCount > 99 ? "99+" : reviewCount}
-            </span>
-          )}
+          All
+        </button>
+        <button
+          onClick={() => setTypeAndPush("expense")}
+          className={filterChip(type === "expense")}
+          style={{
+            border: `1px solid ${type === "expense" ? "var(--accent)" : "var(--border)"}`,
+            color: type === "expense" ? "var(--accent)" : "var(--text)",
+          }}
+        >
+          <span className="flex items-center gap-1.5">
+            <Lucide.ArrowUpRight className="h-4 w-4" />
+            Spent
+          </span>
+        </button>
+        <button
+          onClick={() => setTypeAndPush("income")}
+          className={filterChip(type === "income")}
+          style={{
+            border: `1px solid ${type === "income" ? "var(--accent)" : "var(--border)"}`,
+            color: type === "income" ? "var(--accent)" : "var(--text)",
+          }}
+        >
+          <span className="flex items-center gap-1.5">
+            <Lucide.ArrowDownLeft className="h-4 w-4" />
+            Received
+          </span>
         </button>
 
-        <div className="ml-2 flex gap-2">
-          {((categories ?? []) as string[]).slice(0, 6).map((c) => (
-            <button key={c} onClick={() => setCategoryAndPush(c)} className={"rounded-full px-3 py-1 text-xs " + (category === c ? "bg-accent text-accent-foreground" : "border text-neutral-700")}>{c}</button>
-          ))}
-        </div>
+        {/* Divider */}
+        <div className="h-6 w-px mx-1" style={{ backgroundColor: "var(--border)" }} />
 
-        <div className="ml-auto flex gap-2">
-          {buckets.slice(0, 4).map((b) => (
+        {/* Needs Review */}
+        <button
+          onClick={toggleReview}
+          className={`relative ${filterChip(needsReview)}`}
+          style={{
+            border: `1px solid ${needsReview ? "var(--warning)" : "var(--border)"}`,
+            color: needsReview ? "var(--warning)" : "var(--text)",
+            backgroundColor: needsReview ? "var(--warning-subtle)" : undefined,
+          }}
+        >
+          <span className="flex items-center gap-1.5">
+            <Lucide.AlertCircle className="h-4 w-4" />
+            Needs review
+            {reviewCount > 0 && (
+              <span
+                className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-xs font-semibold"
+                style={{
+                  backgroundColor: needsReview ? "var(--warning)" : "var(--danger)",
+                  color: "#fff",
+                }}
+              >
+                {reviewCount > 99 ? "99+" : reviewCount}
+              </span>
+            )}
+          </span>
+        </button>
+      </div>
+
+      {/* Category Pills (scrollable) */}
+      {((categories ?? []) as string[]).length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {((categories ?? []) as string[]).slice(0, 8).map((c) => (
             <button
-              key={b}
-              onClick={() => {
-                const p = new URLSearchParams(searchParams as any);
-                if (p.get("bucket") === b) p.delete("bucket"); else p.set("bucket", b);
-                router.replace(`/activity?${p.toString()}`);
+              key={c}
+              onClick={() => setCategoryAndPush(category === c ? "" : c)}
+              className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: category === c ? "var(--accent)" : "var(--surface)",
+                color: category === c ? "var(--accent-foreground)" : "var(--text-secondary)",
+                border: category === c ? "none" : "1px solid var(--border)",
               }}
-              className="rounded-full px-3 py-1 text-xs border text-neutral-700"
             >
-              {b}
+              {c}
             </button>
           ))}
-
-          {/** tags quick filters */}
-          <div className="flex gap-2 ml-2">
-            {(["Subscription","Deductible","Reimbursable","Shared","Medical"] as string[]).map((t) => (
-              <button key={t} onClick={() => setTagAndPush(tag === t ? "" : t)} className={"rounded-full px-3 py-1 text-xs " + (tag === t ? "bg-accent text-accent-foreground" : "border text-neutral-700")}>{t}</button>
-            ))}
-          </div>
         </div>
+      )}
+
+      {/* Tag Pills */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        {["Subscription", "Deductible", "Reimbursable", "Shared", "Medical"].map((t) => (
+          <button
+            key={t}
+            onClick={() => setTagAndPush(tag === t ? "" : t)}
+            className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+            style={{
+              backgroundColor: tag === t ? "var(--accent)" : "transparent",
+              color: tag === t ? "var(--accent-foreground)" : "var(--text-tertiary)",
+              border: tag === t ? "none" : "1px solid var(--border)",
+            }}
+          >
+            {t}
+          </button>
+        ))}
       </div>
     </div>
   );

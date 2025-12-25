@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Calendar, ChevronDown, X } from "lucide-react";
+import * as Lucide from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 
 // All available date range presets
@@ -109,9 +109,9 @@ export default function DateRangeControl({
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+        <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
         <span>{displayLabel}</span>
-        <ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+        <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
       </button>
 
       {/* Bottom sheet */}
@@ -149,7 +149,7 @@ export default function DateRangeControl({
 
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold" style={{ color: "var(--text)" }}>
+                <h3 className="text-h2" style={{ color: "var(--text)" }}>
                   Date Range
                 </h3>
                 <button
@@ -157,7 +157,7 @@ export default function DateRangeControl({
                   className="rounded-full p-2 hover:bg-[var(--surface-subtle)] transition-colors"
                   aria-label="Close"
                 >
-                  <X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                  <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
                 </button>
               </div>
 

@@ -4,12 +4,12 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import * as Lucide from "lucide-react";
 import RecurringModal from "@/components/RecurringModal";
 import ActivityTable from "@/components/activity/ActivityTable";
 import FilterBar from "@/components/activity/FilterBar";
 import DateRangeControl from "@/components/activity/DateRangeControl";
 import EmptyState from "@/components/ui/EmptyState";
-import PageHeader from "@/components/ui/PageHeader";
 import { EntryType, startOfMonthLocalTs, startOfWeekLocalTs, todayYYYYMMDD, yyyymmddToLocalMidnightTs } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -25,6 +25,22 @@ export default function HistoryPage() {
   const [range, setRange] = useState<"week" | "month" | "custom">(() => (searchParams.get("range") as any) ?? "month");
   const [from, setFrom] = useState(() => searchParams.get("from") ?? todayYYYYMMDD());
   const [to, setTo] = useState(() => searchParams.get("to") ?? todayYYYYMMDD());
+
+  // Sync URL -> local state when `FilterBar` or other components update the query params.
+  useEffect(() => {
+    const spType = (searchParams.get("type") as any) ?? "all";
+    const spBucket = searchParams.get("bucket") ?? "";
+    const spRange = (searchParams.get("range") as any) ?? "month";
+    const spFrom = searchParams.get("from") ?? todayYYYYMMDD();
+    const spTo = searchParams.get("to") ?? todayYYYYMMDD();
+
+    setType(spType);
+    setBucket(spBucket);
+    setRange(spRange as any);
+    setFrom(spFrom);
+    setTo(spTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // sync state -> URL
   useEffect(() => {
@@ -110,34 +126,64 @@ export default function HistoryPage() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="Activity"
-        subtitle="Filter & explore your past."
-        actions={<div className="text-sm text-neutral-400">Tip: Use "Save as pattern" to save repetitive transactions.</div>}
-      />
+    <div className="space-y-4 pb-4">
+      {/* Header Card */}
+      <div
+        className="rounded-2xl p-5"
+        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center justify-between">
+          <h1 className="text-h1" style={{ color: "var(--text)" }}>Activity</h1>
+          <DateRangeControl
+            range={range}
+            setRange={(r) => setRange(r as any)}
+            from={from}
+            to={to}
+            setFrom={setFrom}
+            setTo={setTo}
+          />
+        </div>
+      </div>
 
       <SignedOut>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
-          <div className="text-sm text-neutral-300 mb-3">Sign in to view history.</div>
+        <div
+          className="rounded-xl p-6 text-center"
+          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <div className="text-meta mb-4" style={{ color: "var(--text-secondary)" }}>
+            Sign in to view your activity
+          </div>
           <SignInButton mode="modal">
-            <button className="rounded-xl px-4 py-2 text-sm font-semibold" style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}>Sign in</button>
+            <button
+              className="rounded-lg px-5 py-2.5 text-sm font-semibold"
+              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              Sign in
+            </button>
           </SignInButton>
         </div>
       </SignedOut>
 
       <SignedIn>
-        <div className="mb-4">
-          <FilterBar buckets={[]} />
-          <div className="mt-3">
-            <DateRangeControl range={range} setRange={(r) => setRange(r as any)} from={from} to={to} setFrom={setFrom} setTo={setTo} />
-          </div>
-        </div>
+        {/* Search + Filters */}
+        <FilterBar buckets={[]} />
 
+        {/* Results */}
         {pages.length === 0 ? (
-          <div className="text-sm text-neutral-400">Loading…</div>
+          <div
+            className="rounded-xl p-8 text-center"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <div className="flex items-center justify-center gap-2 text-meta">
+              <Lucide.Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-tertiary)" }} />
+              <span>Loading transactions…</span>
+            </div>
+          </div>
         ) : allEntries.length === 0 ? (
-          <EmptyState title="No entries" subtitle="No entries in this range." />
+          <EmptyState
+            title="No transactions"
+            subtitle="No entries match your current filters."
+          />
         ) : (
           <div className="space-y-3">
             <ActivityTable
@@ -145,33 +191,35 @@ export default function HistoryPage() {
               onDelete={(id) => deleteEntry({ id })}
               onSavePattern={(e) => setSelected(e)}
               onBulkComplete={() => {
-                // reset pages to refresh from server
                 setPages([]);
                 setCursorList([undefined]);
                 setSeenIds({});
               }}
             />
 
-            {nextCursor ? (
-              <div className="mt-2 text-center">
-                <button onClick={loadMore} className="rounded-md px-4 py-2 border">Load more</button>
+            {nextCursor && (
+              <div className="text-center pt-2">
+                <button
+                  onClick={loadMore}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+                  style={{ border: "1px solid var(--border)", color: "var(--text)" }}
+                >
+                  <Lucide.ChevronDown className="h-4 w-4" />
+                  Load more
+                </button>
               </div>
-            ) : null}
+            )}
           </div>
         )}
 
-        {selected ? <RecurringModal entry={selected} onClose={() => setSelected(null)} onCreated={(id) => setSelected(null)} /> : null}
+        {selected && (
+          <RecurringModal
+            entry={selected}
+            onClose={() => setSelected(null)}
+            onCreated={() => setSelected(null)}
+          />
+        )}
       </SignedIn>
     </div>
   );
-}
-
-function pill(active: boolean) {
-  return [
-    "rounded-full px-3 py-1 text-xs font-semibold",
-    active ? "bg-accent text-accent-foreground" : "border text-neutral-700",
-  ].join(" ");
-}
-function dateInput() {
-  return "w-full rounded-xl border px-3 py-2 text-sm";
 }

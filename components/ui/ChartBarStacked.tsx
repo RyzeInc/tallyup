@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp } from "lucide-react";
+import * as Lucide from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -86,7 +86,7 @@ export default function ChartBarStacked() {
 
       <CardFooter className="flex-col items-start gap-2 text-sm">
         <div className="flex gap-2 leading-none font-medium">
-          Income trends <TrendingUp className="h-4 w-4" />
+          Income trends <Lucide.TrendingUp className="h-4 w-4" />
         </div>
         <div className="text-[var(--text-secondary)] leading-none">Amounts shown in USD (cents stored as integers)</div>
       </CardFooter>

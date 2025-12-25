@@ -1,3 +1,12 @@
+declare module 'lucide-react' {
+  const Lucide: any;
+  export = Lucide;
+}
+
+declare module 'lucide-react/dist/esm/lucide-react' {
+  const Lucide: any;
+  export = Lucide;
+}
 // Minimal declaration file for lucide-react used in this repo.
 // Lists the icons we use as `any` to avoid missing-type errors.
 

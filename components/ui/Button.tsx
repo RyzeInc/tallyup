@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Loader2 } from "lucide-react";
+import * as Lucide from "lucide-react";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "ghost" | "destructive" | "outline";
@@ -22,17 +22,18 @@ export default function Button({
   className = "",
   ...rest
 }: ButtonProps) {
-  const base = "inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
-  
+  const base =
+    "inline-flex items-center justify-center font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+
   const sizes: Record<string, string> = {
-    sm: "h-8 px-3 text-xs rounded-lg gap-1.5",
-    md: "h-10 px-4 text-sm rounded-lg gap-2",
-    lg: "h-12 px-6 text-base rounded-lg gap-2",
-    icon: "h-10 w-10 rounded-lg",
+    sm: "h-9 px-3 text-sm rounded-lg gap-1.5",
+    md: "h-11 px-4 text-body rounded-xl gap-2",
+    lg: "h-12 px-6 text-body rounded-xl gap-2",
+    icon: "h-11 w-11 rounded-xl",
   };
-  
+
   const variants: Record<string, string> = {
-    primary: "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]",
+    primary: "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-95 active:opacity-90",
     secondary: "bg-[var(--surface-subtle)] text-[var(--text)] hover:bg-[var(--border)]",
     ghost: "bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)] hover:text-[var(--text)]",
     destructive: "bg-[var(--danger)] text-white hover:opacity-90",
@@ -46,7 +47,7 @@ export default function Button({
       {...rest}
     >
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Lucide.Loader2 className="h-4 w-4 animate-spin" />
       ) : (
         <>
           {leftIcon}

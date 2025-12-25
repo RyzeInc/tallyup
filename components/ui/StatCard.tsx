@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import * as Lucide from "lucide-react";
 
 interface StatCardProps {
   title: string;
@@ -20,38 +20,51 @@ export default function StatCard({
   icon,
   className = "",
 }: StatCardProps) {
-  const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
-  const trendColor = trend === "up" ? "text-[var(--success)]" : trend === "down" ? "text-[var(--danger)]" : "text-[var(--text-tertiary)]";
+  const TrendIcon =
+    trend === "up"
+      ? Lucide.TrendingUp
+      : trend === "down"
+        ? Lucide.TrendingDown
+        : Lucide.Minus;
+  const trendColor =
+    trend === "up"
+      ? "var(--success)"
+      : trend === "down"
+        ? "var(--danger)"
+        : "var(--text-tertiary)";
 
   return (
     <div
-      className={`rounded-xl border bg-[var(--card)] p-4 lg:p-5 ${className}`}
-      style={{ borderColor: "var(--border)" }}
+      className={`rounded-2xl p-5 ${className}`}
+      style={{
+        backgroundColor: "var(--surface)",
+        border: "1px solid var(--border)",
+      }}
     >
       <div className="flex items-start justify-between">
-        <div className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
-          {title}
-        </div>
+        <div className="text-micro">{title}</div>
         {icon && (
-          <div className="text-[var(--text-tertiary)]">
-            {icon}
-          </div>
+          <div style={{ color: "var(--text-tertiary)" }}>{icon}</div>
         )}
       </div>
-      <div className="mt-2 text-2xl font-semibold text-[var(--text)] text-money">
+      <div
+        className="mt-2 text-kpi tabular-nums"
+        style={{ color: "var(--text)" }}
+      >
         {value}
       </div>
       {(sub || trend) && (
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-2 flex items-center gap-2">
           {trend && trendValue && (
-            <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${trendColor}`}>
-              <TrendIcon className="h-3 w-3" />
+            <span
+              className="inline-flex items-center gap-1 text-sm font-medium"
+              style={{ color: trendColor }}
+            >
+              <TrendIcon className="h-4 w-4" />
               {trendValue}
             </span>
           )}
-          {sub && (
-            <span className="text-xs text-[var(--text-tertiary)]">{sub}</span>
-          )}
+          {sub && <span className="text-meta">{sub}</span>}
         </div>
       )}
     </div>

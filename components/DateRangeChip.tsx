@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, X, Calendar } from "lucide-react";
+import * as Lucide from "lucide-react";
 import { todayYYYYMMDD } from "@/components/utils";
 
 export type DateRangeMode = "today" | "week" | "month" | "custom";
@@ -81,9 +81,9 @@ export default function DateRangeChip({
         aria-haspopup="dialog"
         aria-expanded={open}
       >
-        <Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+        <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
         <span>{displayLabel}</span>
-        <ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+        <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
       </button>
 
       {/* Bottom sheet */}
@@ -129,7 +129,7 @@ export default function DateRangeChip({
                   className="rounded-full p-2 hover:bg-[var(--surface-subtle)] transition-colors"
                   aria-label="Close"
                 >
-                  <X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                  <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
                 </button>
               </div>
 

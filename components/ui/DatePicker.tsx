@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import Lucide from "lucide-react";
+import * as Lucide from "lucide-react";
 
 interface DatePickerProps {
   value: string; // YYYY-MM-DD
@@ -123,7 +123,7 @@ export default function DatePicker({ value, onChange, label }: DatePickerProps) 
 
         {mode === "calendar" && (
           <div className="flex items-center gap-1">
-              <button
+            <button
               onClick={prevMonth}
               className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)] transition-colors"
               aria-label="Previous month"
