@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { centsToDollars } from "@/components/utils";
 
@@ -13,7 +14,7 @@ export default function ActivityTable({
   onBulkComplete,
 }: {
   entries?: any[];
-  onDelete?: (id: string) => void;
+  onDelete?: (id: Id<"entries">) => void;
   onSavePattern?: (entry: any) => void;
   onBulkComplete?: () => void;
 }) {
@@ -21,7 +22,7 @@ export default function ActivityTable({
   const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
   const bulkMarkReviewed = useMutation(api.entries.bulkMarkReviewed);
 
-  function toggle(id: string) {
+  function toggle(id: Id<"entries">) {
     setSelected((s) => ({ ...s, [id]: !s[id] }));
   }
 
