@@ -306,26 +306,22 @@ export const listEntriesPaged = query({
     let fetched: any[] = [];
 
     if (useTypeIndex) {
+      const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
       const q = ctx.db
         .query("entries")
-        .withIndex("by_user_type_date", q => {
-          let qq = q.eq("userId", userId).eq("type", args.type!);
-          const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
-          qq = qq.gte("date", start).lt("date", upper);
-          return qq;
-        })
+        .withIndex("by_user_type_date", (idx) =>
+          idx.eq("userId", userId).eq("type", args.type!).gte("date", start).lt("date", upper)
+        )
         .order("desc")
         .take(take);
       fetched = await q;
     } else {
+      const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
       const q = ctx.db
         .query("entries")
-        .withIndex("by_user_date", q => {
-          let qq = q.eq("userId", userId);
-          const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
-          qq = qq.gte("date", start).lt("date", upper);
-          return qq;
-        })
+        .withIndex("by_user_date", (idx) =>
+          idx.eq("userId", userId).gte("date", start).lt("date", upper)
+        )
         .order("desc")
         .take(take);
       fetched = await q;
@@ -382,7 +378,7 @@ export const listCategories = query({
     if (args.type) {
       rows = await ctx.db
         .query("entries")
-        .withIndex("by_user_type_date", q => q.eq("userId", userId).eq("type", args.type))
+        .withIndex("by_user_type_date", (idx) => idx.eq("userId", userId).eq("type", args.type!))
         .order("desc")
         .take(500);
     } else {
