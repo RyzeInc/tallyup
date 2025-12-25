@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { todayYYYYMMDD, cacheKey, uniqCaseInsensitive } from "@/components/utils";
+import { todayYYYYMMDD, cacheKey, uniqCaseInsensitive, INCOME_SPACES, EXPENSE_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import CurrencyInput from "@/components/ui/CurrencyInput";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
@@ -19,7 +19,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [showMore, setShowMore] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  
   const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg?: string; undoId?: string }>({ kind: "idle" });
 
   const addEntry = useMutation(api.entries.addEntry);
@@ -48,16 +49,27 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       if (category?.trim()) payload.category = category.trim();
       if (note?.trim()) payload.note = note.trim();
       if (methodOrAccount?.trim()) payload.methodOrAccount = methodOrAccount.trim();
+      if (tags.length > 0) payload.tags = tags;
       const res = await addEntry(payload);
 
-      // persist smart defaults
+      // persist smart defaults (include tags)
       try {
-        localStorage.setItem("tallyup.lastEntry", JSON.stringify({ type, bucket: bucket === "Other" ? customBucket || "Other" : bucket, category }));
+        localStorage.setItem(
+          "tallyup.lastEntry",
+          JSON.stringify({
+            type,
+            bucket: bucket === "Other" ? customBucket || "Other" : bucket,
+            category,
+            tags: tags.length ? tags : undefined,
+          })
+        );
       } catch {}
 
       const id = (res as any)?.id as string | undefined;
       setStatus({ kind: "ok", msg: "Saved.", undoId: id });
       setTimeout(() => setStatus({ kind: "idle" }), 2000);
+      // clear selected tags after successful save
+      setTags([]);
 
       // show global toast with undo
       try {
@@ -150,43 +162,83 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         </div>
         <div>
           <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            Space
+            {type === "income" ? "Source" : "Category"}
           </label>
-          <input
+          <select
             value={bucket}
             onChange={(e) => setBucket(e.target.value)}
-            placeholder="Personal"
-            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+            className="w-full rounded-lg border px-3 py-2.5 text-sm appearance-none cursor-pointer"
             style={{
               borderColor: "var(--border)",
               backgroundColor: "var(--input)",
               color: "var(--text)",
             }}
-          />
+          >
+            <option value="">Select...</option>
+            {(type === "income" ? INCOME_SPACES : EXPENSE_SPACES).map((space) => (
+              <option key={space} value={space}>
+                {space}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Context Tags - composable, not mutually exclusive */}
+      <div className="mt-4">
+        <label className="block text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+          Context Tags
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {CONTEXT_TAGS.map((tag) => {
+            const isSelected = tags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => {
+                  setTags((prev) =>
+                    isSelected ? prev.filter((t) => t !== tag) : [...prev, tag]
+                  );
+                }}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  isSelected
+                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    : "border hover:bg-[var(--surface-subtle)]"
+                }`}
+                style={{
+                  borderColor: isSelected ? undefined : "var(--border)",
+                  color: isSelected ? undefined : "var(--text)",
+                }}
+              >
+                {tag}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       <div className="mt-4">
         <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-          Category (optional)
+          Note (optional)
         </label>
-        <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category" />
+        <Input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Subcategory or details" />
       </div>
 
-      {showMore ? (
-        <div className="mt-4">
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            Method / Account (optional)
-          </label>
-          <Input value={methodOrAccount} onChange={(e) => setMethodOrAccount(e.target.value)} placeholder="e.g., Checking" />
-        </div>
-      ) : null}
+      
 
       <div className="mt-4">
         <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
           Note (optional)
         </label>
         <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Quick context" />
+      </div>
+
+      <div className="mt-4">
+        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+          Method / Account (optional)
+        </label>
+        <Input value={methodOrAccount} onChange={(e) => setMethodOrAccount(e.target.value)} placeholder={"e.g., Checking, Debit, Cash"} />
       </div>
 
       <div className="mt-5 flex items-center gap-3">
@@ -199,17 +251,6 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
           }}
         >
           Save
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowMore((s) => !s)}
-          className="rounded-lg px-4 py-2.5 text-sm font-medium border transition-colors hover:bg-[var(--surface-subtle)]"
-          style={{
-            borderColor: "var(--border)",
-            color: "var(--text)",
-          }}
-        >
-          {showMore ? "Less" : "More"}
         </button>
       </div>
 

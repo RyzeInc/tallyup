@@ -18,96 +18,94 @@ export default function CurrencyInput({
   currency?: string;
 }) {
   const [text, setText] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  // Only update from external valueCents when not focused
   useEffect(() => {
-    if (typeof valueCents === "number") setText(formatCents(valueCents));
-    if (valueCents === undefined || valueCents === null) setText("");
-  }, [valueCents]);
+    if (isFocused) return;
+    if (typeof valueCents === "number") {
+      setText((valueCents / 100).toFixed(2));
+    } else if (valueCents === undefined || valueCents === null) {
+      setText("");
+    }
+  }, [valueCents, isFocused]);
 
   function parseToCentsFromString(s: string): number | null {
-    if (!s) return null;
-    // accept $1,234.56 or 1,234.56 etc.
+    if (!s || s.trim() === "") return null;
+    // Remove everything except digits, dots, and minus
     const cleaned = s.replace(/[^0-9.\-]/g, "");
-    if (cleaned.trim() === "") return null;
-    // ensure only one dot
+    if (cleaned === "" || cleaned === "-" || cleaned === ".") return null;
+    
+    // Ensure only one decimal point
     const parts = cleaned.split(".");
     if (parts.length > 2) return null;
-    const asNumber = Number(cleaned);
-    if (Number.isNaN(asNumber)) return null;
+    
+    const asNumber = parseFloat(cleaned);
+    if (isNaN(asNumber)) return null;
+    
     return Math.round(asNumber * 100);
   }
 
-  function formatCents(n: number, minFraction = 2) {
-    const nf = new Intl.NumberFormat(undefined, { style: "currency", currency, minimumFractionDigits: minFraction, maximumFractionDigits: minFraction });
-    return nf.format(n / 100);
+  function formatCents(n: number): string {
+    return (n / 100).toFixed(2);
   }
 
-  function formatNumberStringForTyping(raw: string) {
-    // preserve user's decimals while typing (up to 2)
-    const cleaned = raw.replace(/[^0-9.\-]/g, "");
-    if (cleaned === "" || cleaned === "-") return cleaned;
-    if (cleaned === ".") return "0.";
-    const parts = cleaned.split(".");
-    const intPart = parts[0] || "0";
-    const decPart = parts[1] ?? "";
-    const intNum = Number(intPart.replace(/^0+(?!$)/, "")) || 0;
-    const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-    const formattedInt = nf.format(intNum);
-    if (decPart.length > 0) {
-      return `${formattedInt}.${decPart.slice(0, 2)}`;
+  function sanitizeInput(raw: string): string {
+    // Remove everything except digits, dots, and minus
+    let cleaned = raw.replace(/[^0-9.\-]/g, "");
+    
+    // Only allow minus at the start
+    if (cleaned.indexOf("-") > 0) {
+      cleaned = cleaned.replace(/-/g, "");
     }
-    return formattedInt;
+    
+    // Ensure only one decimal point
+    const firstDotIndex = cleaned.indexOf(".");
+    if (firstDotIndex >= 0) {
+      const beforeDot = cleaned.substring(0, firstDotIndex + 1);
+      const afterDot = cleaned.substring(firstDotIndex + 1).replace(/\./g, "");
+      cleaned = beforeDot + afterDot.slice(0, 2); // Limit to 2 decimal places
+    }
+    
+    return cleaned;
   }
 
   return (
     <input
       id={id}
       ref={inputRef}
+      type="text"
       inputMode="decimal"
       aria-label={ariaLabel ?? "Amount"}
       value={text}
       placeholder={placeholder}
+      onFocus={() => setIsFocused(true)}
       onPaste={(e) => {
-        const p = e.clipboardData.getData("text");
-        const cents = parseToCentsFromString(p);
-        if (cents != null) {
-          e.preventDefault();
-          setText(formatCents(cents));
-          onChange?.(cents);
-        }
+        e.preventDefault();
+        const pastedText = e.clipboardData.getData("text");
+        const sanitized = sanitizeInput(pastedText);
+        setText(sanitized);
+        const cents = parseToCentsFromString(sanitized);
+        onChange?.(cents);
       }}
       onChange={(e) => {
         const raw = e.target.value;
-        // try to parse a numeric value
-        const cents = parseToCentsFromString(raw);
-        if (cents != null) {
-          // if user typed decimals, preserve decimal count while typing
-          const hasDot = raw.indexOf(".") >= 0;
-          if (hasDot) {
-            // determine number of decimals typed
-            const decLen = raw.split(".")[1]?.length ?? 0;
-            const display = formatCents(cents, Math.min(Math.max(decLen, 0), 2));
-            setText(display);
-          } else {
-            // show formatted integer grouping while typing
-            const display = formatNumberStringForTyping(raw);
-            setText(display);
-          }
-          onChange?.(cents);
-        } else {
-          // fallback to preserving raw input
-          setText(raw);
-          onChange?.(null);
-        }
+        const sanitized = sanitizeInput(raw);
+        setText(sanitized);
+        
+        // Parse and notify parent
+        const cents = parseToCentsFromString(sanitized);
+        onChange?.(cents);
       }}
       onBlur={(e) => {
+        setIsFocused(false);
         const cents = parseToCentsFromString(e.target.value);
-        if (cents == null) {
+        if (cents == null || cents === 0) {
           setText("");
           onChange?.(null);
         } else {
-          setText(formatCents(cents, 2));
+          setText(formatCents(cents));
           onChange?.(cents);
         }
       }}

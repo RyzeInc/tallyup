@@ -15,20 +15,20 @@ import {
 import Card, { CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
 import { centsToDollars } from "@/components/utils";
 
-// Sample data: timeline (date) with amounts per category (stacked)
+// Sample data: timeline (date) with INCOME amounts per category (stacked)
 const chartData = [
-  { date: "2025-06-01", groceries: 12000, transport: 3000, entertainment: 2500 },
-  { date: "2025-06-08", groceries: 8000, transport: 2000, entertainment: 1200 },
-  { date: "2025-06-15", groceries: 15000, transport: 2500, entertainment: 4000 },
-  { date: "2025-06-22", groceries: 6000, transport: 1500, entertainment: 900 },
-  { date: "2025-06-29", groceries: 9000, transport: 3200, entertainment: 1800 },
+  { date: "2025-06-01", salary: 450000, freelance: 85000, dividends: 15000 },
+  { date: "2025-06-08", salary: 0, freelance: 120000, dividends: 0 },
+  { date: "2025-06-15", salary: 450000, freelance: 45000, dividends: 25000 },
+  { date: "2025-06-22", salary: 0, freelance: 95000, dividends: 0 },
+  { date: "2025-06-29", salary: 0, freelance: 60000, dividends: 12000 },
 ];
 
 export default function ChartBarStacked() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Spending by Category</CardTitle>
+        <CardTitle>Income by Source</CardTitle>
         <CardDescription>Timeline (weeks) — amounts in USD</CardDescription>
       </CardHeader>
 
@@ -76,9 +76,9 @@ export default function ChartBarStacked() {
 
               <Legend verticalAlign="top" height={36} />
 
-              <Bar dataKey="groceries" stackId="a" fill="var(--chart-1)" name="Groceries" />
-              <Bar dataKey="transport" stackId="a" fill="var(--chart-2)" name="Transport" />
-              <Bar dataKey="entertainment" stackId="a" fill="var(--chart-3)" name="Entertainment" />
+              <Bar dataKey="salary" stackId="a" fill="var(--chart-1)" name="Salary" />
+              <Bar dataKey="freelance" stackId="a" fill="var(--chart-2)" name="Freelance" />
+              <Bar dataKey="dividends" stackId="a" fill="var(--chart-3)" name="Dividends" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -86,7 +86,7 @@ export default function ChartBarStacked() {
 
       <CardFooter className="flex-col items-start gap-2 text-sm">
         <div className="flex gap-2 leading-none font-medium">
-          Trending this month <TrendingUp className="h-4 w-4" />
+          Income trends <TrendingUp className="h-4 w-4" />
         </div>
         <div className="text-[var(--text-secondary)] leading-none">Amounts shown in USD (cents stored as integers)</div>
       </CardFooter>

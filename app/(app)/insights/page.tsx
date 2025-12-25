@@ -4,30 +4,20 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { centsToDollars, startOfMonthLocalTs, startOfWeekLocalTs, todayYYYYMMDD, yyyymmddToLocalMidnightTs } from "@/components/utils";
+import { centsToDollars, todayYYYYMMDD, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
 import DateRangeControl from "@/components/activity/DateRangeControl";
 import ChartBarStacked from "@/components/ui/ChartBarStacked";
 import { TrendingUp, TrendingDown, PieChart, BarChart3 } from "lucide-react";
 
-type RangeMode = "today" | "week" | "month" | "custom";
 const COLORS = ["#60a5fa", "#a78bfa", "#34d399", "#f472b6", "#fbbf24", "#94a3b8"];
 
 export default function InsightsPage() {
-  const [mode, setMode] = useState<RangeMode>("month");
+  const [mode, setMode] = useState<DateRangePreset>("month");
   const [from, setFrom] = useState(todayYYYYMMDD());
   const [to, setTo] = useState(todayYYYYMMDD());
 
   const { startDate, endDate, label } = useMemo(() => {
-    const now = new Date();
-    if (mode === "today") {
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      return { startDate: start, endDate: Date.now() + 1, label: "Today" };
-    }
-    if (mode === "week") return { startDate: startOfWeekLocalTs(now), endDate: Date.now() + 1, label: "This Week" };
-    if (mode === "month") return { startDate: startOfMonthLocalTs(now), endDate: Date.now() + 1, label: "This Month" };
-    const s = yyyymmddToLocalMidnightTs(from);
-    const e = yyyymmddToLocalMidnightTs(to) + 24 * 60 * 60 * 1000;
-    return { startDate: Math.min(s, e), endDate: Math.max(s, e), label: `${from} – ${to}` };
+    return getDateRangeFromPreset(mode, from, to);
   }, [mode, from, to]);
 
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as any[] | undefined;
@@ -81,7 +71,7 @@ export default function InsightsPage() {
         </div>
         <DateRangeControl
           range={mode}
-          setRange={(r) => setMode(r as RangeMode)}
+          setRange={(r) => setMode(r as DateRangePreset)}
           from={from}
           to={to}
           setFrom={setFrom}

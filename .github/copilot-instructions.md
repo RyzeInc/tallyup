@@ -54,5 +54,8 @@ Notes: The repo favors a "Series (user-facing)" mindset backed by matcher fields
 - `app/(app)/summary/page.tsx` and `app/(app)/inbox/page.tsx` (analytics & inbox flows)
 - `components/EntryCard.tsx`, `components/TagChips.tsx` (UI patterns)
 
+### Design principles
+Refer to the project's design principles for UI/UX guidance: `docs/DESIGN_PRINCIPLES.md`
+
 ---
 If you'd like, I can: add a short local Clerk setup snippet (env keys used here), or add a small PR template that enforces the `convex/_generated` regeneration step. Which would you prefer I add next? ✅

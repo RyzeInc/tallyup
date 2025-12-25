@@ -2,6 +2,31 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { Calendar, ChevronDown, X } from "lucide-react";
+import DatePicker from "@/components/ui/DatePicker";
+
+// All available date range presets
+export type DateRangePreset =
+  | "today"
+  | "yesterday"
+  | "week"
+  | "last-week"
+  | "month"
+  | "last-month"
+  | "year"
+  | "last-year"
+  | "custom";
+
+const presetLabels: Record<DateRangePreset, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  week: "This Week",
+  "last-week": "Last Week",
+  month: "This Month",
+  "last-month": "Last Month",
+  year: "This Year",
+  "last-year": "Last Year",
+  custom: "Custom",
+};
 
 export default function DateRangeControl({
   range,
@@ -21,6 +46,8 @@ export default function DateRangeControl({
   const [open, setOpen] = useState(false);
   const [tempFrom, setTempFrom] = useState(from);
   const [tempTo, setTempTo] = useState(to);
+  const [showFromPicker, setShowFromPicker] = useState(false);
+  const [showToPicker, setShowToPicker] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,14 +65,19 @@ export default function DateRangeControl({
     setTempTo(to);
   }, [from, to]);
 
-  const modeLabels: Record<string, string> = {
-    today: "Today",
-    week: "This Week",
-    month: "This Month",
-    custom: "Custom",
-  };
+  const presets: DateRangePreset[] = [
+    "today",
+    "yesterday",
+    "week",
+    "last-week",
+    "month",
+    "last-month",
+    "year",
+    "last-year",
+    "custom",
+  ];
 
-  function selectMode(m: string) {
+  function selectMode(m: DateRangePreset) {
     setRange(m);
     if (m !== "custom") {
       setOpen(false);
@@ -59,7 +91,9 @@ export default function DateRangeControl({
   }
 
   const displayLabel =
-    range === "custom" && from && to ? `${from} – ${to}` : modeLabels[range] || modeLabels.month;
+    range === "custom" && from && to
+      ? `${from} – ${to}`
+      : presetLabels[range as DateRangePreset] || presetLabels.month;
 
   return (
     <>
@@ -99,7 +133,7 @@ export default function DateRangeControl({
             className="relative w-full max-w-md animate-in slide-in-from-bottom-4 duration-200"
           >
             <div
-              className="rounded-t-2xl border-t border-x p-4 pb-8"
+              className="rounded-t-2xl border-t border-x p-4 pb-8 max-h-[85vh] overflow-y-auto"
               style={{
                 backgroundColor: "var(--surface)",
                 borderColor: "var(--border)",
@@ -127,20 +161,21 @@ export default function DateRangeControl({
                 </button>
               </div>
 
-              {/* Options */}
-              <div className="space-y-1 mb-4">
-                {["today", "week", "month", "custom"].map((m) => (
+              {/* Preset options - grid layout for more items */}
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {presets.map((m) => (
                   <button
                     key={m}
                     onClick={() => selectMode(m)}
-                    className={`w-full text-left rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`text-left rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
                       range === m ? "bg-[var(--accent-subtle)]" : "hover:bg-[var(--surface-subtle)]"
                     }`}
                     style={{
                       color: range === m ? "var(--accent)" : "var(--text)",
+                      border: "1px solid var(--border)",
                     }}
                   >
-                    {modeLabels[m]}
+                    {presetLabels[m]}
                   </button>
                 ))}
               </div>
@@ -148,49 +183,79 @@ export default function DateRangeControl({
               {/* Custom date pickers */}
               {range === "custom" && (
                 <div
-                  className="space-y-3 border-t pt-4"
+                  className="space-y-4 border-t pt-4"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
+                  {/* From date */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
                       <label
-                        className="block text-xs font-medium mb-1"
+                        className="text-xs font-medium"
                         style={{ color: "var(--text-secondary)" }}
                       >
                         From
                       </label>
-                      <input
-                        type="date"
-                        value={tempFrom}
-                        onChange={(e) => setTempFrom(e.target.value)}
-                        className="w-full rounded-lg border px-3 py-2 text-sm"
-                        style={{
-                          borderColor: "var(--border)",
-                          backgroundColor: "var(--input)",
-                          color: "var(--text)",
-                        }}
-                      />
+                      <button
+                        onClick={() => setShowFromPicker(!showFromPicker)}
+                        className="text-xs font-medium"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {showFromPicker ? "Hide calendar" : "Show calendar"}
+                      </button>
                     </div>
-                    <div>
+                    <input
+                      type="date"
+                      value={tempFrom}
+                      onChange={(e) => setTempFrom(e.target.value)}
+                      className="w-full rounded-lg border px-3 py-2 text-sm"
+                      style={{
+                        borderColor: "var(--border)",
+                        backgroundColor: "var(--input)",
+                        color: "var(--text)",
+                      }}
+                    />
+                    {showFromPicker && (
+                      <div className="mt-2">
+                        <DatePicker value={tempFrom} onChange={setTempFrom} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* To date */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
                       <label
-                        className="block text-xs font-medium mb-1"
+                        className="text-xs font-medium"
                         style={{ color: "var(--text-secondary)" }}
                       >
                         To
                       </label>
-                      <input
-                        type="date"
-                        value={tempTo}
-                        onChange={(e) => setTempTo(e.target.value)}
-                        className="w-full rounded-lg border px-3 py-2 text-sm"
-                        style={{
-                          borderColor: "var(--border)",
-                          backgroundColor: "var(--input)",
-                          color: "var(--text)",
-                        }}
-                      />
+                      <button
+                        onClick={() => setShowToPicker(!showToPicker)}
+                        className="text-xs font-medium"
+                        style={{ color: "var(--accent)" }}
+                      >
+                        {showToPicker ? "Hide calendar" : "Show calendar"}
+                      </button>
                     </div>
+                    <input
+                      type="date"
+                      value={tempTo}
+                      onChange={(e) => setTempTo(e.target.value)}
+                      className="w-full rounded-lg border px-3 py-2 text-sm"
+                      style={{
+                        borderColor: "var(--border)",
+                        backgroundColor: "var(--input)",
+                        color: "var(--text)",
+                      }}
+                    />
+                    {showToPicker && (
+                      <div className="mt-2">
+                        <DatePicker value={tempTo} onChange={setTempTo} />
+                      </div>
+                    )}
                   </div>
+
                   <button
                     onClick={applyCustom}
                     className="w-full rounded-lg py-2.5 text-sm font-semibold transition-colors"

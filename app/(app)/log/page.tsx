@@ -13,6 +13,9 @@ import {
   todayYYYYMMDD,
   uniqCaseInsensitive,
   yyyymmddToLocalMidnightTs,
+  INCOME_SPACES,
+  EXPENSE_SPACES,
+  CONTEXT_TAGS,
 } from "@/components/utils";
 import RecurringModal from "@/components/RecurringModal";
 import CurrencyInput from "@/components/ui/CurrencyInput";
@@ -31,7 +34,7 @@ export default function LogPage() {
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [showMore, setShowMore] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
 
   const [status, setStatus] = useState<
     { kind: "idle" } |
@@ -89,6 +92,7 @@ export default function LogPage() {
         methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
         amountCents: cents,
         date: ts,
+        tags: tags.length > 0 ? tags : undefined,
       });
 
       // auto-save new category to local cache
@@ -107,6 +111,7 @@ export default function LogPage() {
         note: note.trim() ? note.trim() : undefined,
         methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
         amount,
+        tags: tags.length > 0 ? tags : undefined,
       };
       // reset amountCents
       setAmountCents(null);
@@ -115,6 +120,7 @@ export default function LogPage() {
       setCategory("");
       setNote("");
       setMethodOrAccount("");
+      setTags([]);
 
       const undoId = (res as any)?.id as string | undefined;
       setStatus({ kind: "ok", msg: "Saved.", undoId });
@@ -135,19 +141,7 @@ export default function LogPage() {
     }
   }
 
-  function duplicateLast() {
-    const last = lastSavedRef.current;
-    if (!last) return;
-    setType(last.type);
-    setBucket(last.bucket === "Other" ? "Other" : last.bucket);
-    if (last.bucket !== "Other") setCustomBucket("");
-    setAmount(last.amount);
-    setAmountCents(last.amount ? Math.round(Number(last.amount) * 100) : null);
-    setCategory(last.category ?? "");
-    setNote(last.note ?? "");
-    setMethodOrAccount(last.methodOrAccount ?? "");
-    setShowMore(Boolean(last.methodOrAccount));
-  }
+  
 
   const [selected, setSelected] = useState<any | null>(null);
 
@@ -200,22 +194,7 @@ export default function LogPage() {
           }}
         />
 
-        <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            onClick={duplicateLast}
-            className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
-          >
-            Use last
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowMore((s) => !s)}
-            className="rounded-2xl border border-neutral-800 bg-neutral-900/30 px-3 py-2 text-xs font-semibold text-neutral-200 hover:border-neutral-600"
-          >
-            {showMore ? "Less" : "Options"}
-          </button>
-        </div>
+        {/* Method / Account always visible inline */}
 
         <div className="mb-4 grid grid-cols-2 gap-3">
           <div>
@@ -230,17 +209,17 @@ export default function LogPage() {
           </div>
 
           <div>
-            <label className="block text-xs text-neutral-400 mb-1">Which part of your life?</label>
+            <label className="block text-xs text-neutral-400 mb-1">{type === "income" ? "Income Source" : "Expense Category"}</label>
             <select
                 value={bucket}
                 onChange={(e) => setBucket(e.target.value)}
                 className="w-full rounded-xl border px-3 py-2 text-sm"
                 style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
               >
-                <option value="Personal">Personal</option>
-                <option value="Work">Work</option>
-                <option value="Shared">Shared</option>
-                <option value="Business">Business</option>
+                <option value="">Select...</option>
+                {(type === "income" ? INCOME_SPACES : EXPENSE_SPACES).map((space) => (
+                  <option key={space} value={space}>{space}</option>
+                ))}
                 <option value="Other">Other</option>
             </select>
           </div>
@@ -255,7 +234,39 @@ export default function LogPage() {
           />
         ) : null}
 
-        <label className="block text-xs text-neutral-400 mb-1">Category (optional)</label>
+        {/* Context Tags - composable, not mutually exclusive */}
+        <div className="mb-4">
+          <label className="block text-xs text-neutral-400 mb-2">Context Tags</label>
+          <div className="flex flex-wrap gap-2">
+            {CONTEXT_TAGS.map((tag) => {
+              const isSelected = tags.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => {
+                    setTags((prev) =>
+                      isSelected ? prev.filter((t) => t !== tag) : [...prev, tag]
+                    );
+                  }}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    isSelected
+                      ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                      : "border hover:bg-[var(--surface-subtle)]"
+                  }`}
+                  style={{
+                    borderColor: isSelected ? undefined : "var(--border)",
+                    color: isSelected ? undefined : "var(--text)",
+                  }}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <label className="block text-xs text-neutral-400 mb-1">Subcategory / Details (optional)</label>
         <input
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -270,20 +281,16 @@ export default function LogPage() {
           ))}
         </datalist>
 
-        {showMore ? (
-          <>
-            <label className="block text-xs text-neutral-400 mb-1">
-              {type === "expense" ? "Payment method (optional)" : "Account received on (optional)"}
-            </label>
-            <input
-              value={methodOrAccount}
-              onChange={(e) => setMethodOrAccount(e.target.value)}
-              placeholder={type === "expense" ? "e.g., Debit, Discover, Checking" : "e.g., Checking, Cash"}
-              className="mb-4 w-full rounded-xl border px-3 py-2 text-sm"
-              style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
-            />
-          </>
-        ) : null}
+        <label className="block text-xs text-neutral-400 mb-1">
+          {type === "expense" ? "Payment method (optional)" : "Account received on (optional)"}
+        </label>
+        <input
+          value={methodOrAccount}
+          onChange={(e) => setMethodOrAccount(e.target.value)}
+          placeholder={type === "expense" ? "e.g., Debit, Discover, Checking" : "e.g., Checking, Cash"}
+          className="mb-4 w-full rounded-xl border px-3 py-2 text-sm"
+          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+        />
 
         <label className="block text-xs text-neutral-400 mb-1">Note (optional)</label>
         <textarea
