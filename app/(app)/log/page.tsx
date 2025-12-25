@@ -42,7 +42,15 @@ export default function LogPage() {
     { kind: "err"; msg: string }
   >({ kind: "idle" });
 
-  const lastSavedRef = useRef<{ type: EntryType; bucket: string; category?: string; note?: string; methodOrAccount?: string; amount: string } | null>(null);
+  const lastSavedRef = useRef<{
+    type: EntryType;
+    bucket: string;
+    category?: string;
+    note?: string;
+    methodOrAccount?: string;
+    amount: string;
+    tags?: string[];
+  } | null>(null);
 
   const addEntry = useMutation(api.entries.addEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);

@@ -19,7 +19,7 @@ const navItems = [
 ];
 
 const bottomNavItems = [
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings", label: "Settings", icon: Lucide.Settings },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -251,11 +251,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden border-t bg-[var(--surface)]/95 backdrop-blur-sm" style={{ borderColor: "var(--border)" }}>
         <div className="flex items-center justify-around px-2 py-2">
           {[
-            { href: "/overview", label: "Overview", icon: LayoutGrid },
-            { href: "/activity", label: "Activity", icon: History },
-            { href: "/log", label: "Add", icon: Plus, primary: true },
-            { href: "/review", label: "Review", icon: Inbox },
-            { href: "/settings", label: "Settings", icon: Settings },
+            { href: "/overview", label: "Overview", icon: Lucide.LayoutGrid },
+            { href: "/activity", label: "Activity", icon: Lucide.History },
+            { href: "/log", label: "Add", icon: Lucide.Plus, primary: true },
+            { href: "/review", label: "Review", icon: Lucide.Inbox },
+            { href: "/settings", label: "Settings", icon: Lucide.Settings },
           ].map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
