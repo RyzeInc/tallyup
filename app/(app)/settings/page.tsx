@@ -9,6 +9,22 @@ import Link from "next/link";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 
+type ExpenseSpace = typeof EXPENSE_SPACES[number];
+type IncomeSpace = typeof INCOME_SPACES[number];
+type ContextTag = typeof CONTEXT_TAGS[number];
+
+function isExpenseSpace(x: string): x is ExpenseSpace {
+  return (EXPENSE_SPACES as readonly string[]).includes(x);
+}
+
+function isIncomeSpace(x: string): x is IncomeSpace {
+  return (INCOME_SPACES as readonly string[]).includes(x);
+}
+
+function isContextTag(x: string): x is ContextTag {
+  return (CONTEXT_TAGS as readonly string[]).includes(x);
+}
+
 type SettingsSection = "main" | "categories" | "export" | "privacy" | "help" | "theme";
 
 // Keys for localStorage
@@ -24,25 +40,25 @@ export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
   // Category/tag management state
-  const [pinnedExpense, setPinnedExpense] = useState<string[]>([]);
-  const [pinnedIncome, setPinnedIncome] = useState<string[]>([]);
-  const [pinnedTags, setPinnedTags] = useState<string[]>([]);
-  const [hiddenTags, setHiddenTags] = useState<string[]>([]);
+  const [pinnedExpense, setPinnedExpense] = useState<ExpenseSpace[]>([]);
+  const [pinnedIncome, setPinnedIncome] = useState<IncomeSpace[]>([]);
+  const [pinnedTags, setPinnedTags] = useState<ContextTag[]>([]);
+  const [hiddenTags, setHiddenTags] = useState<ContextTag[]>([]);
 
   useEffect(() => {
     try {
       const pe = localStorage.getItem(PINNED_EXPENSE_KEY);
-      if (pe) setPinnedExpense(JSON.parse(pe));
+      if (pe) setPinnedExpense(((JSON.parse(pe) as string[]) ?? []).filter(isExpenseSpace));
       const pi = localStorage.getItem(PINNED_INCOME_KEY);
-      if (pi) setPinnedIncome(JSON.parse(pi));
+      if (pi) setPinnedIncome(((JSON.parse(pi) as string[]) ?? []).filter(isIncomeSpace));
       const pt = localStorage.getItem(PINNED_TAGS_KEY);
-      if (pt) setPinnedTags(JSON.parse(pt));
+      if (pt) setPinnedTags(((JSON.parse(pt) as string[]) ?? []).filter(isContextTag));
       const ht = localStorage.getItem(HIDDEN_TAGS_KEY);
-      if (ht) setHiddenTags(JSON.parse(ht));
+      if (ht) setHiddenTags(((JSON.parse(ht) as string[]) ?? []).filter(isContextTag));
     } catch {}
   }, []);
 
-  const togglePinExpense = useCallback((cat: string) => {
+  const togglePinExpense = useCallback((cat: ExpenseSpace) => {
     setPinnedExpense((prev) => {
       const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
       try { localStorage.setItem(PINNED_EXPENSE_KEY, JSON.stringify(next)); } catch {}
@@ -50,7 +66,7 @@ export default function SettingsPage() {
     });
   }, []);
 
-  const togglePinIncome = useCallback((cat: string) => {
+  const togglePinIncome = useCallback((cat: IncomeSpace) => {
     setPinnedIncome((prev) => {
       const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
       try { localStorage.setItem(PINNED_INCOME_KEY, JSON.stringify(next)); } catch {}
@@ -58,7 +74,7 @@ export default function SettingsPage() {
     });
   }, []);
 
-  const togglePinTag = useCallback((tag: string) => {
+  const togglePinTag = useCallback((tag: ContextTag) => {
     setPinnedTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
       try { localStorage.setItem(PINNED_TAGS_KEY, JSON.stringify(next)); } catch {}
@@ -66,7 +82,7 @@ export default function SettingsPage() {
     });
   }, []);
 
-  const toggleHideTag = useCallback((tag: string) => {
+  const toggleHideTag = useCallback((tag: ContextTag) => {
     setHiddenTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
       try { localStorage.setItem(HIDDEN_TAGS_KEY, JSON.stringify(next)); } catch {}

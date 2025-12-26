@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { todayYYYYMMDD, cacheKey, uniqCaseInsensitive, INCOME_SPACES, EXPENSE_SPACES, CONTEXT_TAGS } from "@/components/utils";
+
+type ContextTag = typeof CONTEXT_TAGS[number];
+function isContextTag(x: string): x is ContextTag {
+  return (CONTEXT_TAGS as readonly string[]).includes(x);
+}
 import CurrencyInput from "@/components/ui/CurrencyInput";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
@@ -20,7 +25,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [bucket, setBucket] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<ContextTag[]>([]);
   const [touched, setTouched] = useState({ amount: false, date: false, bucket: false, tags: false });
   
   const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg?: string; undoId?: string }>({ kind: "idle" });
@@ -42,7 +47,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         if (parsed?.bucket) setBucket(parsed.bucket);
         // pre-select last used tags
         if (parsed?.tags && Array.isArray(parsed.tags)) {
-          setTags(parsed.tags.filter((t: string) => CONTEXT_TAGS.includes(t)));
+          setTags((parsed.tags as string[]).filter(isContextTag));
         }
         // restore last used method/account
         if (parsed?.methodOrAccount) setMethodOrAccount(parsed.methodOrAccount);
