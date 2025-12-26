@@ -33,6 +33,7 @@ export default function Card({
       style={{
         backgroundColor: "var(--surface)",
         border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-card)",
       }}
     >
       {children}

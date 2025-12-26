@@ -224,7 +224,7 @@ export default function LogPage() {
           </div>
 
           <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.bucket && !effectiveBucket ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
-            <label className="text-micro mb-2 block">Category</label>
+            <label className="text-micro mb-2 block">{type === "income" ? "Source" : "Space"}</label>
             <select
               value={bucket}
               onChange={(e) => setBucket(e.target.value)}

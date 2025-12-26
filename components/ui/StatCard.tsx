@@ -39,6 +39,7 @@ export default function StatCard({
       style={{
         backgroundColor: "var(--surface)",
         border: "1px solid var(--border)",
+        boxShadow: "var(--shadow-card)",
       }}
     >
       <div className="flex items-start justify-between">

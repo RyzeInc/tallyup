@@ -10,6 +10,7 @@
 
 import type * as detector from "../detector.js";
 import type * as entries from "../entries.js";
+import type * as migrations from "../migrations.js";
 import type * as recurring from "../recurring.js";
 
 import type {
@@ -21,6 +22,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   detector: typeof detector;
   entries: typeof entries;
+  migrations: typeof migrations;
   recurring: typeof recurring;
 }>;
 

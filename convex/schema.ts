@@ -7,8 +7,10 @@ export default defineSchema({
 
     type: v.union(v.literal("expense"), v.literal("income")),
 
-    bucket: v.string(),                 // "Personal", "Work", etc.
-    category: v.optional(v.string()),   // free text
+    // Primary field: Space (expense) or Source (income) in UI
+    category: v.optional(v.string()),
+    // Legacy field: will be migrated to category
+    bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
 
     note: v.optional(v.string()),

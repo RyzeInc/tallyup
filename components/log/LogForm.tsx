@@ -174,7 +174,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         </div>
         <div>
           <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            Category
+            {type === "income" ? "Source" : "Space"}
           </label>
           <select
             value={bucket}

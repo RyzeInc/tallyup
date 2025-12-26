@@ -54,7 +54,8 @@
   --radius-full: 9999px;
   --radius: 0.5rem;
   
-  /* -------- Shadows (subtle, rare) -------- */
+  /* -------- Shadows (Mercury-grade depth) -------- */
+  --shadow-card: 0px 1px 2px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.06);
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
   --shadow-md: 0 2px 8px -2px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px -4px rgba(0, 0, 0, 0.1);
@@ -67,8 +68,14 @@
   --ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   
+  /* -------- Background Gradient (Mercury-grade warmth) -------- */
+  --app-bg-start: #FAF7F2;
+  --app-bg-mid: #F7F3EC;
+  --app-bg-end: #F2EDE4;
+  --bg: linear-gradient(180deg, #FAF7F2 0%, #F7F3EC 40%, #F2EDE4 100%);
+  
   /* -------- Light Theme Palette -------- */
-  --canvas: #F7F7F8;
+  --canvas: #FAF7F2; /* Legacy fallback */
   --surface: #FFFFFF;
   --surface-elevated: #FFFFFF;
   --surface-subtle: #F2F2F3;

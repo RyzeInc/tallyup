@@ -17,7 +17,7 @@ export default function EntryCard({
   const isOptimistic = has(entry._id);
 
   return (
-    <div className="rounded-2xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}>
+    <div className="rounded-2xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)", boxShadow: "var(--shadow-card)" }}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-lg font-semibold">

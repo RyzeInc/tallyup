@@ -27,11 +27,16 @@ function cleanTags(tags?: string[]): string[] | undefined {
   return out.length ? out : undefined;
 }
 
+// Helper to get effective category from entry (handles migration from bucket)
+function getEffectiveCategory(entry: any): string | undefined {
+  return entry.category ?? entry.bucket;
+}
+
 export const addEntry = mutation({
   args: {
     type: v.union(v.literal("expense"), v.literal("income")),
-    bucket: v.string(),
     category: v.optional(v.string()),
+    bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
@@ -44,21 +49,24 @@ export const addEntry = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
 
-    const bucket = args.bucket.trim();
-    if (!bucket) throw new Error("Bucket is required.");
+    // Accept either category or bucket, prefer category
+    const categoryValue = cleanStr(args.category) ?? cleanStr(args.bucket);
+    if (!categoryValue) throw new Error("Category or bucket is required.");
+    
+    const category = categoryValue;
+    const bucket = cleanStr(args.bucket) ?? categoryValue;
 
     const amountCents = Math.round(args.amountCents);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
       throw new Error("Amount must be greater than 0.");
     }
 
-    const category = cleanStr(args.category);
     const note = cleanStr(args.note);
     const methodOrAccount = cleanStr(args.methodOrAccount);
     const tags = cleanTags(args.tags);
 
     const now = Date.now();
-    const needsReview = args.needsReview ?? !category;
+    const needsReview = args.needsReview ?? false;
 
     const excludeFromTotals = args.excludeFromTotals ?? false;
 
@@ -89,8 +97,8 @@ export const addEntry = mutation({
         .order("desc")
         .take(200);
 
-      const bucketLower = (bucket ?? "").trim().toLowerCase();
-      const categoryLower = (category ?? "").trim().toLowerCase();
+      const categoryLower = category.toLowerCase();
+      const bucketLower = bucket.toLowerCase();
 
       let bestRule: any = null;
       let bestScore = 0;
@@ -145,8 +153,8 @@ export const addEntry = mutation({
 export const updateEntry = mutation({
   args: {
     id: v.id("entries"),
-    bucket: v.optional(v.string()),
     category: v.optional(v.string()),
+    bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
@@ -162,8 +170,16 @@ export const updateEntry = mutation({
 
     const patch: any = { updatedAt: Date.now() };
 
-    if (args.bucket !== undefined) patch.bucket = args.bucket.trim();
-    if (args.category !== undefined) patch.category = cleanStr(args.category);
+    if (args.category !== undefined) {
+      const cat = args.category.trim();
+      if (cat) {
+        patch.category = cat;
+        patch.bucket = args.bucket?.trim() || cat;
+      }
+    }
+    if (args.bucket !== undefined && args.category === undefined) {
+      patch.bucket = args.bucket.trim();
+    }
     if (args.tags !== undefined) patch.tags = cleanTags(args.tags);
     if (args.note !== undefined) patch.note = cleanStr(args.note);
     if (args.methodOrAccount !== undefined) patch.methodOrAccount = cleanStr(args.methodOrAccount);
@@ -269,7 +285,10 @@ export const listEntries = query({
 
     if (args.bucket?.trim()) {
       const b = args.bucket.trim().toLowerCase();
-      rows = rows.filter(r => (r.bucket ?? "").toLowerCase() === b);
+      rows = rows.filter(r => {
+        const effectiveCategory = getEffectiveCategory(r);
+        return effectiveCategory?.toLowerCase() === b || (r.bucket ?? "").toLowerCase() === b;
+      });
     }
 
     return rows;
@@ -394,7 +413,12 @@ export const listCategories = query({
     const out: string[] = [];
 
     for (const r of rows) {
-      if (bucketFilter && (r.bucket ?? "").toLowerCase() !== bucketFilter) continue;
+      // Filter by bucket if specified (check both bucket and category for match)
+      if (bucketFilter) {
+        const effectiveCategory = getEffectiveCategory(r);
+        const matchesBucket = effectiveCategory?.toLowerCase() === bucketFilter || (r.bucket ?? "").toLowerCase() === bucketFilter;
+        if (!matchesBucket) continue;
+      }
       const c = (r.category ?? "").trim();
       if (!c) continue;
       const k = c.toLowerCase();
@@ -428,12 +452,13 @@ export const listBuckets = query({
     const seen = new Set<string>();
     const out: string[] = [];
     for (const r of rows) {
-      const b = (r.bucket ?? "").trim();
-      if (!b) continue;
-      const k = b.toLowerCase();
+      // Use category if present, fallback to bucket for legacy data
+      const effectiveCategory = getEffectiveCategory(r);
+      if (!effectiveCategory) continue;
+      const k = effectiveCategory.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push(b);
+      out.push(effectiveCategory);
       if (out.length >= 30) break;
     }
     return out;
