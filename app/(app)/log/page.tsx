@@ -30,11 +30,10 @@ export default function LogPage() {
 
   const [bucket, setBucket] = useState<string>(DEFAULT_BUCKETS[0]);
   const [customBucket, setCustomBucket] = useState("");
-
-  const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
   const [tags, setTags] = useState<string[]>([]);
+  const [touched, setTouched] = useState({ amount: false, date: false, bucket: false, tags: false });
 
   const [status, setStatus] = useState<
     { kind: "idle" } |
@@ -64,24 +63,7 @@ export default function LogPage() {
 
   const effectiveBucket = bucket === "Other" ? (customBucket.trim() || "Other") : bucket;
 
-  const serverCats = useQuery(api.entries.listCategories, { type, bucket: effectiveBucket });
-  const [cachedCats, setCachedCats] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    try {
-      const raw = localStorage.getItem(cacheKey(user.id, type, effectiveBucket));
-      if (!raw) return setCachedCats([]);
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) setCachedCats(parsed.filter((x) => typeof x === "string"));
-    } catch {
-      setCachedCats([]);
-    }
-  }, [user?.id, type, effectiveBucket]);
-
-  const mergedCats = useMemo(() => {
-    return uniqCaseInsensitive([...(cachedCats ?? []), ...((serverCats as string[]) ?? [])]).slice(0, 60);
-  }, [cachedCats, serverCats]);
+  // validation touched state controls required-field UI
 
   async function onSave() {
     setStatus({ kind: "idle" });
@@ -91,11 +73,15 @@ export default function LogPage() {
 
     const ts = yyyymmddToLocalMidnightTs(date);
 
+    // mark touched for UI
+    setTouched({ amount: true, date: true, bucket: true, tags: true });
+
+    if (!effectiveBucket || tags.length === 0) return setStatus({ kind: "err", msg: "Please fill required fields." });
+
     try {
       const res = await addEntry({
         type,
-        bucket: effectiveBucket,
-        category: category.trim() ? category.trim() : undefined,
+        category: effectiveBucket,
         note: note.trim() ? note.trim() : undefined,
         methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
         amountCents: cents,
@@ -103,19 +89,9 @@ export default function LogPage() {
         tags: tags.length > 0 ? tags : undefined,
       });
 
-      // auto-save new category to local cache
-      if (user?.id && category.trim()) {
-        const next = uniqCaseInsensitive([category.trim(), ...(cachedCats ?? [])]).slice(0, 60);
-        setCachedCats(next);
-        try {
-          localStorage.setItem(cacheKey(user.id, type, effectiveBucket), JSON.stringify(next));
-        } catch {}
-      }
-
       lastSavedRef.current = {
         type,
         bucket: effectiveBucket,
-        category: category.trim() ? category.trim() : undefined,
         note: note.trim() ? note.trim() : undefined,
         methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
         amount,
@@ -125,7 +101,6 @@ export default function LogPage() {
       setAmountCents(null);
 
       setAmount("");
-      setCategory("");
       setNote("");
       setMethodOrAccount("");
       setTags([]);
@@ -214,7 +189,7 @@ export default function LogPage() {
         {/* Amount Input */}
         <div
           className="rounded-xl p-4"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{ backgroundColor: "var(--surface)", border: touched.amount && (!amountCents && !amount) ? "1px solid var(--danger)" : "1px solid var(--border)" }}
         >
           <label className="text-micro mb-2 block">Amount</label>
           <CurrencyInput
@@ -225,20 +200,20 @@ export default function LogPage() {
               setAmountCents(c);
               setAmount(c ? (c / 100).toFixed(2) : "");
             }}
+            invalid={touched.amount && (!amountCents && !amount)}
+            onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
           />
         </div>
 
         {/* Date + Space Row */}
         <div className="grid grid-cols-2 gap-3">
-          <div
-            className="rounded-xl p-4"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-          >
+          <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.date && !date ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
             <label className="text-micro mb-2 block">Date</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, date: true }))}
               className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
               style={{
                 backgroundColor: "var(--surface-subtle)",
@@ -248,16 +223,12 @@ export default function LogPage() {
             />
           </div>
 
-          <div
-            className="rounded-xl p-4"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <label className="text-micro mb-2 block">
-              {type === "income" ? "Source" : "Space"}
-            </label>
+          <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.bucket && !effectiveBucket ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
+            <label className="text-micro mb-2 block">Category</label>
             <select
               value={bucket}
               onChange={(e) => setBucket(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
               className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
               style={{
                 backgroundColor: "var(--surface-subtle)",
@@ -265,7 +236,7 @@ export default function LogPage() {
                 border: "none",
               }}
             >
-              <option value="">Select...</option>
+              <option value="">Choose category...</option>
               {(type === "income" ? INCOME_SPACES : EXPENSE_SPACES).map((space) => (
                 <option key={space} value={space}>
                   {space}
@@ -299,7 +270,7 @@ export default function LogPage() {
         {/* Context Tags */}
         <div
           className="rounded-xl p-4"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{ backgroundColor: "var(--surface)", border: touched.tags && tags.length === 0 ? "1px solid var(--danger)" : "1px solid var(--border)" }}
         >
           <label className="text-micro mb-3 block">Context tags</label>
           <div className="flex flex-wrap gap-2">
@@ -334,30 +305,7 @@ export default function LogPage() {
           style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         >
           <div>
-            <label className="text-micro mb-2 block">Category (optional)</label>
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              list="cat-suggestions"
-              placeholder="Start typing…"
-              className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
-              style={{
-                backgroundColor: "var(--surface-subtle)",
-                color: "var(--text)",
-                border: "none",
-              }}
-            />
-            <datalist id="cat-suggestions">
-              {mergedCats.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </div>
-
-          <div>
-            <label className="text-micro mb-2 block">
-              {type === "expense" ? "Payment method (optional)" : "Account (optional)"}
-            </label>
+            <label className="text-micro mb-2 block">{type === "expense" ? "Payment method" : "Account"}</label>
             <input
               value={methodOrAccount}
               onChange={(e) => setMethodOrAccount(e.target.value)}
@@ -372,7 +320,7 @@ export default function LogPage() {
           </div>
 
           <div>
-            <label className="text-micro mb-2 block">Note (optional)</label>
+            <label className="text-micro mb-2 block">Note</label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}

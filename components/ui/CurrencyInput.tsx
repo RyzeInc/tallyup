@@ -9,6 +9,8 @@ export default function CurrencyInput({
   id,
   ariaLabel,
   currency = "USD",
+  invalid,
+  onBlur,
 }: {
   valueCents?: number;
   onChange?: (cents: number | null) => void;
@@ -16,6 +18,8 @@ export default function CurrencyInput({
   id?: string;
   ariaLabel?: string;
   currency?: string;
+  invalid?: boolean;
+  onBlur?: () => void;
 }) {
   const [text, setText] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -108,10 +112,11 @@ export default function CurrencyInput({
           setText(formatCents(cents));
           onChange?.(cents);
         }
+        onBlur?.();
       }}
       className="w-full h-12 rounded-lg border px-3 text-lg font-semibold tabular-nums transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-transparent"
       style={{
-        borderColor: "var(--border)",
+        borderColor: invalid ? "var(--danger)" : "var(--border)",
         backgroundColor: "var(--input)",
         color: "var(--text)",
         fontFeatureSettings: "'tnum' 1",
