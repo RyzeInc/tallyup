@@ -69,10 +69,10 @@
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   
   /* -------- Background Gradient (Mercury-grade warmth) -------- */
-  --app-bg-start: #FAF7F2;
-  --app-bg-mid: #F7F3EC;
-  --app-bg-end: #F2EDE4;
-  --bg: linear-gradient(180deg, #FAF7F2 0%, #F7F3EC 40%, #F2EDE4 100%);
+  --app-bg-start: #FBF8F3;
+  --app-bg-mid: #F5F0E8;
+  --app-bg-end: #EBE4D8;
+  --bg: linear-gradient(180deg, #FBF8F3 0%, #F5F0E8 50%, #EBE4D8 100%);
   
   /* -------- Light Theme Palette -------- */
   --canvas: #FAF7F2; /* Legacy fallback */
@@ -120,20 +120,22 @@
   /* -------- shadcn/ui Compatibility -------- */
   --background: var(--canvas);
   --foreground: var(--text);
-  --card: var(--surface);
-  --card-foreground: var(--text);
-  --popover: var(--surface);
-  --popover-foreground: var(--text);
+  /* Ensure cards are explicitly white in light mode and text is black */
+  --card: #FFFFFF;
+  --card-foreground: #1A1A1B;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A1A1B;
   --primary: var(--accent);
   --primary-foreground: var(--accent-foreground);
   --secondary: var(--surface-subtle);
   --secondary-foreground: var(--text);
   --muted: var(--surface-subtle);
   --muted-foreground: var(--text-secondary);
-  --input: var(--surface);
+  --input: #FFFFFF;
   --ring: var(--accent);
   --destructive: var(--danger);
   --destructive-foreground: #FFFFFF;
+  /* Keep bg pointing at canvas (legacy) while body uses --bg gradient */
   --bg: var(--canvas);
   
   /* -------- Layout -------- */
@@ -211,12 +213,13 @@ html {
 }
 
 body {
-  background-color: var(--canvas);
+  background: var(--bg);
   color: var(--text);
   font-size: var(--text-body);
   font-weight: var(--text-body-weight);
   line-height: 1.5;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  min-height: 100vh;
 }
 
 .tabular-nums,

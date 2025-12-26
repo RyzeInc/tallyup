@@ -46,8 +46,9 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 safe-area-inset-bottom"
         style={{
-          backgroundColor: "var(--surface)",
+          backgroundColor: "var(--card)",
           borderTop: "1px solid var(--border)",
+          color: "var(--text)",
         }}
       >
         <div className="mx-auto max-w-lg">

@@ -31,7 +31,8 @@ export default function Card({
         .filter(Boolean)
         .join(" ")}
       style={{
-        backgroundColor: "var(--surface)",
+        backgroundColor: "var(--card)",
+        color: "var(--card-foreground)",
         border: "1px solid var(--border)",
         boxShadow: "var(--shadow-card)",
       }}
