@@ -6,6 +6,7 @@ import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { centsToDollars } from "@/components/utils";
+import Link from "next/link";
 
 export default function ActivityTable({
   entries = [],
@@ -21,13 +22,46 @@ export default function ActivityTable({
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
   const bulkMarkReviewed = useMutation(api.entries.bulkMarkReviewed);
+  const updateEntry = useMutation(api.entries.updateEntry);
+  const deleteEntry = useMutation(api.entries.deleteEntry);
 
   function toggle(id: Id<"entries">) {
     setSelected((s) => ({ ...s, [id]: !s[id] }));
   }
 
+  function selectAll() {
+    const newSelected: Record<string, boolean> = {};
+    entries.forEach((e) => { newSelected[e._id] = true; });
+    setSelected(newSelected);
+  }
+
   function clearSelection() {
     setSelected({});
+  }
+
+  async function handleBulkMarkReviewed() {
+    try {
+      await bulkMarkReviewed({ ids: selectedIds as any });
+      clearSelection();
+      onBulkComplete?.();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to apply bulk action.");
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (!confirm(`Delete ${selectedIds.length} entries? This cannot be undone.`)) return;
+    try {
+      for (const id of selectedIds) {
+        await deleteEntry({ id: id as any });
+      }
+      clearSelection();
+      onBulkComplete?.();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete entries.");
+    }
   }
 
   return (
@@ -35,7 +69,7 @@ export default function ActivityTable({
       {/* Bulk Actions Bar */}
       {selectedIds.length > 0 && (
         <div
-          className="flex items-center gap-3 rounded-xl px-4 py-3"
+          className="sticky top-0 z-10 flex items-center gap-3 rounded-xl px-4 py-3"
           style={{ backgroundColor: "var(--accent-subtle)", border: "1px solid var(--accent)" }}
         >
           <span className="text-body font-semibold" style={{ color: "var(--accent)" }}>
@@ -43,27 +77,38 @@ export default function ActivityTable({
           </span>
           <div className="ml-auto flex gap-2">
             <button
+              onClick={selectAll}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+              style={{ border: "1px solid var(--border)", color: "var(--text)" }}
+            >
+              Select all
+            </button>
+            <button
               onClick={clearSelection}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
               style={{ border: "1px solid var(--border)", color: "var(--text)" }}
             >
               Clear
             </button>
             <button
-              onClick={async () => {
-                try {
-                  await bulkMarkReviewed({ ids: selectedIds as any });
-                  clearSelection();
-                  onBulkComplete?.();
-                } catch (e) {
-                  console.error(e);
-                  alert("Failed to apply bulk action.");
-                }
-              }}
-              className="rounded-lg px-3 py-1.5 text-sm font-semibold"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+              onClick={handleBulkMarkReviewed}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+              style={{ backgroundColor: "var(--success)", color: "white" }}
             >
-              Mark reviewed
+              <span className="flex items-center gap-1">
+                <Lucide.Check className="h-3 w-3" />
+                Mark reviewed
+              </span>
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+              style={{ backgroundColor: "var(--danger)", color: "white" }}
+            >
+              <span className="flex items-center gap-1">
+                <Lucide.Trash2 className="h-3 w-3" />
+                Delete
+              </span>
             </button>
           </div>
         </div>
@@ -79,6 +124,10 @@ export default function ActivityTable({
           const amountColor = isIncome ? "var(--success)" : "var(--text)";
           const amountPrefix = isIncome ? "+" : "−";
           
+          // Build secondary line: Category · Tags (as short chips)
+          const categoryLabel = r.category || r.bucket || "Uncategorized";
+          const tagLabels = r.tags?.slice(0, 2) || [];
+          
           return (
             <div
               key={r._id}
@@ -92,7 +141,7 @@ export default function ActivityTable({
                 type="checkbox"
                 checked={!!selected[r._id]}
                 onChange={() => toggle(r._id)}
-                className="h-4 w-4 rounded"
+                className="h-4 w-4 rounded shrink-0"
                 style={{ accentColor: "var(--accent)" }}
               />
 
@@ -111,28 +160,51 @@ export default function ActivityTable({
               </div>
 
               {/* Main Content */}
-              <div className="flex-1 min-w-0">
+              <Link href={`/activity?edit=${r._id}`} className="flex-1 min-w-0">
+                {/* Primary: Title */}
                 <div className="flex items-center gap-2">
                   <span
                     className="text-body font-semibold truncate"
                     style={{ color: "var(--text)" }}
                   >
-                    {r.note || r.merchant || r.category || "Untitled"}
+                    {r.note || r.merchant || categoryLabel}
                   </span>
                   {r.needsReview && (
                     <span
                       className="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold"
                       style={{ backgroundColor: "var(--warning-subtle)", color: "var(--warning)" }}
                     >
-                      Needs review
+                      Review
                     </span>
                   )}
                 </div>
-                <div className="text-meta truncate" style={{ color: "var(--text-secondary)" }}>
-                  {r.bucket || r.category || "Uncategorized"}
-                  {r.methodOrAccount && ` · ${r.methodOrAccount}`}
+                
+                {/* Secondary: Category · Context tags */}
+                <div className="flex items-center gap-1.5 text-meta truncate" style={{ color: "var(--text-secondary)" }}>
+                  <span>{categoryLabel}</span>
+                  {tagLabels.length > 0 && (
+                    <>
+                      <span style={{ color: "var(--text-tertiary)" }}>·</span>
+                      {tagLabels.map((tag: string, idx: number) => (
+                        <span key={tag} className="inline-flex items-center">
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full mr-1"
+                            style={{ backgroundColor: "var(--accent)" }}
+                          />
+                          <span className="text-[11px]">{tag}</span>
+                        </span>
+                      ))}
+                    </>
+                  )}
                 </div>
-              </div>
+                
+                {/* Tertiary: Method/account if present */}
+                {r.methodOrAccount && (
+                  <div className="text-[10px] truncate" style={{ color: "var(--text-tertiary)" }}>
+                    {r.methodOrAccount}
+                  </div>
+                )}
+              </Link>
 
               {/* Amount + Date */}
               <div className="shrink-0 text-right">

@@ -1,21 +1,23 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { todayYYYYMMDD, cacheKey, uniqCaseInsensitive, INCOME_SPACES, EXPENSE_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import CurrencyInput from "@/components/ui/CurrencyInput";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
+import Combobox from "@/components/ui/Combobox";
 import { useQuickLog } from "./QuickLogProvider";
 
 export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) => void }) {
+  const router = useRouter();
   const quickLog = useQuickLog();
   const [type, setType] = useState<"expense" | "income">("expense");
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayYYYYMMDD());
   const [bucket, setBucket] = useState("");
-  const [customBucket, setCustomBucket] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -25,8 +27,9 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
   const addEntry = useMutation(api.entries.addEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
+  const updateEntry = useMutation(api.entries.updateEntry);
 
-  // smart defaults: last entry
+  // smart defaults: last entry (type, bucket, and tags)
   useEffect(() => {
     try {
       const raw = localStorage.getItem("tallyup.lastEntry");
@@ -34,6 +37,10 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         const parsed = JSON.parse(raw);
         if (parsed?.type) setType(parsed.type);
         if (parsed?.bucket) setBucket(parsed.bucket);
+        // pre-select last used tags
+        if (parsed?.tags && Array.isArray(parsed.tags)) {
+          setTags(parsed.tags.filter((t: string) => CONTEXT_TAGS.includes(t)));
+        }
       }
     } catch {}
   }, []);
@@ -53,7 +60,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
     try {
       const payload: any = { type, amountCents, date: (() => { const [y,m,d] = date.split("-"); return new Date(Number(y), Number(m)-1, Number(d)).getTime(); })() };
-      if (bucket) payload.category = bucket === "Other" ? customBucket.trim() || "Other" : bucket;
+      if (bucket) payload.category = bucket;
       if (note?.trim()) payload.note = note.trim();
       if (methodOrAccount?.trim()) payload.methodOrAccount = methodOrAccount.trim();
       if (tags.length > 0) payload.tags = tags;
@@ -65,7 +72,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
           "tallyup.lastEntry",
           JSON.stringify({
             type,
-            bucket: bucket === "Other" ? customBucket || "Other" : bucket,
+            bucket,
             tags: tags.length ? tags : undefined,
           })
         );
@@ -73,26 +80,49 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
       const id = (res as any)?.id as string | undefined;
       setStatus({ kind: "ok", msg: "Saved.", undoId: id });
-      setTimeout(() => setStatus({ kind: "idle" }), 2000);
-      // clear selected tags after successful save
-      setTags([]);
 
-      // show global toast with undo
-      try {
-        quickLog.showToast("Saved", async () => {
-          if (!id) return;
-          try {
-            await deleteEntry({ id: id as any });
-            quickLog.showToast("Undone");
-          } catch (e: any) {
-            quickLog.showToast(e?.message ?? "Failed to undo.");
-          }
-        });
-      } catch {}
+      // Reset form for next entry
+      setAmountCents(null);
+      setNote("");
+      // Keep type, bucket, tags for smart defaults
+
+      // show rich toast with actions
+      if (id) {
+        quickLog.showRichToast("Entry saved", [
+          {
+            label: "Edit",
+            onClick: () => {
+              // Navigate to entry detail/edit view
+              router.push(`/activity?entry=${id}`);
+            },
+          },
+          {
+            label: "Flag for review",
+            onClick: async () => {
+              try {
+                await updateEntry({ id: id as any, needsReview: true });
+                quickLog.showToast("Flagged for review");
+              } catch (e: any) {
+                quickLog.showToast(e?.message ?? "Failed to flag");
+              }
+            },
+          },
+          {
+            label: "Log another",
+            onClick: () => {
+              // Focus the amount input for quick next entry
+              setAmountCents(null);
+              setStatus({ kind: "idle" });
+            },
+          },
+        ]);
+      } else {
+        quickLog.showToast("Saved");
+      }
+
+      setTimeout(() => setStatus({ kind: "idle" }), 2000);
 
       onDone?.({ id });
-
-      return id;
     } catch (err: any) {
       setStatus({ kind: "err", msg: err?.message ?? "Failed to save." });
     }
@@ -154,50 +184,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
       />
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            Date
-          </label>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, date: true }))}
-            className="w-full rounded-lg border px-3 py-2.5 text-sm"
-            style={{
-              borderColor: touched.date && !date ? "var(--danger)" : "var(--border)",
-              backgroundColor: "var(--input)",
-              color: "var(--text)",
-            }}
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            {type === "income" ? "Source" : "Space"}
-          </label>
-          <select
-            value={bucket}
-            onChange={(e) => setBucket(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
-            className="w-full rounded-lg border px-3 py-2.5 text-sm appearance-none cursor-pointer"
-            style={{
-              borderColor: touched.bucket && !bucket ? "var(--danger)" : "var(--border)",
-              backgroundColor: "var(--input)",
-              color: "var(--text)",
-            }}
-          >
-            <option value="">Choose category...</option>
-            {(type === "income" ? INCOME_SPACES : EXPENSE_SPACES).map((space) => (
-              <option key={space} value={space}>
-                {space}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Context Tags - composable, not mutually exclusive */}
+      {/* Context Tags - placed ABOVE category for faster entry */}
       <div className="mt-4">
         <label className="block text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
           Context Tags
@@ -234,6 +221,43 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               );
             })}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            Date
+          </label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            onBlur={() => setTouched((t) => ({ ...t, date: true }))}
+            className="w-full rounded-lg border px-3 py-2.5 text-sm"
+            style={{
+              borderColor: touched.date && !date ? "var(--danger)" : "var(--border)",
+              backgroundColor: "var(--input)",
+              color: "var(--text)",
+            }}
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+            Category
+          </label>
+          <Combobox
+            value={bucket}
+            onChange={(v) => setBucket(v)}
+            options={useMemo(() => {
+              const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
+              const merged = uniqCaseInsensitive([...base]);
+              if (!merged.includes("Other")) merged.push("Other");
+              return merged;
+            }, [type])}
+            placeholder="Choose category..."
+            onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
+          />
         </div>
       </div>
 

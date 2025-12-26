@@ -4,26 +4,34 @@ import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { centsToDollars, todayYYYYMMDD, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
-import DateRangeControl from "@/components/activity/DateRangeControl";
+import { centsToDollars } from "@/components/utils";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
+import { useTimeRange } from "@/components/TimeRangeProvider";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useQuickLog } from "@/components/log/QuickLogProvider";
 
 const COLORS = ["#6366F1", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4"];
 
 export default function SummaryPage() {
   const { user } = useUser();
-  const [mode, setMode] = useState<DateRangePreset>("week");
-  const [from, setFrom] = useState(todayYYYYMMDD());
-  const [to, setTo] = useState(todayYYYYMMDD());
+  const router = useRouter();
+  const quickLog = useQuickLog();
+  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
-  const { startDate, endDate, label } = useMemo(() => {
-    return getDateRangeFromPreset(mode, from, to);
-  }, [mode, from, to]);
-
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as any[] | undefined;
+  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 1200 }) as any[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+
+  // Get recent entries for mini-list (last 5)
+  const recentEntries = useMemo(() => {
+    if (!entries) return [];
+    return [...entries]
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 5);
+  }, [entries]);
 
   const computed = useMemo(() => {
     const all = entries ?? [];
@@ -31,6 +39,7 @@ export default function SummaryPage() {
     let expense = 0;
 
     const bucketSpend = new Map<string, number>();
+    const categorySpend = new Map<string, number>();
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
@@ -40,6 +49,9 @@ export default function SummaryPage() {
       if (e.type === "expense") {
         const b = (e.bucket ?? "Other").trim() || "Other";
         bucketSpend.set(b, (bucketSpend.get(b) ?? 0) + e.amountCents);
+
+        const c = (e.category ?? "Uncategorized").trim() || "Uncategorized";
+        categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
       }
     }
 
@@ -49,13 +61,47 @@ export default function SummaryPage() {
     const otherTotal = [...bucketSpend.entries()].sort((a, b) => b[1] - a[1]).slice(5).reduce((s, [, v]) => s + v, 0);
     const bucketFinal = otherTotal > 0 ? [...bucketRows, ["Other", otherTotal] as const] : bucketRows;
 
-    return { income, expense, net, bucketFinal };
+    // Top category
+    const topCategory = [...categorySpend.entries()].sort((a, b) => b[1] - a[1])[0];
+
+    return { income, expense, net, bucketFinal, topCategory };
   }, [entries]);
+
+  // Previous period for comparison
+  const prevComputed = useMemo(() => {
+    const all = prevEntries ?? [];
+    let income = 0;
+    let expense = 0;
+
+    for (const e of all) {
+      if (e.excludeFromTotals) continue;
+      if (e.type === "income") income += e.amountCents;
+      else expense += e.amountCents;
+    }
+
+    return { income, expense, net: income - expense };
+  }, [prevEntries]);
+
+  // Compute deltas
+  const deltas = useMemo(() => {
+    const incomeDelta = computed.income - prevComputed.income;
+    const expenseDelta = computed.expense - prevComputed.expense;
+    const netDelta = computed.net - prevComputed.net;
+    return { income: incomeDelta, expense: expenseDelta, net: netDelta };
+  }, [computed, prevComputed]);
 
   const reviewCount = inbox?.length ?? 0;
 
+  function openLogSpent() {
+    quickLog.openModal();
+  }
+
+  function openLogReceived() {
+    quickLog.openModal();
+  }
+
   return (
-    <div className="space-y-6 pb-4">
+    <div className="space-y-4 pb-4">
       {/* Header Card with Title + Date Selector */}
       <div
         className="rounded-2xl p-5"
@@ -65,14 +111,7 @@ export default function SummaryPage() {
           <div>
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Home</h1>
           </div>
-          <DateRangeControl
-            range={mode}
-            setRange={(r) => setMode(r as DateRangePreset)}
-            from={from}
-            to={to}
-            setFrom={setFrom}
-            setTo={setTo}
-          />
+          <GlobalDateRangePicker />
         </div>
 
         <SignedOut>
@@ -113,14 +152,18 @@ export default function SummaryPage() {
                   {computed.net >= 0 ? "+" : ""}{centsToDollars(computed.net)}
                 </div>
                 <div className="flex items-center gap-1.5 mt-1">
-                  {computed.net >= 0 ? (
-                    <Lucide.TrendingUp className="h-4 w-4" style={{ color: "var(--success)" }} />
-                  ) : (
-                    <Lucide.TrendingDown className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                  {deltas.net !== 0 && prevEntries && (
+                    <>
+                      {deltas.net >= 0 ? (
+                        <Lucide.TrendingUp className="h-4 w-4" style={{ color: "var(--success)" }} />
+                      ) : (
+                        <Lucide.TrendingDown className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                      )}
+                      <span className="text-meta" style={{ color: deltas.net >= 0 ? "var(--success)" : "var(--danger)" }}>
+                        {deltas.net >= 0 ? "+" : ""}{centsToDollars(deltas.net)} vs {prevLabel.toLowerCase()}
+                      </span>
+                    </>
                   )}
-                  <span className="text-meta" style={{ color: "var(--success)" }}>
-                    {computed.net >= 0 ? "↗ You're ahead" : "↘ More out than in"}
-                  </span>
                 </div>
               </div>
             </>
@@ -131,6 +174,75 @@ export default function SummaryPage() {
       <SignedIn>
         {entries && inbox && (
           <>
+            {/* Quick Actions Row */}
+            <div
+              className="grid grid-cols-4 gap-2"
+            >
+              <button
+                onClick={openLogSpent}
+                className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--surface-subtle)]"
+                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+              >
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full"
+                  style={{ backgroundColor: "var(--danger-subtle)" }}
+                >
+                  <Lucide.ArrowUpRight className="h-5 w-5" style={{ color: "var(--danger)" }} />
+                </div>
+                <span className="text-xs font-medium" style={{ color: "var(--text)" }}>Log spent</span>
+              </button>
+
+              <button
+                onClick={openLogReceived}
+                className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--surface-subtle)]"
+                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+              >
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full"
+                  style={{ backgroundColor: "var(--success-subtle)" }}
+                >
+                  <Lucide.ArrowDownLeft className="h-5 w-5" style={{ color: "var(--success)" }} />
+                </div>
+                <span className="text-xs font-medium" style={{ color: "var(--text)" }}>Log received</span>
+              </button>
+
+              {reviewCount > 0 && (
+                <Link
+                  href="/review"
+                  className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--surface-subtle)]"
+                  style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+                >
+                  <div
+                    className="relative flex h-10 w-10 items-center justify-center rounded-full"
+                    style={{ backgroundColor: "var(--warning-subtle)" }}
+                  >
+                    <Lucide.AlertCircle className="h-5 w-5" style={{ color: "var(--warning)" }} />
+                    <span
+                      className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+                      style={{ backgroundColor: "var(--warning)", color: "white" }}
+                    >
+                      {reviewCount > 9 ? "9+" : reviewCount}
+                    </span>
+                  </div>
+                  <span className="text-xs font-medium" style={{ color: "var(--text)" }}>Review</span>
+                </Link>
+              )}
+
+              <Link
+                href="/activity?focus=search"
+                className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-colors hover:bg-[var(--surface-subtle)]"
+                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+              >
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-full"
+                  style={{ backgroundColor: "var(--surface-subtle)" }}
+                >
+                  <Lucide.Search className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+                </div>
+                <span className="text-xs font-medium" style={{ color: "var(--text)" }}>Search</span>
+              </Link>
+            </div>
+
             {/* Stats Row: Received / Spent / Needs Review */}
             <div
               className="grid grid-cols-3 gap-px rounded-xl overflow-hidden"
@@ -144,7 +256,11 @@ export default function SummaryPage() {
                 >
                   {centsToDollars(computed.income)}
                 </div>
-                <div className="text-meta">{label}</div>
+                {prevEntries && deltas.income !== 0 && (
+                  <div className="text-[10px] mt-0.5" style={{ color: deltas.income >= 0 ? "var(--success)" : "var(--danger)" }}>
+                    {deltas.income >= 0 ? "+" : ""}{centsToDollars(deltas.income)}
+                  </div>
+                )}
               </div>
               <div className="p-4" style={{ backgroundColor: "var(--surface)" }}>
                 <div className="text-micro mb-1">Spent</div>
@@ -154,9 +270,13 @@ export default function SummaryPage() {
                 >
                   {centsToDollars(computed.expense)}
                 </div>
-                <div className="text-meta">{label}</div>
+                {prevEntries && deltas.expense !== 0 && (
+                  <div className="text-[10px] mt-0.5" style={{ color: deltas.expense <= 0 ? "var(--success)" : "var(--danger)" }}>
+                    {deltas.expense >= 0 ? "+" : ""}{centsToDollars(deltas.expense)}
+                  </div>
+                )}
               </div>
-              <div className="p-4" style={{ backgroundColor: "var(--surface)" }}>
+              <Link href="/review" className="p-4 transition-colors hover:bg-[var(--surface-subtle)]" style={{ backgroundColor: "var(--surface)" }}>
                 <div className="text-micro mb-1">Needs review</div>
                 <div
                   className="text-xl font-semibold tabular-nums"
@@ -164,14 +284,14 @@ export default function SummaryPage() {
                 >
                   {reviewCount}
                 </div>
-                <div className="text-meta">entries</div>
-              </div>
+                <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>entries</div>
+              </Link>
             </div>
 
-            {/* Attention Needed Card */}
+            {/* Needs Review Card - actionable */}
             {reviewCount > 0 && (
               <Link
-                href="/activity?review=1"
+                href="/review"
                 className="flex items-center gap-4 rounded-xl p-4 transition-colors hover:opacity-90"
                 style={{
                   backgroundColor: "var(--surface)",
@@ -188,13 +308,65 @@ export default function SummaryPage() {
                   <div className="text-body font-semibold" style={{ color: "var(--text)" }}>
                     {reviewCount} {reviewCount === 1 ? "entry needs" : "entries need"} review
                   </div>
-                  <div className="text-meta">Tap to categorize</div>
+                  <div className="text-meta">Start review wizard →</div>
                 </div>
                 <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
               </Link>
             )}
 
-            {/* Spending Breakdown (Collapsible) */}
+            {/* Recent Entries Mini-list */}
+            {recentEntries.length > 0 && (
+              <div
+                className="rounded-xl overflow-hidden"
+                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+              >
+                <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: "var(--border)" }}>
+                  <span className="text-h2" style={{ color: "var(--text)" }}>Recent</span>
+                  <Link href="/activity" className="text-meta font-medium" style={{ color: "var(--accent)" }}>
+                    See all →
+                  </Link>
+                </div>
+                <div>
+                  {recentEntries.map((e, i) => {
+                    const isIncome = e.type === "income";
+                    const amountColor = isIncome ? "var(--success)" : "var(--text)";
+                    const amountPrefix = isIncome ? "+" : "−";
+
+                    return (
+                      <Link
+                        key={e._id}
+                        href={`/activity?edit=${e._id}`}
+                        className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-subtle)] ${i > 0 ? "border-t" : ""}`}
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="text-body font-medium truncate" style={{ color: "var(--text)" }}>
+                            {e.note || e.merchant || e.category || "Untitled"}
+                          </div>
+                          <div className="text-meta truncate" style={{ color: "var(--text-secondary)" }}>
+                            {e.category || e.bucket || "Uncategorized"}
+                            {e.tags?.length > 0 && ` · ${e.tags.slice(0, 2).join(", ")}`}
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div
+                            className="text-body font-semibold tabular-nums"
+                            style={{ color: amountColor }}
+                          >
+                            {amountPrefix}{centsToDollars(Math.abs(e.amountCents))}
+                          </div>
+                          <div className="text-meta" style={{ color: "var(--text-tertiary)" }}>
+                            {new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Spending Breakdown with top category hint */}
             <div
               className="rounded-xl overflow-hidden"
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
@@ -203,9 +375,16 @@ export default function SummaryPage() {
                 onClick={() => setBreakdownOpen(!breakdownOpen)}
                 className="w-full flex items-center justify-between p-4 transition-colors hover:bg-[var(--surface-subtle)]"
               >
-                <span className="text-h2" style={{ color: "var(--text)" }}>
-                  Spending breakdown
-                </span>
+                <div className="text-left">
+                  <span className="text-h2 block" style={{ color: "var(--text)" }}>
+                    Spending by Category
+                  </span>
+                  {computed.topCategory && !breakdownOpen && (
+                    <span className="text-meta" style={{ color: "var(--text-secondary)" }}>
+                      Top: {computed.topCategory[0]} — {centsToDollars(computed.topCategory[1])}
+                    </span>
+                  )}
+                </div>
                 {breakdownOpen ? (
                   <Lucide.ChevronDown className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
                 ) : (
@@ -223,7 +402,11 @@ export default function SummaryPage() {
                         const total = computed.bucketFinal.reduce((s, [, val]) => s + val, 0) || 1;
                         const pct = Math.round((v / total) * 100);
                         return (
-                          <div key={name} className="space-y-1.5">
+                          <Link
+                            key={name}
+                            href={`/activity?category=${encodeURIComponent(String(name))}`}
+                            className="block space-y-1.5 transition-opacity hover:opacity-80"
+                          >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2">
                                 <span
@@ -245,7 +428,7 @@ export default function SummaryPage() {
                                 style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
                               />
                             </div>
-                          </div>
+                          </Link>
                         );
                       })}
                     </div>

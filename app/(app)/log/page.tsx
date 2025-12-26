@@ -19,6 +19,7 @@ import {
 } from "@/components/utils";
 import RecurringModal from "@/components/RecurringModal";
 import CurrencyInput from "@/components/ui/CurrencyInput";
+import Combobox from "@/components/ui/Combobox";
 
 export default function LogPage() {
   const { user } = useUser();
@@ -234,25 +235,18 @@ export default function LogPage() {
 
           <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.bucket && !effectiveBucket ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
             <label className="text-micro mb-2 block">{type === "income" ? "Source" : "Space"}</label>
-            <select
-              value={bucket}
-              onChange={(e) => setBucket(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
-              className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
-              style={{
-                backgroundColor: "var(--surface-subtle)",
-                color: "var(--text)",
-                border: "none",
-              }}
-            >
-              <option value="">Choose category...</option>
-              {(type === "income" ? INCOME_SPACES : EXPENSE_SPACES).map((space) => (
-                <option key={space} value={space}>
-                  {space}
-                </option>
-              ))}
-              <option value="Other">Other</option>
-            </select>
+              <Combobox
+                value={bucket}
+                onChange={(v) => setBucket(v)}
+                options={useMemo(() => {
+                  const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
+                  const merged = uniqCaseInsensitive([...base]);
+                  if (!merged.includes("Other")) merged.push("Other");
+                  return merged;
+                }, [type])}
+                placeholder="Choose category..."
+                onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
+              />
           </div>
         </div>
 

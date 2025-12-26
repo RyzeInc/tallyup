@@ -1,72 +1,78 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import RecurringModal from "@/components/RecurringModal";
 import ActivityTable from "@/components/activity/ActivityTable";
-import FilterBar from "@/components/activity/FilterBar";
-import DateRangeControl from "@/components/activity/DateRangeControl";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
+import { useTimeRange } from "@/components/TimeRangeProvider";
 import EmptyState from "@/components/ui/EmptyState";
-import { EntryType, startOfMonthLocalTs, startOfWeekLocalTs, todayYYYYMMDD, yyyymmddToLocalMidnightTs } from "@/components/utils";
+import { EntryType, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 export default function HistoryPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const { startDate, endDate } = useTimeRange();
 
   const [type, setType] = useState<"all" | EntryType>(() => (searchParams.get("type") as any) ?? "all");
-  const [bucket, setBucket] = useState<string>(() => searchParams.get("bucket") ?? "");
-  const q = searchParams.get("q") ?? "";
+  const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const reviewOnly = searchParams.get("review") === "1";
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const [range, setRange] = useState<"week" | "month" | "custom">(() => (searchParams.get("range") as any) ?? "month");
-  const [from, setFrom] = useState(() => searchParams.get("from") ?? todayYYYYMMDD());
-  const [to, setTo] = useState(() => searchParams.get("to") ?? todayYYYYMMDD());
+  // Filter state
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    const cat = searchParams.get("category");
+    return cat ? [cat] : [];
+  });
+  const [selectedTags, setSelectedTags] = useState<string[]>(() => {
+    const tag = searchParams.get("tag");
+    return tag ? [tag] : [];
+  });
+  const [minAmount, setMinAmount] = useState<string>("");
+  const [maxAmount, setMaxAmount] = useState<string>("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
 
-  // Sync URL -> local state when `FilterBar` or other components update the query params.
+  // Get review count for badge
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const reviewCount = inbox?.length ?? 0;
+
+  // Focus search on mount if requested
   useEffect(() => {
-    const spType = (searchParams.get("type") as any) ?? "all";
-    const spBucket = searchParams.get("bucket") ?? "";
-    const spRange = (searchParams.get("range") as any) ?? "month";
-    const spFrom = searchParams.get("from") ?? todayYYYYMMDD();
-    const spTo = searchParams.get("to") ?? todayYYYYMMDD();
-
-    setType(spType);
-    setBucket(spBucket);
-    setRange(spRange as any);
-    setFrom(spFrom);
-    setTo(spTo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (searchParams.get("focus") === "search" && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
   }, [searchParams]);
 
-  // sync state -> URL
+  // Sync URL filters
+  useEffect(() => {
+    const cat = searchParams.get("category");
+    const tag = searchParams.get("tag");
+    if (cat) setSelectedCategories([cat]);
+    if (tag) setSelectedTags([tag]);
+    setType((searchParams.get("type") as any) ?? "all");
+  }, [searchParams]);
+
+  // Update URL when filters change
   useEffect(() => {
     const p = new URLSearchParams();
     if (type && type !== "all") p.set("type", type);
-    if (bucket) p.set("bucket", bucket);
-    if (range && range !== "month") p.set("range", range);
-    if (range === "custom") {
-      p.set("from", from);
-      p.set("to", to);
-    }
+    if (q) p.set("q", q);
+    if (reviewOnly) p.set("review", "1");
+    if (selectedCategories.length === 1) p.set("category", selectedCategories[0]);
+    if (selectedTags.length === 1) p.set("tag", selectedTags[0]);
     const qs = p.toString();
     const url = qs ? `/activity?${qs}` : `/activity`;
     router.replace(url);
-  }, [type, bucket, range, from, to, router]);
+  }, [type, q, reviewOnly, selectedCategories, selectedTags, router]);
 
   const deleteEntry = useMutation(api.entries.deleteEntry);
-
-  const { startDate, endDate } = useMemo(() => {
-    const now = new Date();
-    if (range === "week") return { startDate: startOfWeekLocalTs(now), endDate: Date.now() + 1 };
-    if (range === "month") return { startDate: startOfMonthLocalTs(now), endDate: Date.now() + 1 };
-    const s = yyyymmddToLocalMidnightTs(from);
-    const e = yyyymmddToLocalMidnightTs(to) + 24 * 60 * 60 * 1000;
-    return { startDate: Math.min(s, e), endDate: Math.max(s, e) };
-  }, [range, from, to]);
 
   // paginated entries: cursor-based pages from server
   const [pages, setPages] = useState<any[][]>([]);
@@ -76,14 +82,10 @@ export default function HistoryPage() {
 
   const currentCursor = cursorList[cursorList.length - 1];
 
-  const categoryParam = searchParams.get("category") ?? undefined;
-  const tagParam = searchParams.get("tag") ?? undefined;
-
   const pageResult = useQuery(api.entries.listEntriesPaged, {
     type: type === "all" ? undefined : type,
-    buckets: bucket.trim() ? [bucket] : undefined,
-    categories: categoryParam ? [categoryParam] : undefined,
-    tags: tagParam ? [tagParam] : undefined,
+    categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+    tags: selectedTags.length > 0 ? selectedTags : undefined,
     startDate,
     endDate,
     needsReview: reviewOnly ? true : undefined,
@@ -98,7 +100,7 @@ export default function HistoryPage() {
     setNextCursor(undefined);
     setCursorList([undefined]);
     setSeenIds({});
-  }, [type, bucket, range, from, to]);
+  }, [type, startDate, endDate, selectedCategories, selectedTags, reviewOnly, q]);
 
   // append page result when it arrives
   useEffect(() => {
@@ -114,9 +116,24 @@ export default function HistoryPage() {
     if (newRows.length) setPages((p) => [...p, newRows]);
     setSeenIds(seen);
     setNextCursor(pageResult.nextCursor);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageResult]);
 
-  const allEntries = pages.flat();
+  // Sort entries
+  const allEntries = useMemo(() => {
+    const entries = pages.flat();
+    switch (sortBy) {
+      case "oldest":
+        return [...entries].sort((a, b) => a.date - b.date);
+      case "highest":
+        return [...entries].sort((a, b) => b.amountCents - a.amountCents);
+      case "lowest":
+        return [...entries].sort((a, b) => a.amountCents - b.amountCents);
+      case "newest":
+      default:
+        return [...entries].sort((a, b) => b.date - a.date);
+    }
+  }, [pages, sortBy]);
 
   const [selected, setSelected] = useState<any | null>(null);
 
@@ -124,6 +141,48 @@ export default function HistoryPage() {
     if (!nextCursor) return;
     setCursorList((c) => [...c, nextCursor]);
   }
+
+  // Count active filters
+  const activeFilterCount = selectedCategories.length + selectedTags.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
+
+  // Clear a specific filter
+  function clearCategory(cat: string) {
+    setSelectedCategories((prev) => prev.filter((c) => c !== cat));
+  }
+  function clearTag(tag: string) {
+    setSelectedTags((prev) => prev.filter((t) => t !== tag));
+  }
+  function clearAllFilters() {
+    setSelectedCategories([]);
+    setSelectedTags([]);
+    setMinAmount("");
+    setMaxAmount("");
+  }
+
+  function toggleReview() {
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    if (reviewOnly) {
+      p.delete("review");
+    } else {
+      p.set("review", "1");
+    }
+    const qs = p.toString();
+    router.replace(qs ? `/activity?${qs}` : `/activity`);
+  }
+
+  // Category options based on type
+  const categoryOptions = useMemo(() => {
+    if (type === "income") return [...INCOME_SPACES];
+    if (type === "expense") return [...EXPENSE_SPACES];
+    return [...INCOME_SPACES, ...EXPENSE_SPACES];
+  }, [type]);
+
+  const filterChip = (active: boolean) =>
+    `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+      active
+        ? "bg-[var(--accent-subtle)] border-[var(--accent)]"
+        : "hover:bg-[var(--surface-subtle)]"
+    }`;
 
   return (
     <div className="space-y-4 pb-4">
@@ -134,14 +193,7 @@ export default function HistoryPage() {
       >
         <div className="flex items-center justify-between">
           <h1 className="text-h1" style={{ color: "var(--text)" }}>Activity</h1>
-          <DateRangeControl
-            range={range}
-            setRange={(r) => setRange(r as any)}
-            from={from}
-            to={to}
-            setFrom={setFrom}
-            setTo={setTo}
-          />
+          <GlobalDateRangePicker showAllPresets />
         </div>
       </div>
 
@@ -165,11 +217,157 @@ export default function HistoryPage() {
       </SignedOut>
 
       <SignedIn>
-        {/* Search + Filters */}
-        <FilterBar buckets={[]} />
+        {/* Search Input */}
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3"
+          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <Lucide.Search className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
+          <input
+            ref={searchInputRef}
+            type="text"
+            placeholder="Search transactions…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="flex-1 bg-transparent text-body outline-none placeholder:text-[var(--text-tertiary)]"
+            style={{ color: "var(--text)" }}
+          />
+          {q && (
+            <button
+              onClick={() => setQ("")}
+              className="shrink-0 rounded-full p-1 transition-colors hover:bg-[var(--surface-subtle)]"
+            >
+              <Lucide.X className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Row: Type chips + Filters button */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Type segmented control */}
+          <button
+            onClick={() => setType("all")}
+            className={filterChip(type === "all")}
+            style={{
+              border: `1px solid ${type === "all" ? "var(--accent)" : "var(--border)"}`,
+              color: type === "all" ? "var(--accent)" : "var(--text)",
+            }}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setType("expense")}
+            className={filterChip(type === "expense")}
+            style={{
+              border: `1px solid ${type === "expense" ? "var(--accent)" : "var(--border)"}`,
+              color: type === "expense" ? "var(--accent)" : "var(--text)",
+            }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Lucide.ArrowUpRight className="h-4 w-4" />
+              Spent
+            </span>
+          </button>
+          <button
+            onClick={() => setType("income")}
+            className={filterChip(type === "income")}
+            style={{
+              border: `1px solid ${type === "income" ? "var(--accent)" : "var(--border)"}`,
+              color: type === "income" ? "var(--accent)" : "var(--text)",
+            }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Lucide.ArrowDownLeft className="h-4 w-4" />
+              Received
+            </span>
+          </button>
+
+          {/* Review filter */}
+          <button
+            onClick={toggleReview}
+            className={filterChip(reviewOnly)}
+            style={{
+              border: `1px solid ${reviewOnly ? "var(--warning)" : "var(--border)"}`,
+              color: reviewOnly ? "var(--warning)" : "var(--text)",
+              backgroundColor: reviewOnly ? "var(--warning-subtle)" : undefined,
+            }}
+          >
+            <span className="flex items-center gap-1.5">
+              <Lucide.AlertCircle className="h-4 w-4" />
+              Needs review
+              {reviewCount > 0 && (
+                <span
+                  className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                  style={{
+                    backgroundColor: "var(--warning)",
+                    color: "white",
+                  }}
+                >
+                  {reviewCount}
+                </span>
+              )}
+            </span>
+          </button>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Filters button */}
+          <button
+            onClick={() => setFiltersOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+            style={{ border: "1px solid var(--border)", color: "var(--text)" }}
+          >
+            <Lucide.SlidersHorizontal className="h-4 w-4" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span
+                className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Active filter pills */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => clearCategory(cat)}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
+                style={{ backgroundColor: "var(--accent-subtle)", color: "var(--accent)" }}
+              >
+                {cat}
+                <Lucide.X className="h-3 w-3" />
+              </button>
+            ))}
+            {selectedTags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => clearTag(tag)}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                {tag}
+                <Lucide.X className="h-3 w-3" />
+              </button>
+            ))}
+            <button
+              onClick={clearAllFilters}
+              className="text-xs font-medium underline"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Clear all
+            </button>
+          </div>
+        )}
 
         {/* Results */}
-        {pages.length === 0 ? (
+        {pages.length === 0 && !pageResult ? (
           <div
             className="rounded-xl p-8 text-center"
             style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
@@ -218,6 +416,158 @@ export default function HistoryPage() {
             onClose={() => setSelected(null)}
             onCreated={() => setSelected(null)}
           />
+        )}
+
+        {/* Filters Bottom Sheet */}
+        {filtersOpen && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setFiltersOpen(false)}
+            />
+            <div
+              className="relative w-full max-w-md animate-in slide-in-from-bottom-4 duration-200"
+            >
+              <div
+                className="rounded-t-2xl border-t border-x p-4 pb-8 max-h-[85vh] overflow-y-auto"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                {/* Handle */}
+                <div className="flex justify-center mb-3">
+                  <div className="h-1 w-10 rounded-full" style={{ backgroundColor: "var(--border)" }} />
+                </div>
+
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Filters</h2>
+                  <button
+                    onClick={() => setFiltersOpen(false)}
+                    className="rounded-full p-2 transition-colors hover:bg-[var(--surface-subtle)]"
+                  >
+                    <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+                  </button>
+                </div>
+
+                {/* Category filter */}
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Category</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {categoryOptions.map((cat) => {
+                      const isSelected = selectedCategories.includes(cat);
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedCategories((prev) => prev.filter((c) => c !== cat));
+                            } else {
+                              setSelectedCategories((prev) => [...prev, cat]);
+                            }
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                            isSelected
+                              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                              : "border hover:bg-[var(--surface-subtle)]"
+                          }`}
+                          style={{
+                            borderColor: isSelected ? undefined : "var(--border)",
+                            color: isSelected ? undefined : "var(--text)",
+                          }}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Context Tags filter */}
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Context Tags</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {CONTEXT_TAGS.map((tag) => {
+                      const isSelected = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedTags((prev) => prev.filter((t) => t !== tag));
+                            } else {
+                              setSelectedTags((prev) => [...prev, tag]);
+                            }
+                          }}
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                            isSelected
+                              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                              : "border hover:bg-[var(--surface-subtle)]"
+                          }`}
+                          style={{
+                            borderColor: isSelected ? undefined : "var(--border)",
+                            color: isSelected ? undefined : "var(--text)",
+                          }}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Sort */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Sort by</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: "newest", label: "Newest" },
+                      { key: "oldest", label: "Oldest" },
+                      { key: "highest", label: "Highest" },
+                      { key: "lowest", label: "Lowest" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() => setSortBy(opt.key as any)}
+                        className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                          sortBy === opt.key
+                            ? "bg-[var(--accent-subtle)] border-[var(--accent)]"
+                            : "hover:bg-[var(--surface-subtle)]"
+                        }`}
+                        style={{
+                          border: `1px solid ${sortBy === opt.key ? "var(--accent)" : "var(--border)"}`,
+                          color: sortBy === opt.key ? "var(--accent)" : "var(--text)",
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Apply button */}
+                <button
+                  onClick={() => setFiltersOpen(false)}
+                  className="w-full rounded-lg py-3 text-sm font-semibold"
+                  style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+                >
+                  Apply Filters
+                </button>
+
+                {/* Clear all */}
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={() => {
+                      clearAllFilters();
+                      setFiltersOpen(false);
+                    }}
+                    className="w-full text-center text-meta font-medium py-2 mt-2"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </SignedIn>
     </div>
