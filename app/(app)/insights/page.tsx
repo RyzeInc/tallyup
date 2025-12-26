@@ -13,6 +13,11 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
@@ -34,6 +39,9 @@ interface Entry {
   amountCents: number;
   date: number;
   excludeFromTotals?: boolean;
+  methodOrAccount?: string;
+  needsReview?: boolean;
+  recurringRuleId?: string;
 }
 
 interface InsightCard {
@@ -46,6 +54,41 @@ interface InsightCard {
   link: string;
 }
 
+interface AlertItem {
+  id: string;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  severity: "warning" | "info" | "danger";
+  title: string;
+  description: string;
+  link: string;
+}
+
+interface RecurringRule {
+  _id: string;
+  type: "expense" | "income";
+  displayName?: string;
+  category?: string;
+  bucket?: string;
+  amountCents?: number;
+  minAmountCents?: number;
+  maxAmountCents?: number;
+  cadenceType?: string;
+  active: boolean;
+  confidence: number;
+  lastMatchedAt?: number;
+}
+
+interface RecurringPatternDisplay {
+  id: string;
+  name: string;
+  type: "expense" | "income";
+  amount: string;
+  cadence: string;
+  matchCount: number;
+  sparklineData: number[];
+  lastSeen: string;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────
@@ -53,6 +96,13 @@ const MIN_DAYS_FOR_TRENDS = 7;
 const MIN_TRANSACTIONS_FOR_INSIGHT = 5;
 const INSIGHT_MIN_DELTA_CENTS = 5000; // $50
 const INSIGHT_MIN_PERCENT = 15;
+
+const CHART_COLORS = [
+  "#6366F1", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899", 
+  "#06B6D4", "#F97316", "#84CC16", "#EF4444", "#3B82F6"
+];
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // ─────────────────────────────────────────────────────────────
 // Helper functions
@@ -158,6 +208,7 @@ export default function InsightsPage() {
   // Data
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
   const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
+  const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
 
   // Days in range
   const daysInRange = useMemo(() => getDaysBetween(startDate, endDate), [startDate, endDate]);
@@ -200,8 +251,14 @@ export default function InsightsPage() {
     let expense = 0;
     const categorySpend = new Map<string, number>();
     const categoryCount = new Map<string, number>();
-    let largestExpense = { amount: 0, note: "", category: "" };
+    const tagSpend = new Map<string, number>();
+    const paymentMethodSpend = new Map<string, number>();
+    const dayOfWeekSpend = new Map<number, number>(); // 0-6
+    const dayOfMonthSpend = new Map<number, number>(); // 1-31
+    let largestExpense = { amount: 0, note: "", category: "", id: "" };
     let reimbursableOutstanding = 0;
+    let needsReviewCount = 0;
+    let recurringCount = 0;
 
     for (const e of all) {
       if (e.type === "income") {
@@ -213,18 +270,74 @@ export default function InsightsPage() {
         categoryCount.set(c, (categoryCount.get(c) ?? 0) + 1);
 
         if (e.amountCents > largestExpense.amount) {
-          largestExpense = { amount: e.amountCents, note: e.note ?? "", category: c };
+          largestExpense = { amount: e.amountCents, note: e.note ?? "", category: c, id: e._id };
+        }
+
+        // Tag breakdown
+        if (e.tags?.length) {
+          for (const tag of e.tags) {
+            tagSpend.set(tag, (tagSpend.get(tag) ?? 0) + e.amountCents);
+          }
+        } else {
+          tagSpend.set("Untagged", (tagSpend.get("Untagged") ?? 0) + e.amountCents);
         }
 
         // Reimbursable
         if (e.tags?.includes("Reimbursable")) {
           reimbursableOutstanding += e.amountCents;
         }
+
+        // Payment method
+        const method = (e.methodOrAccount ?? "Unknown").trim() || "Unknown";
+        paymentMethodSpend.set(method, (paymentMethodSpend.get(method) ?? 0) + e.amountCents);
+
+        // Day of week
+        const d = new Date(e.date);
+        const dow = d.getDay();
+        dayOfWeekSpend.set(dow, (dayOfWeekSpend.get(dow) ?? 0) + e.amountCents);
+
+        // Day of month
+        const dom = d.getDate();
+        dayOfMonthSpend.set(dom, (dayOfMonthSpend.get(dom) ?? 0) + e.amountCents);
       }
+
+      // Counts
+      if (e.needsReview) needsReviewCount++;
+      if (e.recurringRuleId) recurringCount++;
     }
 
     const net = income - expense;
     const topCategory = [...categorySpend.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["None", 0];
+
+    // Top categories for charts
+    const topCategories = [...categorySpend.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, amount], i) => ({ name, amount, color: CHART_COLORS[i % CHART_COLORS.length] }));
+
+    // Top tags for charts
+    const topTags = [...tagSpend.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, amount], i) => ({ name, amount, color: CHART_COLORS[i % CHART_COLORS.length] }));
+
+    // Payment methods for charts
+    const topPaymentMethods = [...paymentMethodSpend.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([name, amount], i) => ({ name, amount, color: CHART_COLORS[i % CHART_COLORS.length] }));
+
+    // Day of week data (sorted Sun-Sat)
+    const dayOfWeekData = DAY_NAMES.map((name, i) => ({
+      name,
+      amount: dayOfWeekSpend.get(i) ?? 0,
+    }));
+
+    // Day of month data
+    const dayOfMonthData = Array.from({ length: 31 }, (_, i) => ({
+      day: i + 1,
+      amount: dayOfMonthSpend.get(i + 1) ?? 0,
+    }));
 
     return {
       income,
@@ -235,6 +348,15 @@ export default function InsightsPage() {
       reimbursableOutstanding,
       categorySpend,
       categoryCount,
+      tagSpend,
+      paymentMethodSpend,
+      topCategories,
+      topTags,
+      topPaymentMethods,
+      dayOfWeekData,
+      dayOfMonthData,
+      needsReviewCount,
+      recurringCount,
       transactionCount: all.length,
     };
   }, [filteredEntries]);
@@ -413,6 +535,176 @@ export default function InsightsPage() {
     expense: formatDelta(computed.expense, prevComputed.expense),
     net: formatDelta(computed.net, prevComputed.net),
   }), [computed, prevComputed]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Alerts & Guardrails
+  // ─────────────────────────────────────────────────────────────
+  const alerts = useMemo(() => {
+    const items: AlertItem[] = [];
+
+    // 1. Needs review items
+    if (computed.needsReviewCount > 0) {
+      items.push({
+        id: "needs-review",
+        icon: Lucide.AlertCircle,
+        severity: "warning",
+        title: `${computed.needsReviewCount} item${computed.needsReviewCount > 1 ? "s" : ""} need review`,
+        description: "Uncategorized transactions awaiting classification",
+        link: "/inbox",
+      });
+    }
+
+    // 2. Large single expense (outlier detection)
+    if (computed.largestExpense.amount > 0) {
+      const avgExpense = computed.expense / Math.max(1, computed.transactionCount);
+      if (computed.largestExpense.amount > avgExpense * 5 && computed.largestExpense.amount >= 10000) {
+        items.push({
+          id: "large-expense",
+          icon: Lucide.AlertTriangle,
+          severity: "info",
+          title: `Large expense: ${centsToDollars(computed.largestExpense.amount)}`,
+          description: computed.largestExpense.category,
+          link: "/activity?type=expense",
+        });
+      }
+    }
+
+    // 3. No income in period
+    if (computed.income === 0 && computed.expense > 0 && daysInRange >= 7) {
+      items.push({
+        id: "no-income",
+        icon: Lucide.TrendingDown,
+        severity: "danger",
+        title: "No income recorded",
+        description: `No income logged in ${label}`,
+        link: "/log",
+      });
+    }
+
+    // 4. Spending spike vs previous period
+    if (prevComputed.expense > 0 && computed.expense > prevComputed.expense * 1.5) {
+      items.push({
+        id: "spending-spike",
+        icon: Lucide.Flame,
+        severity: "warning",
+        title: "Spending spike detected",
+        description: `+${((computed.expense / prevComputed.expense - 1) * 100).toFixed(0)}% vs ${prevLabel}`,
+        link: "/activity?type=expense",
+      });
+    }
+
+    return items.slice(0, 4);
+  }, [computed, prevComputed, daysInRange, label, prevLabel]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Recent Activity (last 10 transactions)
+  // ─────────────────────────────────────────────────────────────
+  const recentActivity = useMemo(() => {
+    if (!entries) return [];
+    return [...entries]
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 10);
+  }, [entries]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Category pie chart data
+  // ─────────────────────────────────────────────────────────────
+  const categoryPieData = useMemo(() => {
+    if (computed.topCategories.length === 0) return [];
+    const total = computed.topCategories.reduce((sum, c) => sum + c.amount, 0);
+    return computed.topCategories.map((c) => ({
+      ...c,
+      percent: total > 0 ? Math.round((c.amount / total) * 100) : 0,
+    }));
+  }, [computed.topCategories]);
+
+  // ─────────────────────────────────────────────────────────────
+  // Recurring Patterns for sparkline widget
+  // ─────────────────────────────────────────────────────────────
+  const recurringPatterns = useMemo((): RecurringPatternDisplay[] => {
+    if (!recurringRules || !entries) return [];
+
+    // Build entry lookup by recurringRuleId
+    const entriesByRule = new Map<string, Entry[]>();
+    for (const entry of entries) {
+      if (entry.recurringRuleId) {
+        const arr = entriesByRule.get(entry.recurringRuleId) || [];
+        arr.push(entry);
+        entriesByRule.set(entry.recurringRuleId, arr);
+      }
+    }
+
+    const patterns: RecurringPatternDisplay[] = [];
+
+    for (const rule of recurringRules) {
+      const linkedEntries = entriesByRule.get(rule._id) || [];
+      const matchCount = linkedEntries.length;
+
+      // Name: prefer displayName, fallback to category/bucket
+      const name = rule.displayName || rule.category || rule.bucket || "Unnamed Pattern";
+
+      // Amount: prefer amountCents, else derive from linked entries average
+      let amountStr = "—";
+      if (rule.amountCents) {
+        amountStr = centsToDollars(rule.amountCents);
+      } else if (linkedEntries.length > 0) {
+        const avgCents = Math.round(linkedEntries.reduce((s, e) => s + e.amountCents, 0) / linkedEntries.length);
+        amountStr = "~" + centsToDollars(avgCents);
+      }
+
+      // Cadence label
+      const cadenceMap: Record<string, string> = {
+        weekly: "Weekly",
+        biweekly: "Bi-weekly",
+        semiMonthly: "Semi-monthly",
+        monthly: "Monthly",
+        quarterly: "Quarterly",
+        yearly: "Yearly",
+        custom: "Custom",
+      };
+      const cadence = rule.cadenceType ? cadenceMap[rule.cadenceType] || rule.cadenceType : "—";
+
+      // Sparkline data: last 6 amounts from linked entries (sorted by date)
+      const sortedLinked = [...linkedEntries].sort((a, b) => a.date - b.date);
+      const last6 = sortedLinked.slice(-6);
+      const sparklineData = last6.map((e) => e.amountCents);
+      // Pad with zeros if fewer than 6
+      while (sparklineData.length < 6) sparklineData.unshift(0);
+
+      // Last seen (use endDate as reference point for stability)
+      let lastSeen = "Never";
+      if (linkedEntries.length > 0) {
+        const mostRecent = Math.max(...linkedEntries.map((e) => e.date));
+        const daysDiff = Math.round((endDate - mostRecent) / (24 * 60 * 60 * 1000));
+        if (daysDiff <= 0) lastSeen = "Today";
+        else if (daysDiff === 1) lastSeen = "Yesterday";
+        else if (daysDiff < 7) lastSeen = `${daysDiff}d ago`;
+        else if (daysDiff < 30) lastSeen = `${Math.round(daysDiff / 7)}w ago`;
+        else lastSeen = `${Math.round(daysDiff / 30)}mo ago`;
+      } else if (rule.lastMatchedAt) {
+        const daysDiff = Math.round((endDate - rule.lastMatchedAt) / (24 * 60 * 60 * 1000));
+        if (daysDiff <= 0) lastSeen = "Today";
+        else if (daysDiff === 1) lastSeen = "Yesterday";
+        else if (daysDiff < 7) lastSeen = `${daysDiff}d ago`;
+        else if (daysDiff < 30) lastSeen = `${Math.round(daysDiff / 7)}w ago`;
+        else lastSeen = `${Math.round(daysDiff / 30)}mo ago`;
+      }
+
+      patterns.push({
+        id: rule._id,
+        name,
+        type: rule.type,
+        amount: amountStr,
+        cadence,
+        matchCount,
+        sparklineData,
+        lastSeen,
+      });
+    }
+
+    // Sort by match count (more matches first), take top 5
+    return patterns.sort((a, b) => b.matchCount - a.matchCount).slice(0, 5);
+  }, [recurringRules, entries, endDate]);
 
   // ─────────────────────────────────────────────────────────────
   // Toggle tag selection
@@ -977,6 +1269,483 @@ export default function InsightsPage() {
                 </div>
                 <div className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
                   Need more data in the previous period to compare
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                D. Category Breakdown (Bar + Donut)
+            ───────────────────────────────────────────────────────────── */}
+            {computed.topCategories.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Category Ranking (Horizontal Bar) */}
+                <div
+                  className="rounded-xl border p-4"
+                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lucide.BarChart3 className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Top Categories
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {computed.topCategories.slice(0, 6).map((cat) => {
+                      const maxAmt = computed.topCategories[0]?.amount ?? 1;
+                      const pct = Math.round((cat.amount / maxAmt) * 100);
+                      return (
+                        <Link
+                          key={cat.name}
+                          href={`/activity?category=${encodeURIComponent(cat.name)}`}
+                          className="block group"
+                        >
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span style={{ color: "var(--text)" }}>{cat.name}</span>
+                            <span className="tabular-nums font-medium" style={{ color: "var(--text-secondary)" }}>
+                              {centsToDollars(cat.amount)}
+                            </span>
+                          </div>
+                          <div
+                            className="h-2 rounded-full overflow-hidden"
+                            style={{ backgroundColor: "var(--surface-subtle)" }}
+                          >
+                            <div
+                              className="h-full rounded-full transition-all group-hover:opacity-80"
+                              style={{ width: `${pct}%`, backgroundColor: cat.color }}
+                            />
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Category Share (Donut) */}
+                <div
+                  className="rounded-xl border p-4"
+                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lucide.PieChart className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Spend Share
+                    </span>
+                  </div>
+                  <div style={{ width: "100%", height: 180 }}>
+                    <ResponsiveContainer>
+                      <PieChart>
+                        <Pie
+                          data={categoryPieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={70}
+                          paddingAngle={2}
+                          dataKey="amount"
+                          nameKey="name"
+                        >
+                          {categoryPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          contentStyle={{
+                            backgroundColor: "var(--surface)",
+                            borderColor: "var(--border)",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                          formatter={(value: number, name: string) => [centsToDollars(value), name]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2 justify-center">
+                    {categoryPieData.slice(0, 4).map((cat) => (
+                      <div key={cat.name} className="flex items-center gap-1.5 text-[10px]">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
+                        <span style={{ color: "var(--text-secondary)" }}>{cat.name}</span>
+                        <span style={{ color: "var(--text-tertiary)" }}>{cat.percent}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                E. Tag Lens Summary (Stacked Bar)
+            ───────────────────────────────────────────────────────────── */}
+            {computed.topTags.length > 0 && (
+              <div
+                className="rounded-xl border p-4"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Lucide.Tags className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Spend by Tag
+                    </span>
+                  </div>
+                </div>
+
+                {/* Stacked horizontal bar */}
+                <div
+                  className="h-6 rounded-full overflow-hidden flex"
+                  style={{ backgroundColor: "var(--surface-subtle)" }}
+                >
+                  {computed.topTags.map((tag) => {
+                    const pct = computed.expense > 0 ? (tag.amount / computed.expense) * 100 : 0;
+                    if (pct < 2) return null;
+                    return (
+                      <div
+                        key={tag.name}
+                        title={`${tag.name}: ${centsToDollars(tag.amount)}`}
+                        style={{ width: `${pct}%`, backgroundColor: tag.color }}
+                        className="h-full transition-opacity hover:opacity-80"
+                      />
+                    );
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 mt-3">
+                  {computed.topTags.slice(0, 6).map((tag) => (
+                    <Link
+                      key={tag.name}
+                      href={`/activity?tag=${encodeURIComponent(tag.name)}`}
+                      className="flex items-center gap-1.5 text-xs hover:opacity-80"
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color }} />
+                      <span style={{ color: "var(--text)" }}>{tag.name}</span>
+                      <span className="tabular-nums" style={{ color: "var(--text-tertiary)" }}>
+                        {centsToDollars(tag.amount)}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                F. Payment Method Mix
+            ───────────────────────────────────────────────────────────── */}
+            {computed.topPaymentMethods.length > 1 && (
+              <div
+                className="rounded-xl border p-4"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <Lucide.CreditCard className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                  <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    Payment Methods
+                  </span>
+                </div>
+                <div style={{ width: "100%", height: 160 }}>
+                  <ResponsiveContainer>
+                    <BarChart
+                      data={computed.topPaymentMethods}
+                      layout="vertical"
+                      margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+                    >
+                      <XAxis type="number" hide />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        axisLine={false}
+                        tickLine={false}
+                        width={80}
+                        tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                      />
+                      <RechartsTooltip
+                        contentStyle={{
+                          backgroundColor: "var(--surface)",
+                          borderColor: "var(--border)",
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                        formatter={(value: number) => [centsToDollars(value), "Spent"]}
+                      />
+                      <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                        {computed.topPaymentMethods.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                G. Timing Patterns (Day of Week + Day of Month)
+            ───────────────────────────────────────────────────────────── */}
+            {computed.transactionCount >= 5 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Day of Week */}
+                <div
+                  className="rounded-xl border p-4"
+                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Day of Week
+                    </span>
+                  </div>
+                  <div style={{ width: "100%", height: 120 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={computed.dayOfWeekData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                        <XAxis
+                          dataKey="name"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "var(--text-tertiary)", fontSize: 10 }}
+                        />
+                        <YAxis hide />
+                        <RechartsTooltip
+                          contentStyle={{
+                            backgroundColor: "var(--surface)",
+                            borderColor: "var(--border)",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                          formatter={(value: number) => [centsToDollars(value), "Spent"]}
+                        />
+                        <Bar dataKey="amount" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Day of Month */}
+                <div
+                  className="rounded-xl border p-4"
+                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Lucide.CalendarDays className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Day of Month
+                    </span>
+                  </div>
+                  <div style={{ width: "100%", height: 120 }}>
+                    <ResponsiveContainer>
+                      <BarChart data={computed.dayOfMonthData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                        <XAxis
+                          dataKey="day"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "var(--text-tertiary)", fontSize: 8 }}
+                          interval={4}
+                        />
+                        <YAxis hide />
+                        <RechartsTooltip
+                          contentStyle={{
+                            backgroundColor: "var(--surface)",
+                            borderColor: "var(--border)",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                          formatter={(value: number) => [centsToDollars(value), "Spent"]}
+                          labelFormatter={(label: number) => `Day ${label}`}
+                        />
+                        <Bar dataKey="amount" fill="var(--chart-2)" radius={[2, 2, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                H. Alerts & Guardrails
+            ───────────────────────────────────────────────────────────── */}
+            {alerts.length > 0 && (
+              <div
+                className="rounded-xl border p-4"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Lucide.ShieldAlert className="h-4 w-4" style={{ color: "var(--warning)" }} />
+                  <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    Alerts & Guardrails
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {alerts.map((alert) => {
+                    const Icon = alert.icon;
+                    const severityColor =
+                      alert.severity === "danger" ? "var(--danger)" :
+                      alert.severity === "warning" ? "var(--warning)" : "var(--accent)";
+                    return (
+                      <Link
+                        key={alert.id}
+                        href={alert.link}
+                        className="flex items-start gap-3 p-2 rounded-lg transition-colors hover:bg-[var(--surface-subtle)]"
+                      >
+                        <Icon className="h-4 w-4 mt-0.5 flex-shrink-0" style={{ color: severityColor }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                            {alert.title}
+                          </div>
+                          <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                            {alert.description}
+                          </div>
+                        </div>
+                        <Lucide.ChevronRight className="h-4 w-4 flex-shrink-0 mt-0.5" style={{ color: "var(--text-tertiary)" }} />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                I. Recurring Patterns (sparkline widget)
+            ───────────────────────────────────────────────────────────── */}
+            {recurringPatterns.length > 0 && (
+              <div
+                className="rounded-xl border p-4"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Lucide.Repeat className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Recurring Patterns
+                    </span>
+                  </div>
+                  <Link
+                    href="/recurring"
+                    className="text-xs font-medium hover:underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    Manage all
+                  </Link>
+                </div>
+                <div className="space-y-3">
+                  {recurringPatterns.map((pattern) => (
+                    <div
+                      key={pattern.id}
+                      className="flex items-center gap-3 p-2 rounded-lg transition-colors hover:bg-[var(--surface-subtle)]"
+                    >
+                      {/* Icon */}
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{
+                          backgroundColor: pattern.type === "income" ? "var(--success-subtle)" : "var(--danger-subtle)",
+                        }}
+                      >
+                        {pattern.type === "income" ? (
+                          <Lucide.TrendingUp className="h-4 w-4" style={{ color: "var(--success)" }} />
+                        ) : (
+                          <Lucide.TrendingDown className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                        )}
+                      </div>
+
+                      {/* Name & cadence */}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>
+                          {pattern.name}
+                        </div>
+                        <div className="text-xs flex gap-2" style={{ color: "var(--text-secondary)" }}>
+                          <span>{pattern.cadence}</span>
+                          <span>·</span>
+                          <span>{pattern.matchCount} matches</span>
+                          <span>·</span>
+                          <span>{pattern.lastSeen}</span>
+                        </div>
+                      </div>
+
+                      {/* Sparkline (mini bar chart) */}
+                      <div className="w-16 h-6 flex-shrink-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={pattern.sparklineData.map((v, i) => ({ idx: i, val: v }))}
+                            margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+                          >
+                            <Bar
+                              dataKey="val"
+                              fill={pattern.type === "income" ? "var(--success)" : "var(--accent)"}
+                              radius={[1, 1, 0, 0]}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Amount */}
+                      <div
+                        className="text-sm font-semibold tabular-nums text-right flex-shrink-0 w-20"
+                        style={{ color: pattern.type === "income" ? "var(--success)" : "var(--text)" }}
+                      >
+                        {pattern.amount}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ─────────────────────────────────────────────────────────────
+                J. Recent Activity
+            ───────────────────────────────────────────────────────────── */}
+            {recentActivity.length > 0 && (
+              <div
+                className="rounded-xl border p-4"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Lucide.Clock className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                      Recent Activity
+                    </span>
+                  </div>
+                  <Link
+                    href="/activity"
+                    className="text-xs font-medium hover:underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    View all
+                  </Link>
+                </div>
+                <div className="space-y-1">
+                  {recentActivity.slice(0, 5).map((entry) => (
+                    <Link
+                      key={entry._id}
+                      href={`/activity`}
+                      className="flex items-center justify-between py-2 px-1 rounded-lg transition-colors hover:bg-[var(--surface-subtle)]"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                          style={{ backgroundColor: entry.type === "income" ? "var(--success-subtle)" : "var(--danger-subtle)" }}
+                        >
+                          {entry.type === "income" ? (
+                            <Lucide.ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
+                          ) : (
+                            <Lucide.ArrowUpRight className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm truncate" style={{ color: "var(--text)" }}>
+                            {entry.category || entry.note || "Uncategorized"}
+                          </div>
+                          <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                            {new Date(entry.date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          </div>
+                        </div>
+                      </div>
+                      <div
+                        className="text-sm font-medium tabular-nums"
+                        style={{ color: entry.type === "income" ? "var(--success)" : "var(--text)" }}
+                      >
+                        {entry.type === "income" ? "+" : ""}{centsToDollars(entry.amountCents)}
+                      </div>
+                    </Link>
+                  ))}
                 </div>
               </div>
             )}
