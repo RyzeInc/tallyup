@@ -93,11 +93,11 @@ export default function SummaryPage() {
   const reviewCount = inbox?.length ?? 0;
 
   function openLogSpent() {
-    quickLog.openModal();
+    quickLog.open();
   }
 
   function openLogReceived() {
-    quickLog.openModal();
+    quickLog.open();
   }
 
   return (

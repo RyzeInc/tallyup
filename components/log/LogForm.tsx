@@ -29,8 +29,11 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const deleteEntry = useMutation(api.entries.deleteEntry);
   const updateEntry = useMutation(api.entries.updateEntry);
 
-  // smart defaults: last entry (type, bucket, and tags)
+  // smart defaults: last entry (type, bucket, tags, and methodOrAccount)
   useEffect(() => {
+    // Always reset date to today when form mounts (fresh open)
+    setDate(todayYYYYMMDD());
+    
     try {
       const raw = localStorage.getItem("tallyup.lastEntry");
       if (raw) {
@@ -41,6 +44,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         if (parsed?.tags && Array.isArray(parsed.tags)) {
           setTags(parsed.tags.filter((t: string) => CONTEXT_TAGS.includes(t)));
         }
+        // restore last used method/account
+        if (parsed?.methodOrAccount) setMethodOrAccount(parsed.methodOrAccount);
       }
     } catch {}
   }, []);
@@ -66,7 +71,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       if (tags.length > 0) payload.tags = tags;
       const res = await addEntry(payload);
 
-      // persist smart defaults (include tags)
+      // persist smart defaults (include tags and methodOrAccount)
       try {
         localStorage.setItem(
           "tallyup.lastEntry",
@@ -74,6 +79,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             type,
             bucket,
             tags: tags.length ? tags : undefined,
+            methodOrAccount: methodOrAccount?.trim() || undefined,
           })
         );
       } catch {}

@@ -37,6 +37,7 @@ export default function HistoryPage() {
   });
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
+  const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
 
   // Get review count for badge
@@ -119,21 +120,45 @@ export default function HistoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageResult]);
 
-  // Sort entries
+  // Sort and filter entries
   const allEntries = useMemo(() => {
-    const entries = pages.flat();
+    let entries = pages.flat();
+    
+    // Apply amount range filter using absolute values (magnitude)
+    // This ensures filtering works correctly for both income and expenses
+    if (minAmount) {
+      const minCents = Math.round(parseFloat(minAmount) * 100);
+      entries = entries.filter((e) => Math.abs(e.amountCents) >= minCents);
+    }
+    if (maxAmount) {
+      const maxCents = Math.round(parseFloat(maxAmount) * 100);
+      entries = entries.filter((e) => Math.abs(e.amountCents) <= maxCents);
+    }
+    
+    // Apply method/account filter
+    if (selectedMethods.length > 0) {
+      entries = entries.filter((e) => {
+        const method = e.methodOrAccount ?? "";
+        return selectedMethods.some((m) => {
+          if (m === "__unspecified__") return !e.methodOrAccount || e.methodOrAccount.trim() === "";
+          return method.toLowerCase() === m.toLowerCase();
+        });
+      });
+    }
+    
+    // Sort
     switch (sortBy) {
       case "oldest":
         return [...entries].sort((a, b) => a.date - b.date);
       case "highest":
-        return [...entries].sort((a, b) => b.amountCents - a.amountCents);
+        return [...entries].sort((a, b) => Math.abs(b.amountCents) - Math.abs(a.amountCents));
       case "lowest":
-        return [...entries].sort((a, b) => a.amountCents - b.amountCents);
+        return [...entries].sort((a, b) => Math.abs(a.amountCents) - Math.abs(b.amountCents));
       case "newest":
       default:
         return [...entries].sort((a, b) => b.date - a.date);
     }
-  }, [pages, sortBy]);
+  }, [pages, sortBy, minAmount, maxAmount, selectedMethods]);
 
   const [selected, setSelected] = useState<any | null>(null);
 
@@ -143,7 +168,7 @@ export default function HistoryPage() {
   }
 
   // Count active filters
-  const activeFilterCount = selectedCategories.length + selectedTags.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
+  const activeFilterCount = selectedCategories.length + selectedTags.length + selectedMethods.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
 
   // Clear a specific filter
   function clearCategory(cat: string) {
@@ -152,9 +177,13 @@ export default function HistoryPage() {
   function clearTag(tag: string) {
     setSelectedTags((prev) => prev.filter((t) => t !== tag));
   }
+  function clearMethod(m: string) {
+    setSelectedMethods((prev) => prev.filter((x) => x !== m));
+  }
   function clearAllFilters() {
     setSelectedCategories([]);
     setSelectedTags([]);
+    setSelectedMethods([]);
     setMinAmount("");
     setMaxAmount("");
   }
@@ -177,6 +206,28 @@ export default function HistoryPage() {
     return [...INCOME_SPACES, ...EXPENSE_SPACES];
   }, [type]);
 
+  // Data-driven method/account options from user's entries
+  const methodOptions = useMemo(() => {
+    const allPages = pages.flat();
+    const methodSet = new Set<string>();
+    let hasUnspecified = false;
+    
+    for (const e of allPages) {
+      if (e.methodOrAccount && e.methodOrAccount.trim()) {
+        methodSet.add(e.methodOrAccount.trim());
+      } else {
+        hasUnspecified = true;
+      }
+    }
+    
+    // Sort alphabetically and prepend Unspecified if any entries lack method
+    const sorted = [...methodSet].sort((a, b) => a.localeCompare(b));
+    if (hasUnspecified) {
+      sorted.unshift("__unspecified__");
+    }
+    return sorted;
+  }, [pages]);
+
   const filterChip = (active: boolean) =>
     `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
       active
@@ -192,7 +243,10 @@ export default function HistoryPage() {
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
         <div className="flex items-center justify-between">
-          <h1 className="text-h1" style={{ color: "var(--text)" }}>Activity</h1>
+          <div>
+            <h1 className="text-h1" style={{ color: "var(--text)" }}>Activity</h1>
+            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>All transactions</p>
+          </div>
           <GlobalDateRangePicker showAllPresets />
         </div>
       </div>
@@ -356,6 +410,25 @@ export default function HistoryPage() {
                 <Lucide.X className="h-3 w-3" />
               </button>
             ))}
+            {selectedMethods.map((m) => (
+              <button
+                key={m}
+                onClick={() => clearMethod(m)}
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                {m === "__unspecified__" ? "Unspecified" : m}
+                <Lucide.X className="h-3 w-3" />
+              </button>
+            ))}
+            {(minAmount || maxAmount) && (
+              <span
+                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                {minAmount && maxAmount ? `$${minAmount} – $${maxAmount}` : minAmount ? `≥ $${minAmount}` : `≤ $${maxAmount}`}
+              </span>
+            )}
             <button
               onClick={clearAllFilters}
               className="text-xs font-medium underline"
@@ -512,6 +585,83 @@ export default function HistoryPage() {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* Amount Range filter */}
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Amount Range</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>Min</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-tertiary)" }}>$</span>
+                        <input
+                          type="number"
+                          value={minAmount}
+                          onChange={(e) => setMinAmount(e.target.value)}
+                          placeholder="0"
+                          className="w-full rounded-lg border pl-7 pr-3 py-2 text-sm"
+                          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>Max</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-tertiary)" }}>$</span>
+                        <input
+                          type="number"
+                          value={maxAmount}
+                          onChange={(e) => setMaxAmount(e.target.value)}
+                          placeholder="Any"
+                          className="w-full rounded-lg border pl-7 pr-3 py-2 text-sm"
+                          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Method/Account filter - data-driven from user's entries */}
+                <div className="mb-4">
+                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Method / Account</h3>
+                  {methodOptions.length === 0 ? (
+                    <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                      No methods found in your entries
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {methodOptions.map((method) => {
+                        const isUnspecified = method === "__unspecified__";
+                        const label = isUnspecified ? "Unspecified" : method;
+                        const isSelected = selectedMethods.includes(method);
+                        return (
+                          <button
+                            key={method}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedMethods((prev) => prev.filter((m) => m !== method));
+                              } else {
+                                setSelectedMethods((prev) => [...prev, method]);
+                              }
+                            }}
+                            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                              isSelected
+                                ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                                : "border hover:bg-[var(--surface-subtle)]"
+                            }`}
+                            style={{
+                              borderColor: isSelected ? undefined : "var(--border)",
+                              color: isSelected ? undefined : "var(--text)",
+                              fontStyle: isUnspecified ? "italic" : undefined,
+                            }}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Sort */}

@@ -29,7 +29,7 @@ export const EXPENSE_SPACES = [
   "Miscellaneous",
 ] as const;
 
-// Context tags - composable, not mutually exclusive
+// Context tags - life/work/tax context (who/what flow)
 export const CONTEXT_TAGS = [
   "Personal",
   "Shared",
@@ -40,6 +40,16 @@ export const CONTEXT_TAGS = [
   "Client",
   "Reimbursable",
   "Tax-Deductible",
+] as const;
+
+// Intent tags - planning/volatility context (why/how)
+export const INTENT_TAGS = [
+  "Essential",
+  "Discretionary",
+  "Planned",
+  "Unexpected",
+  "One-time",
+  "Recurring",
 ] as const;
 
 export function dollarsToCents(input: string): number | null {

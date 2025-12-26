@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useCallback } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
-import { centsToDollars } from "@/components/utils";
+import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES } from "@/components/utils";
 import Link from "next/link";
+
+// Swipe threshold in px
+const SWIPE_THRESHOLD = 80;
 
 export default function ActivityTable({
   entries = [],
@@ -24,6 +27,13 @@ export default function ActivityTable({
   const bulkMarkReviewed = useMutation(api.entries.bulkMarkReviewed);
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
+
+  // Bulk action sheet state
+  const [bulkAction, setBulkAction] = useState<"none" | "tag" | "category">("none");
+
+  // Swipe state per row
+  const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({});
+  const touchStart = useRef<Record<string, { x: number; y: number }>>({});
 
   function toggle(id: Id<"entries">) {
     setSelected((s) => ({ ...s, [id]: !s[id] }));
@@ -64,53 +74,206 @@ export default function ActivityTable({
     }
   }
 
+  async function handleBulkAddTag(tag: string) {
+    try {
+      for (const id of selectedIds) {
+        const entry = entries.find((e) => e._id === id);
+        if (!entry) continue;
+        const currentTags = entry.tags ?? [];
+        if (!currentTags.includes(tag)) {
+          await updateEntry({ id: id as any, tags: [...currentTags, tag] });
+        }
+      }
+      clearSelection();
+      setBulkAction("none");
+      onBulkComplete?.();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to add tag.");
+    }
+  }
+
+  async function handleBulkChangeCategory(category: string) {
+    try {
+      for (const id of selectedIds) {
+        await updateEntry({ id: id as any, category });
+      }
+      clearSelection();
+      setBulkAction("none");
+      onBulkComplete?.();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to change category.");
+    }
+  }
+
+  // Swipe handlers
+  const handleTouchStart = useCallback((id: string, e: React.TouchEvent) => {
+    touchStart.current[id] = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, []);
+
+  const handleTouchMove = useCallback((id: string, e: React.TouchEvent) => {
+    const start = touchStart.current[id];
+    if (!start) return;
+    const deltaX = e.touches[0].clientX - start.x;
+    const deltaY = e.touches[0].clientY - start.y;
+    // Only horizontal swipes
+    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+    setSwipeOffset((o) => ({ ...o, [id]: Math.max(-SWIPE_THRESHOLD, Math.min(SWIPE_THRESHOLD, deltaX)) }));
+  }, []);
+
+  const handleTouchEnd = useCallback(async (id: string, entry: any) => {
+    const offset = swipeOffset[id] ?? 0;
+    if (offset >= SWIPE_THRESHOLD) {
+      // Swipe right = mark reviewed
+      try {
+        await updateEntry({ id: id as any, needsReview: false });
+        onBulkComplete?.();
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (offset <= -SWIPE_THRESHOLD) {
+      // Swipe left = edit (navigate)
+      window.location.href = `/activity?edit=${id}`;
+    }
+    setSwipeOffset((o) => ({ ...o, [id]: 0 }));
+    delete touchStart.current[id];
+  }, [swipeOffset, updateEntry, onBulkComplete]);
+
+  // Get category options based on selected entries
+  const categoryOptions = useMemo(() => {
+    const hasExpense = selectedIds.some((id) => entries.find((e) => e._id === id)?.type === "expense");
+    const hasIncome = selectedIds.some((id) => entries.find((e) => e._id === id)?.type === "income");
+    if (hasExpense && hasIncome) return [...EXPENSE_SPACES, ...INCOME_SPACES];
+    if (hasIncome) return [...INCOME_SPACES];
+    return [...EXPENSE_SPACES];
+  }, [selectedIds, entries]);
+
   return (
     <div className="space-y-3">
       {/* Bulk Actions Bar */}
       {selectedIds.length > 0 && (
         <div
-          className="sticky top-0 z-10 flex items-center gap-3 rounded-xl px-4 py-3"
+          className="sticky top-0 z-10 rounded-xl px-4 py-3"
           style={{ backgroundColor: "var(--accent-subtle)", border: "1px solid var(--accent)" }}
         >
-          <span className="text-body font-semibold" style={{ color: "var(--accent)" }}>
-            {selectedIds.length} selected
-          </span>
-          <div className="ml-auto flex gap-2">
-            <button
-              onClick={selectAll}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
-              style={{ border: "1px solid var(--border)", color: "var(--text)" }}
-            >
-              Select all
-            </button>
-            <button
-              onClick={clearSelection}
-              className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
-              style={{ border: "1px solid var(--border)", color: "var(--text)" }}
-            >
-              Clear
-            </button>
-            <button
-              onClick={handleBulkMarkReviewed}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-              style={{ backgroundColor: "var(--success)", color: "white" }}
-            >
-              <span className="flex items-center gap-1">
-                <Lucide.Check className="h-3 w-3" />
-                Mark reviewed
-              </span>
-            </button>
-            <button
-              onClick={handleBulkDelete}
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-              style={{ backgroundColor: "var(--danger)", color: "white" }}
-            >
-              <span className="flex items-center gap-1">
-                <Lucide.Trash2 className="h-3 w-3" />
-                Delete
-              </span>
-            </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-body font-semibold" style={{ color: "var(--accent)" }}>
+              {selectedIds.length} selected
+            </span>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <button
+                onClick={selectAll}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+                style={{ border: "1px solid var(--border)", color: "var(--text)", backgroundColor: "var(--surface)" }}
+              >
+                Select all
+              </button>
+              <button
+                onClick={clearSelection}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+                style={{ border: "1px solid var(--border)", color: "var(--text)", backgroundColor: "var(--surface)" }}
+              >
+                Clear
+              </button>
+              <button
+                onClick={handleBulkMarkReviewed}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{ backgroundColor: "var(--success)", color: "white" }}
+              >
+                <span className="flex items-center gap-1">
+                  <Lucide.Check className="h-3 w-3" />
+                  Mark reviewed
+                </span>
+              </button>
+              <button
+                onClick={() => setBulkAction("tag")}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                <span className="flex items-center gap-1">
+                  <Lucide.Tag className="h-3 w-3" />
+                  Add tag
+                </span>
+              </button>
+              <button
+                onClick={() => setBulkAction("category")}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+              >
+                <span className="flex items-center gap-1">
+                  <Lucide.Folder className="h-3 w-3" />
+                  Category
+                </span>
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                style={{ backgroundColor: "var(--danger)", color: "white" }}
+              >
+                <span className="flex items-center gap-1">
+                  <Lucide.Trash2 className="h-3 w-3" />
+                  Delete
+                </span>
+              </button>
+            </div>
           </div>
+
+          {/* Tag selection panel */}
+          {bulkAction === "tag" && (
+            <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+              <div className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                Select tag to add:
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {CONTEXT_TAGS.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => handleBulkAddTag(tag)}
+                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+                    style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
+                  >
+                    {tag}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setBulkAction("none")}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Category selection panel */}
+          {bulkAction === "category" && (
+            <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+              <div className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
+                Select category:
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {categoryOptions.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => handleBulkChangeCategory(cat)}
+                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
+                    style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setBulkAction("none")}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -127,23 +290,58 @@ export default function ActivityTable({
           // Build secondary line: Category · Tags (as short chips)
           const categoryLabel = r.category || r.bucket || "Uncategorized";
           const tagLabels = r.tags?.slice(0, 2) || [];
+          const offset = swipeOffset[r._id] ?? 0;
           
           return (
             <div
               key={r._id}
-              className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-subtle)] ${
-                i > 0 ? "border-t" : ""
-              }`}
+              className={`relative overflow-hidden ${i > 0 ? "border-t" : ""}`}
               style={{ borderColor: "var(--border)" }}
             >
-              {/* Checkbox */}
-              <input
-                type="checkbox"
-                checked={!!selected[r._id]}
-                onChange={() => toggle(r._id)}
-                className="h-4 w-4 rounded shrink-0"
-                style={{ accentColor: "var(--accent)" }}
-              />
+              {/* Swipe background indicators */}
+              <div className="absolute inset-0 flex">
+                {/* Right swipe = mark reviewed (green) */}
+                <div
+                  className="flex items-center justify-start pl-4 w-1/2"
+                  style={{ backgroundColor: offset > 20 ? "var(--success)" : "transparent" }}
+                >
+                  {offset > 20 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-white">
+                      <Lucide.Check className="h-4 w-4" />
+                      Mark reviewed
+                    </span>
+                  )}
+                </div>
+                {/* Left swipe = edit (blue) */}
+                <div
+                  className="flex items-center justify-end pr-4 w-1/2"
+                  style={{ backgroundColor: offset < -20 ? "var(--accent)" : "transparent" }}
+                >
+                  {offset < -20 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-white">
+                      Edit
+                      <Lucide.Pencil className="h-4 w-4" />
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Main row content */}
+              <div
+                className="relative flex items-center gap-3 px-4 py-3 transition-transform bg-[var(--surface)]"
+                style={{ transform: `translateX(${offset}px)` }}
+                onTouchStart={(e) => handleTouchStart(r._id, e)}
+                onTouchMove={(e) => handleTouchMove(r._id, e)}
+                onTouchEnd={() => handleTouchEnd(r._id, r)}
+              >
+                {/* Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={!!selected[r._id]}
+                  onChange={() => toggle(r._id)}
+                  className="h-4 w-4 rounded shrink-0"
+                  style={{ accentColor: "var(--accent)" }}
+                />
 
               {/* Icon */}
               <div
@@ -231,6 +429,7 @@ export default function ActivityTable({
                 >
                   <Lucide.Bookmark className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                 </button>
+              </div>
               </div>
             </div>
           );

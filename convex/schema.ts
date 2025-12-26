@@ -7,13 +7,15 @@ export default defineSchema({
 
     type: v.union(v.literal("expense"), v.literal("income")),
 
-    // Primary field: Space (expense) or Source (income) in UI
+    // Primary field: Category (expense) or Source (income) in UI
     category: v.optional(v.string()),
     // Legacy field: will be migrated to category
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
 
     note: v.optional(v.string()),
+    // Optional explicit merchant/payee for cleaner analytics
+    merchant: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
 
     // Money is stored as *integer cents* (validated in mutations).

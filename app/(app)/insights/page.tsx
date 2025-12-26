@@ -33,6 +33,7 @@ export default function InsightsPage() {
     const categoryIncome = new Map<string, number>();
     const contextSpend = new Map<string, number>();
     const daySpend = new Map<string, number>();
+    const merchantSpend = new Map<string, number>();
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
@@ -54,6 +55,34 @@ export default function InsightsPage() {
           contextSpend.set("Untagged", (contextSpend.get("Untagged") ?? 0) + e.amountCents);
         }
 
+        // Merchants/places - use explicit merchant field if available, otherwise parse from note with guardrails
+        let merchantName: string | null = null;
+        
+        if (e.merchant?.trim()) {
+          // Explicit merchant field takes priority
+          merchantName = e.merchant.trim();
+        } else if (e.note?.trim()) {
+          // Heuristic: extract first segment before comma/newline
+          const firstPart = e.note.trim().split(/[,\n]/)[0].trim();
+          
+          // Guardrails: skip if it looks like junk
+          const isValidMerchant =
+            firstPart.length >= 2 &&
+            firstPart.length <= 50 &&
+            !/^\d+$/.test(firstPart) && // not just numbers
+            !/^[\u{1F300}-\u{1F9FF}]$/u.test(firstPart) && // not just emoji
+            !/^(for|the|a|an|to|from|at|in|on)$/i.test(firstPart) && // not prepositions
+            !/^(rent|groceries|gas|food|coffee|lunch|dinner|breakfast|bill|payment|transfer)$/i.test(firstPart); // generic terms become category, not merchant
+          
+          if (isValidMerchant) {
+            merchantName = firstPart;
+          }
+        }
+        
+        if (merchantName) {
+          merchantSpend.set(merchantName, (merchantSpend.get(merchantName) ?? 0) + e.amountCents);
+        }
+
         // Group by day
         const day = new Date(e.date).toLocaleDateString("en-US", { weekday: "short" });
         daySpend.set(day, (daySpend.get(day) ?? 0) + e.amountCents);
@@ -65,8 +94,9 @@ export default function InsightsPage() {
     const topExpenseCats = [...categorySpend.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
     const topIncomeCats = [...categoryIncome.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
     const topContexts = [...contextSpend.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const topMerchants = [...merchantSpend.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-    return { income, expense, net, topExpenseCats, topIncomeCats, topContexts, categorySpend, categoryIncome };
+    return { income, expense, net, topExpenseCats, topIncomeCats, topContexts, topMerchants, categorySpend, categoryIncome };
   }, [entries]);
 
   // Previous period for comparisons
@@ -172,10 +202,11 @@ export default function InsightsPage() {
               ))}
             </div>
 
-            {/* Summary cards with deltas */}
+            {/* Summary cards with deltas - clickable */}
             <div className="grid grid-cols-3 gap-3">
-              <div
-                className={`rounded-xl border p-3 transition-colors ${viewMode === "received" ? "ring-2 ring-[var(--accent)]" : ""}`}
+              <Link
+                href="/activity?type=income"
+                className={`rounded-xl border p-3 transition-colors hover:opacity-90 ${viewMode === "received" ? "ring-2 ring-[var(--accent)]" : ""}`}
                 style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
               >
                 <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
@@ -193,9 +224,10 @@ export default function InsightsPage() {
                     {deltas.income >= 0 ? "+" : ""}{centsToDollars(deltas.income)}
                   </div>
                 )}
-              </div>
-              <div
-                className={`rounded-xl border p-3 transition-colors ${viewMode === "spent" ? "ring-2 ring-[var(--accent)]" : ""}`}
+              </Link>
+              <Link
+                href="/activity?type=expense"
+                className={`rounded-xl border p-3 transition-colors hover:opacity-90 ${viewMode === "spent" ? "ring-2 ring-[var(--accent)]" : ""}`}
                 style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
               >
                 <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
@@ -213,9 +245,10 @@ export default function InsightsPage() {
                     {deltas.expense >= 0 ? "+" : ""}{centsToDollars(deltas.expense)}
                   </div>
                 )}
-              </div>
-              <div
-                className={`rounded-xl border p-3 transition-colors ${viewMode === "net" ? "ring-2 ring-[var(--accent)]" : ""}`}
+              </Link>
+              <Link
+                href="/activity"
+                className={`rounded-xl border p-3 transition-colors hover:opacity-90 ${viewMode === "net" ? "ring-2 ring-[var(--accent)]" : ""}`}
                 style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
               >
                 <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
@@ -233,7 +266,7 @@ export default function InsightsPage() {
                     {deltas.net >= 0 ? "+" : ""}{centsToDollars(deltas.net)}
                   </div>
                 )}
-              </div>
+              </Link>
             </div>
 
             {/* Breakdown Card */}
@@ -370,6 +403,43 @@ export default function InsightsPage() {
                 </div>
               )}
             </div>
+
+            {/* Top Merchants (always useful) */}
+            {viewMode === "spent" && computed.topMerchants.length > 0 && (
+              <div
+                className="rounded-xl border p-4"
+                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+              >
+                <div className="flex items-center gap-2 mb-4">
+                  <Lucide.Store className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                  <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                    Top Merchants
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {computed.topMerchants.map(([merchant, amount], idx) => (
+                    <Link
+                      key={merchant}
+                      href={`/activity?search=${encodeURIComponent(merchant)}`}
+                      className="flex items-center justify-between text-sm py-1.5 transition-opacity hover:opacity-80"
+                    >
+                      <div className="flex items-center gap-2" style={{ color: "var(--text)" }}>
+                        <span className="w-5 text-right" style={{ color: "var(--text-tertiary)" }}>
+                          {idx + 1}.
+                        </span>
+                        <span className="truncate max-w-[180px]">{merchant}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="tabular-nums font-medium" style={{ color: "var(--text)" }}>
+                          {centsToDollars(amount)}
+                        </span>
+                        <Lucide.ChevronRight className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
       </SignedIn>

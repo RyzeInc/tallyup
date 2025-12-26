@@ -215,7 +215,7 @@ export default function LogPage() {
           />
         </div>
 
-        {/* Date + Space Row */}
+        {/* Date + Category Row */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.date && !date ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
             <label className="text-micro mb-2 block">Date</label>
@@ -234,7 +234,7 @@ export default function LogPage() {
           </div>
 
           <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.bucket && !effectiveBucket ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
-            <label className="text-micro mb-2 block">{type === "income" ? "Source" : "Space"}</label>
+            <label className="text-micro mb-2 block">{type === "income" ? "Source" : "Category"}</label>
               <Combobox
                 value={bucket}
                 onChange={(v) => setBucket(v)}
@@ -255,7 +255,7 @@ export default function LogPage() {
             className="rounded-xl p-4"
             style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
           >
-            <label className="text-micro mb-2 block">Custom space</label>
+            <label className="text-micro mb-2 block">Custom category</label>
             <input
               value={customBucket}
               onChange={(e) => setCustomBucket(e.target.value)}
