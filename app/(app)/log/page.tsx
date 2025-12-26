@@ -33,7 +33,16 @@ export default function LogPage() {
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [touched, setTouched] = useState({ amount: false, date: false, bucket: false, tags: false });
+  const [touched, setTouched] = useState({ amount: false, date: false, bucket: false });
+
+  // Collapsible optional sections - initialize based on existing data
+  const [showTags, setShowTags] = useState(false);
+  const [showPayMode, setShowPayMode] = useState(false);
+  const [showNote, setShowNote] = useState(false);
+
+  // Refs for focus management
+  const payModeInputRef = useRef<HTMLInputElement>(null);
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [status, setStatus] = useState<
     { kind: "idle" } |
@@ -73,10 +82,10 @@ export default function LogPage() {
 
     const ts = yyyymmddToLocalMidnightTs(date);
 
-    // mark touched for UI
-    setTouched({ amount: true, date: true, bucket: true, tags: true });
+    // mark touched for UI (tags no longer required)
+    setTouched({ amount: true, date: true, bucket: true });
 
-    if (!effectiveBucket || tags.length === 0) return setStatus({ kind: "err", msg: "Please fill required fields." });
+    if (!effectiveBucket) return setStatus({ kind: "err", msg: "Please fill required fields." });
 
     try {
       const res = await addEntry({
@@ -267,73 +276,267 @@ export default function LogPage() {
           </div>
         )}
 
-        {/* Context Tags */}
+        {/* Optional Fields - Action Chips Row */}
         <div
           className="rounded-xl p-4"
-          style={{ backgroundColor: "var(--surface)", border: touched.tags && tags.length === 0 ? "1px solid var(--danger)" : "1px solid var(--border)" }}
-        >
-          <label className="text-micro mb-3 block">Context tags</label>
-          <div className="flex flex-wrap gap-2">
-            {CONTEXT_TAGS.map((tag) => {
-              const isSelected = tags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => {
-                    setTags((prev) =>
-                      isSelected ? prev.filter((t) => t !== tag) : [...prev, tag]
-                    );
-                  }}
-                  className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
-                  style={{
-                    backgroundColor: isSelected ? "var(--accent)" : "transparent",
-                    color: isSelected ? "var(--accent-foreground)" : "var(--text-secondary)",
-                    border: isSelected ? "none" : "1px solid var(--border)",
-                  }}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Optional Fields */}
-        <div
-          className="rounded-xl p-4 space-y-4"
           style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         >
-          <div>
-            <label className="text-micro mb-2 block">{type === "expense" ? "Payment method" : "Account"}</label>
-            <input
-              value={methodOrAccount}
-              onChange={(e) => setMethodOrAccount(e.target.value)}
-              placeholder={type === "expense" ? "e.g., Debit, Discover" : "e.g., Checking, Cash"}
-              className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
-              style={{
-                backgroundColor: "var(--surface-subtle)",
-                color: "var(--text)",
-                border: "none",
+          <div className="flex items-center gap-3 flex-nowrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            {/* Context Tag Chip */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowTags(!showTags);
               }}
-            />
+              aria-expanded={showTags}
+              aria-controls="context-tags-section"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl text-body font-medium transition-colors"
+              style={{
+                minHeight: 44,
+                paddingLeft: 16,
+                paddingRight: 16,
+                whiteSpace: "nowrap",
+                flex: "1 1 0%",
+                minWidth: 0,
+                textAlign: "center",
+                backgroundColor: showTags || tags.length > 0 ? "var(--accent-subtle)" : "transparent",
+                color: showTags || tags.length > 0 ? "var(--accent)" : "var(--text)",
+                border: showTags || tags.length > 0 ? "1px solid var(--accent)" : "1px solid var(--border)",
+              }}
+            >
+              {showTags ? (
+                <>Tags{tags.length > 0 && ` (${tags.length})`}</>
+              ) : tags.length > 0 ? (
+                <>Tags ({tags.length})</>
+              ) : (
+                <>
+                  <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 500 }}>+</span>
+                  Add Tag
+                </>
+              )}
+            </button>
+
+            {/* Pay Mode Chip */}
+            <button
+              type="button"
+              onClick={() => {
+                const willShow = !showPayMode;
+                setShowPayMode(willShow);
+                if (willShow) {
+                  setTimeout(() => payModeInputRef.current?.focus(), 50);
+                }
+              }}
+              aria-expanded={showPayMode}
+              aria-controls="pay-mode-section"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl text-body font-medium transition-colors"
+              style={{
+                minHeight: 44,
+                paddingLeft: 16,
+                paddingRight: 16,
+                whiteSpace: "nowrap",
+                flex: "1 1 0%",
+                minWidth: 0,
+                textAlign: "center",
+                backgroundColor: showPayMode || methodOrAccount.trim() ? "var(--accent-subtle)" : "transparent",
+                color: showPayMode || methodOrAccount.trim() ? "var(--accent)" : "var(--text)",
+                border: showPayMode || methodOrAccount.trim() ? "1px solid var(--accent)" : "1px solid var(--border)",
+              }}
+            >
+              {showPayMode ? (
+                <>{type === "expense" ? "Method" : "Account"}{methodOrAccount.trim() && `: ${methodOrAccount.trim()}`}</>
+              ) : methodOrAccount.trim() ? (
+                <>{type === "expense" ? "Method" : "Account"}: {methodOrAccount.trim()}</>
+              ) : (
+                <>
+                  <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 500 }}>+</span>
+                  Add {type === "expense" ? "Method" : "Account"}
+                </>
+              )}
+            </button>
+
+            {/* Note Chip */}
+            <button
+              type="button"
+              onClick={() => {
+                const willShow = !showNote;
+                setShowNote(willShow);
+                if (willShow) {
+                  setTimeout(() => noteInputRef.current?.focus(), 50);
+                }
+              }}
+              aria-expanded={showNote}
+              aria-controls="note-section"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl text-body font-medium transition-colors"
+              style={{
+                minHeight: 44,
+                paddingLeft: 16,
+                paddingRight: 16,
+                whiteSpace: "nowrap",
+                flex: "1 1 0%",
+                minWidth: 0,
+                textAlign: "center",
+                backgroundColor: showNote || note.trim() ? "var(--accent-subtle)" : "transparent",
+                color: showNote || note.trim() ? "var(--accent)" : "var(--text)",
+                border: showNote || note.trim() ? "1px solid var(--accent)" : "1px solid var(--border)",
+              }}
+            >
+              {showNote ? (
+                <>Note{note.trim() && " ✓"}</>
+              ) : note.trim() ? (
+                <>Note ✓</>
+              ) : (
+                <>
+                  <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 500 }}>+</span>
+                  Add Note
+                </>
+              )}
+            </button>
           </div>
 
-          <div>
-            <label className="text-micro mb-2 block">Note</label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              rows={2}
-              placeholder="Quick context..."
-              className="w-full resize-none rounded-lg px-3 py-2.5 text-body outline-none"
-              style={{
-                backgroundColor: "var(--surface-subtle)",
-                color: "var(--text)",
-                border: "none",
-              }}
-            />
-          </div>
+          {/* Context Tags Section (Expandable) */}
+          {showTags && (
+            <div id="context-tags-section" className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-micro">Context Tags</label>
+                <div className="flex gap-2">
+                  {tags.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTags([]);
+                        setShowTags(false);
+                      }}
+                      className="text-xs font-medium px-2 py-1 rounded"
+                      style={{ color: "var(--danger)" }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowTags(false)}
+                    className="text-xs font-medium px-2 py-1 rounded"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {CONTEXT_TAGS.map((tag) => {
+                  const isSelected = tags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        setTags((prev) =>
+                          isSelected ? prev.filter((t) => t !== tag) : [...prev, tag]
+                        );
+                      }}
+                      className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                      style={{
+                        backgroundColor: isSelected ? "var(--accent)" : "transparent",
+                        color: isSelected ? "var(--accent-foreground)" : "var(--text-secondary)",
+                        border: isSelected ? "none" : "1px solid var(--border)",
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Pay Mode Section (Expandable) */}
+          {showPayMode && (
+            <div id="pay-mode-section" className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-micro">{type === "expense" ? "Method" : "Account"}</label>
+                <div className="flex gap-2">
+                  {methodOrAccount.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMethodOrAccount("");
+                        setShowPayMode(false);
+                      }}
+                      className="text-xs font-medium px-2 py-1 rounded"
+                      style={{ color: "var(--danger)" }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowPayMode(false)}
+                    className="text-xs font-medium px-2 py-1 rounded"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+              <input
+                ref={payModeInputRef}
+                value={methodOrAccount}
+                onChange={(e) => setMethodOrAccount(e.target.value)}
+                placeholder={type === "expense" ? "e.g., Debit, Discover" : "e.g., Checking, Cash"}
+                className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
+                style={{
+                  backgroundColor: "var(--surface-subtle)",
+                  color: "var(--text)",
+                  border: "none",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Note Section (Expandable) */}
+          {showNote && (
+            <div id="note-section" className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-micro">Note</label>
+                <div className="flex gap-2">
+                  {note.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNote("");
+                        setShowNote(false);
+                      }}
+                      className="text-xs font-medium px-2 py-1 rounded"
+                      style={{ color: "var(--danger)" }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowNote(false)}
+                    className="text-xs font-medium px-2 py-1 rounded"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+              <textarea
+                ref={noteInputRef}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                placeholder="Quick context..."
+                className="w-full resize-none rounded-lg px-3 py-2.5 text-body outline-none"
+                style={{
+                  backgroundColor: "var(--surface-subtle)",
+                  color: "var(--text)",
+                  border: "none",
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Save Button */}

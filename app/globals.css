@@ -69,10 +69,10 @@
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   
   /* -------- Background Gradient (Mercury-grade warmth) -------- */
-  --app-bg-start: #FBF8F3;
-  --app-bg-mid: #F5F0E8;
+  --app-bg-start: #CD7F32;
+  --app-bg-mid: #FBF8F3;
   --app-bg-end: #EBE4D8;
-  --bg: linear-gradient(180deg, #FBF8F3 0%, #F5F0E8 50%, #EBE4D8 100%);
+  --bg: linear-gradient(90deg, var(--app-bg-start) 0%, var(--app-bg-mid) 50%, var(--app-bg-end) 100%);
   
   /* -------- Light Theme Palette -------- */
   --canvas: #FAF7F2; /* Legacy fallback */
