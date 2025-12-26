@@ -1,3 +1,3 @@
 "use client";
 
-export { default } from "../summary/page";
+export { default } from "../home/page";
