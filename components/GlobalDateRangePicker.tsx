@@ -5,22 +5,20 @@ import * as Lucide from "lucide-react";
 import { useTimeRange } from "./TimeRangeProvider";
 import { DateRangePreset } from "./utils";
 
-const QUICK_PRESETS: { key: DateRangePreset; label: string }[] = [
-  { key: "week", label: "This Week" },
-  { key: "month", label: "This Month" },
-  { key: "last-month", label: "Last Month" },
-  { key: "custom", label: "Custom Range" },
+// Grouped presets for the new 5-row layout
+const PRESET_ROWS: { label?: string; presets: { key: DateRangePreset; label: string }[] }[] = [
+  { presets: [{ key: "custom", label: "Custom Range" }] },
+  { label: "Month", presets: [{ key: "month", label: "This Month" }, { key: "last-month", label: "Last Month" }] },
+  { label: "Week", presets: [{ key: "week", label: "This Week" }, { key: "last-week", label: "Last Week" }] },
+  { label: "Year", presets: [{ key: "year", label: "This Year" }, { key: "last-year", label: "Last Year" }] },
+  { presets: [{ key: "today", label: "Today" }, { key: "yesterday", label: "Yesterday" }] },
 ];
 
-const ALL_PRESETS: { key: DateRangePreset; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "week", label: "This Week" },
-  { key: "last-week", label: "Last Week" },
+// Quick presets for inline display (if needed)
+const QUICK_PRESETS: { key: DateRangePreset; label: string }[] = [
   { key: "month", label: "This Month" },
   { key: "last-month", label: "Last Month" },
-  { key: "year", label: "This Year" },
-  { key: "last-year", label: "Last Year" },
+  { key: "week", label: "This Week" },
   { key: "custom", label: "Custom Range" },
 ];
 
@@ -36,9 +34,7 @@ export default function GlobalDateRangePicker({
   const [tempFrom, setTempFrom] = useState(customFrom);
   const [tempTo, setTempTo] = useState(customTo);
   const [showCustom, setShowCustom] = useState(false);
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  const presets = showAllPresets ? ALL_PRESETS : QUICK_PRESETS;
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -95,9 +91,9 @@ export default function GlobalDateRangePicker({
         <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
       </button>
 
-      {/* Bottom sheet */}
+      {/* Dialog */}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/40"
@@ -108,29 +104,21 @@ export default function GlobalDateRangePicker({
             aria-hidden="true"
           />
 
-          {/* Sheet */}
+          {/* Dialog box */}
           <div
-            ref={sheetRef}
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label="Select date range"
-            className="relative w-full max-w-md animate-in slide-in-from-bottom-4 duration-200"
+            className="relative w-full max-w-sm animate-in fade-in zoom-in-95 duration-150"
           >
             <div
-              className="rounded-t-2xl border-t border-x p-4 pb-8 max-h-[85vh] overflow-y-auto"
+              className="rounded-2xl border p-5 shadow-lg"
               style={{
                 backgroundColor: "var(--surface)",
                 borderColor: "var(--border)",
               }}
             >
-              {/* Handle */}
-              <div className="flex justify-center mb-3">
-                <div
-                  className="h-1 w-10 rounded-full"
-                  style={{ backgroundColor: "var(--border)" }}
-                />
-              </div>
-
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
@@ -141,47 +129,77 @@ export default function GlobalDateRangePicker({
                     setOpen(false);
                     setShowCustom(false);
                   }}
-                  className="rounded-full p-2 transition-colors hover:bg-[var(--surface-subtle)]"
+                  className="rounded-full p-1.5 transition-colors hover:bg-[var(--surface-subtle)]"
                 >
                   <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
                 </button>
               </div>
 
               {!showCustom ? (
-                /* Preset buttons */
-                <div className="space-y-2">
-                  {presets.map((p) => (
-                    <button
-                      key={p.key}
-                      onClick={() => selectPreset(p.key)}
-                      className={`w-full flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                        preset === p.key && p.key !== "custom"
-                          ? "bg-[var(--accent-subtle)] border-[var(--accent)]"
-                          : "hover:bg-[var(--surface-subtle)]"
-                      }`}
-                      style={{
-                        border: `1px solid ${
-                          preset === p.key && p.key !== "custom"
-                            ? "var(--accent)"
-                            : "var(--border)"
-                        }`,
-                        color:
-                          preset === p.key && p.key !== "custom"
-                            ? "var(--accent)"
-                            : "var(--text)",
-                      }}
-                    >
-                      <span>{p.label}</span>
-                      {preset === p.key && p.key !== "custom" && (
-                        <Lucide.Check className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                /* Preset rows - 5 row layout */
+                <div className="space-y-3">
+                  {PRESET_ROWS.map((row, rowIdx) => (
+                    <div key={rowIdx}>
+                      {row.presets.length === 1 ? (
+                        /* Single button row (Custom) */
+                        <button
+                          onClick={() => selectPreset(row.presets[0].key)}
+                          className={`w-full flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
+                            preset === row.presets[0].key && row.presets[0].key !== "custom"
+                              ? "bg-[var(--accent-subtle)]"
+                              : "hover:bg-[var(--surface-subtle)]"
+                          }`}
+                          style={{
+                            border: `1px solid ${
+                              preset === row.presets[0].key && row.presets[0].key !== "custom"
+                                ? "var(--accent)"
+                                : "var(--border)"
+                            }`,
+                            color:
+                              preset === row.presets[0].key && row.presets[0].key !== "custom"
+                                ? "var(--accent)"
+                                : "var(--text)",
+                          }}
+                        >
+                          <span>{row.presets[0].label}</span>
+                          {preset === row.presets[0].key && row.presets[0].key !== "custom" && (
+                            <Lucide.Check className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                          )}
+                          {row.presets[0].key === "custom" && (
+                            <Lucide.ChevronRight
+                              className="h-4 w-4"
+                              style={{ color: "var(--text-tertiary)" }}
+                            />
+                          )}
+                        </button>
+                      ) : (
+                        /* Two-button row */
+                        <div className="grid grid-cols-2 gap-2">
+                          {row.presets.map((p) => (
+                            <button
+                              key={p.key}
+                              onClick={() => selectPreset(p.key)}
+                              className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-3 text-sm font-medium transition-colors ${
+                                preset === p.key
+                                  ? "bg-[var(--accent-subtle)]"
+                                  : "hover:bg-[var(--surface-subtle)]"
+                              }`}
+                              style={{
+                                border: `1px solid ${
+                                  preset === p.key ? "var(--accent)" : "var(--border)"
+                                }`,
+                                color: preset === p.key ? "var(--accent)" : "var(--text)",
+                              }}
+                            >
+                              <span>{p.label}</span>
+                              {preset === p.key && (
+                                <Lucide.Check className="h-3.5 w-3.5" style={{ color: "var(--accent)" }} />
+                              )}
+                            </button>
+                          ))}
+                        </div>
                       )}
-                      {p.key === "custom" && (
-                        <Lucide.ChevronRight
-                          className="h-4 w-4"
-                          style={{ color: "var(--text-tertiary)" }}
-                        />
-                      )}
-                    </button>
+                    </div>
                   ))}
                 </div>
               ) : (
