@@ -68,14 +68,25 @@
   --ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   
-  /* -------- Background Gradient (Mercury-grade warmth) -------- */
-  --app-bg-start: #CD7F32;
-  --app-bg-mid: #FBF8F3;
-  --app-bg-end: #EBE4D8;
-  --bg: linear-gradient(90deg, var(--app-bg-start) 0%, var(--app-bg-mid) 50%, var(--app-bg-end) 100%);
+  /* -------- Background Gradient (Branded Sand → Water painting) -------- */
+  /* Sand zone: grounded, safe, human */
+  --bg-sand-light: #F1E6D6;
+  --bg-sand-mid: #E4D2BA;
+  --bg-sand-dark: #D6C1A4;
+  
+  /* Water zone: clarity, perspective, calm */
+  --bg-water-soft: #8FB6BE;
+  --bg-water-deep: #6F9EA8;
+  
+  /* Clay zone: atmospheric, emotional memory (use sparingly) */
+  --bg-clay-soft: #C87A5A;
+  --bg-clay-muted: #B56A52;
+  
+  /* Primary app background: subtle sand gradient */
+  --bg: radial-gradient(ellipse at top, rgba(143, 182, 190, 0.08) 0%, var(--bg-sand-light) 30%, var(--bg-sand-mid) 100%);
   
   /* -------- Light Theme Palette -------- */
-  --canvas: #FAF7F2; /* Legacy fallback */
+  --canvas: var(--bg-sand-light);
   --surface: #FFFFFF;
   --surface-elevated: #FFFFFF;
   --surface-subtle: #F2F2F3;
@@ -86,11 +97,11 @@
   --text-tertiary: #A1A1AA;
   --text-placeholder: #D4D4D8;
   
-  /* -------- Accent (Brand) -------- */
-  --accent: #6366F1;
-  --accent-hover: #4F46E5;
+  /* -------- Accent (Deep Blue-Teal in light mode) -------- */
+  --accent: #2F6F85;
+  --accent-hover: #255C6F;
   --accent-foreground: #FFFFFF;
-  --accent-subtle: #EEF2FF;
+  --accent-subtle: rgba(47, 111, 133, 0.08);
   
   /* -------- Semantic Colors -------- */
   --success: #059669;
@@ -110,12 +121,12 @@
   --expense: #6B7280;
   
   /* -------- Chart Colors -------- */
-  --chart-1: #6366F1;
+  --chart-1: #2F6F85;
   --chart-2: #10B981;
   --chart-3: #F59E0B;
-  --chart-4: #8B5CF6;
+  --chart-4: #6F9EA8;
   --chart-5: #EC4899;
-  --chart-6: #06B6D4;
+  --chart-6: #C87A5A;
   
   /* -------- shadcn/ui Compatibility -------- */
   --background: var(--canvas);
@@ -153,7 +164,9 @@
 
 /* -------- Dark Theme -------- */
 .dark {
-  --canvas: #09090B;
+  /* Dark background: mineral/clay blend */
+  --bg: radial-gradient(ellipse at top, rgba(111, 158, 168, 0.12) 0%, #1A1612 30%, #0F0D0B 100%);
+  --canvas: #0F0D0B;
   --surface: #18181B;
   --surface-elevated: #1F1F23;
   --surface-subtle: #27272A;
@@ -164,10 +177,11 @@
   --text-tertiary: #71717A;
   --text-placeholder: #52525B;
   
-  --accent: #818CF8;
-  --accent-hover: #A5B4FC;
-  --accent-foreground: #1E1E2E;
-  --accent-subtle: rgba(99, 102, 241, 0.15);
+  /* Accent (Seafoam in dark mode) */
+  --accent: #7FD1C2;
+  --accent-hover: #6BBFAF;
+  --accent-foreground: #0F0D0B;
+  --accent-subtle: rgba(127, 209, 194, 0.15);
   
   --success: #10B981;
   --success-subtle: rgba(16, 185, 129, 0.12);
@@ -187,10 +201,10 @@
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
   --shadow-md: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 8px 24px -4px rgba(0, 0, 0, 0.7);
-  --shadow-fab: 0 4px 16px -2px rgba(129, 140, 248, 0.5);
+  --shadow-fab: 0 4px 16px -2px rgba(127, 209, 194, 0.4);
   
   --background: var(--canvas);
-  --bg: var(--canvas);
+  --bg-override: var(--canvas);
   --sidebar-bg: var(--surface);
   --sidebar-active: var(--accent-subtle);
   --sidebar-active-text: var(--accent);

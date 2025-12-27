@@ -98,8 +98,8 @@ const INSIGHT_MIN_DELTA_CENTS = 5000; // $50
 const INSIGHT_MIN_PERCENT = 15;
 
 const CHART_COLORS = [
-  "#6366F1", "#8B5CF6", "#10B981", "#F59E0B", "#EC4899", 
-  "#06B6D4", "#F97316", "#84CC16", "#EF4444", "#3B82F6"
+  "#2F6F85", "#6F9EA8", "#10B981", "#F59E0B", "#EC4899", 
+  "#C87A5A", "#F97316", "#84CC16", "#EF4444", "#3B82F6"
 ];
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

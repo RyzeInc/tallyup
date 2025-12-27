@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
 
-const COLORS = ["#6366F1", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4"];
+const COLORS = ["#2F6F85", "#10B981", "#F59E0B", "#6F9EA8", "#EC4899", "#C87A5A"];
 
 export default function SummaryPage() {
   const { user } = useUser();

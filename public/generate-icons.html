@@ -72,10 +72,11 @@
       const padding = size * 0.15;
       const contentSize = size - (padding * 2);
       
-      // Gradient background
+      // Gradient background (branded colors)
       const gradient = ctx.createLinearGradient(0, 0, size, size);
-      gradient.addColorStop(0, '#667eea');
-      gradient.addColorStop(1, '#764ba2');
+      gradient.addColorStop(0, '#8FB6BE');      // Water soft
+      gradient.addColorStop(0.5, '#2F6F85');    // Deep blue-teal
+      gradient.addColorStop(1, '#D6C1A4');      // Sand dark
       ctx.fillStyle = gradient;
       
       // Rounded rectangle background
