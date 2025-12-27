@@ -19,35 +19,97 @@ export default function Button({
   leftIcon,
   rightIcon,
   disabled,
-  className = "",
+  style,
   ...rest
 }: ButtonProps) {
-  const base =
-    "inline-flex items-center justify-center font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
-
-  const sizes: Record<string, string> = {
-    sm: "h-9 px-3 text-sm rounded-lg gap-1.5",
-    md: "h-11 px-4 text-body rounded-xl gap-2",
-    lg: "h-12 px-6 text-body rounded-xl gap-2",
-    icon: "h-11 w-11 rounded-xl",
+  // Base styles using design tokens
+  const baseStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 600,
+    transition: "all 0.15s ease",
+    cursor: disabled || loading ? "not-allowed" : "pointer",
+    opacity: disabled || loading ? 0.5 : 1,
+    border: "none",
+    outline: "none",
   };
 
-  const variants: Record<string, string> = {
-    primary: "bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-95 active:opacity-90",
-    secondary: "bg-[var(--surface-subtle)] text-[var(--text)] hover:bg-[var(--border)]",
-    ghost: "bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-subtle)] hover:text-[var(--text)]",
-    destructive: "bg-[var(--danger)] text-white hover:opacity-90",
-    outline: "border border-[var(--border)] bg-transparent text-[var(--text)] hover:bg-[var(--surface-subtle)]",
+  // Size styles - ensuring 44px minimum for accessibility
+  const sizeStyles: Record<string, React.CSSProperties> = {
+    sm: {
+      minHeight: 36,
+      minWidth: 36,
+      padding: "0 var(--space-3)",
+      fontSize: "var(--text-sm)",
+      borderRadius: "var(--radius-md)",
+      gap: "var(--space-1)",
+    },
+    md: {
+      minHeight: 44, // Accessibility minimum
+      minWidth: 44,
+      padding: "0 var(--space-4)",
+      fontSize: "var(--text-base)",
+      borderRadius: "var(--radius-lg)",
+      gap: "var(--space-2)",
+    },
+    lg: {
+      minHeight: "var(--button-height)", // 48px
+      minWidth: 48,
+      padding: "0 var(--space-6)",
+      fontSize: "var(--text-base)",
+      borderRadius: "var(--radius-lg)",
+      gap: "var(--space-2)",
+    },
+    icon: {
+      minHeight: 44, // Accessibility minimum
+      minWidth: 44,
+      padding: 0,
+      borderRadius: "var(--radius-lg)",
+    },
+  };
+
+  // Variant styles using design tokens
+  const variantStyles: Record<string, React.CSSProperties> = {
+    primary: {
+      backgroundColor: "var(--primary)",
+      color: "#FFFFFF",
+    },
+    secondary: {
+      backgroundColor: "var(--surface-2)",
+      color: "var(--text)",
+    },
+    ghost: {
+      backgroundColor: "transparent",
+      color: "var(--text-secondary)",
+    },
+    destructive: {
+      backgroundColor: "var(--danger)",
+      color: "#FFFFFF",
+    },
+    outline: {
+      backgroundColor: "transparent",
+      color: "var(--text)",
+      border: "1px solid var(--border)",
+    },
+  };
+
+  const combinedStyle: React.CSSProperties = {
+    ...baseStyle,
+    ...sizeStyles[size],
+    ...variantStyles[variant],
+    ...style,
   };
 
   return (
     <button
-      className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}
+      style={combinedStyle}
       disabled={disabled || loading}
+      aria-busy={loading}
       {...rest}
     >
       {loading ? (
-        <Lucide.Loader2 className="h-4 w-4 animate-spin" />
+        <Lucide.Loader2 style={{ width: 16, height: 16, animation: "spin 1s linear infinite" }} />
       ) : (
         <>
           {leftIcon}

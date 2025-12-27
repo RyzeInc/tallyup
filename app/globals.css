@@ -3,10 +3,35 @@
 
 /* ============================================
    TALLYUP DESIGN SYSTEM
-   Mercury-grade fintech design tokens
+   Light-first, trust-focused fintech tokens
+   
+   Principles:
+   - Light-first: default = light, no auto-dark
+   - 8pt spacing grid throughout
+   - Cards always white for finance trust
+   - One accent color for primary actions
+   - Muted income/expense colors (not neon)
    ============================================ */
 
-:root {
+:root, .light {
+  /* -------- Core Palette (spec tokens) -------- */
+  --bg: #F5EDE3;                           /* warm sand base */
+  --bg-gradient-a: #F5EDE3;                /* wet sand gradient stop A */
+  --bg-gradient-b: #E8D9C8;                /* wet sand gradient stop B */
+  --surface: #FFFFFF;                      /* pure white (cards) */
+  --surface-2: #FAF8F6;                    /* subtle off-white (inputs, pills) */
+  --text: #1A1A1B;                         /* near-black */
+  --muted: #71717A;                        /* neutral gray */
+  --border: #E8E8EA;                       /* low-contrast border */
+  --primary: #2F6F85;                      /* deep blue-teal */
+  --primary-hover: #255C6F;
+  --primary-foreground: #FFFFFF;
+  --success: #3D8B6E;                      /* muted green (income) */
+  --success-subtle: #EDF7F3;
+  --danger: #C45C5C;                       /* muted red (expense negative) */
+  --danger-subtle: #FCF4F4;
+  --shadow: 0px 1px 3px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.05);
+  
   /* -------- Typography Scale -------- */
   --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   
@@ -41,25 +66,36 @@
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
-  --space-4: 16px;
+  --space-4: 16px;        /* page horizontal padding */
+  --space-5: 20px;        /* card padding */
   --space-6: 24px;
   --space-8: 32px;
   --space-10: 40px;
   --space-12: 48px;
   
-  /* -------- Radius -------- */
+  /* -------- Radius (consistent) -------- */
   --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-md: 14px;       /* input radius */
+  --radius-lg: 20px;       /* card radius - enforced globally */
   --radius-full: 9999px;
   --radius: 0.5rem;
   
-  /* -------- Shadows (Mercury-grade depth) -------- */
-  --shadow-card: 0px 1px 2px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.06);
+  /* -------- Layout -------- */
+  --page-padding: 16px;
+  --card-padding: 20px;
+  --card-radius: 20px;
+  --input-radius: 14px;
+  --button-height: 48px;
+  --topbar-height: 56px;
+  --bottomnav-height: 72px;
+  --content-max-width: 560px;
+  
+  /* -------- Shadows -------- */
+  --shadow-card: var(--shadow);
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
   --shadow-md: 0 2px 8px -2px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px -4px rgba(0, 0, 0, 0.1);
-  --shadow-fab: 0 4px 16px -2px rgba(99, 102, 241, 0.4);
+  --shadow-fab: 0 4px 16px -2px rgba(47, 111, 133, 0.3);
   
   /* -------- Motion -------- */
   --motion-fast: 100ms;
@@ -68,113 +104,58 @@
   --ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   
-  /* -------- Background System (Layered Geology, Not Lighting) -------- */
-  /* 
-   * Three-layer system:
-   * Layer 1 (bottom): Base sand - warm, grounded
-   * Layer 2 (middle): Clay undercurrent - warmth, density, "wet sand"
-   * Layer 3 (top): Mineral light - cool, clarity, air
-   * 
-   * Light enters the screen, not emanates from content.
-   */
+  /* -------- Background gradient (layered warm sand) -------- */
+  --bg-full: linear-gradient(168deg, var(--bg-gradient-a) 0%, var(--bg-gradient-b) 100%);
   
-  /* Sand zone: grounded, safe, human */
-  --bg-sand-light: #F1E6D6;
-  --bg-sand-mid: #E4D2BA;
-  --bg-sand-dark: #D6C1A4;
-  --bg-sand-warm: #E8D5BF;
-  
-  /* Water zone: clarity, perspective, calm */
-  --bg-water-soft: #8FB6BE;
-  --bg-water-deep: #6F9EA8;
-  
-  /* Clay zone: atmospheric, emotional memory */
-  --bg-clay-soft: #C87A5A;
-  --bg-clay-muted: #B56A52;
-  --bg-clay-ochre: #D4A574;
-  
-  /* 
-   * Layered background composition:
-   * - Mineral light: top-left bias, cool blue-teal (air, not spotlight)
-   * - Clay undercurrent: lower third, warm rust/ochre (wet sand density)
-   * - Base sand: full screen warm beige (ground)
-   */
-  --bg: 
-    /* Layer 3: Mineral light - enters from top-left, not centered */
-    radial-gradient(ellipse 120% 60% at 15% -10%, rgba(143, 182, 190, 0.14) 0%, transparent 50%),
-    /* Layer 2: Clay undercurrent - lower third warmth, wet sand feeling */
-    radial-gradient(ellipse 140% 50% at 80% 110%, rgba(200, 122, 90, 0.08) 0%, transparent 45%),
-    /* Secondary clay: ochre mid-warmth */
-    radial-gradient(ellipse 100% 40% at 20% 95%, rgba(212, 165, 116, 0.06) 0%, transparent 40%),
-    /* Layer 1: Base sand - uneven, not perfectly centered */
-    linear-gradient(168deg, #F4EAE0 0%, #E8D5BF 35%, #E4D2BA 65%, #DCC9AD 100%);
-  
-  /* -------- Light Theme Palette -------- */
-  --canvas: var(--bg-sand-light);
-  --surface: #FFFFFF;
-  --surface-elevated: #FFFFFF;
-  --surface-subtle: #F2F2F3;
-  --border: #E8E8EA;
+  /* -------- Semantic mappings -------- */
+  --canvas: var(--bg);
+  --surface-elevated: var(--surface);
+  --surface-subtle: var(--surface-2);
   --border-subtle: #F0F0F2;
-  --text: #1A1A1B;
-  --text-secondary: #71717A;
+  --text-secondary: var(--muted);
   --text-tertiary: #A1A1AA;
   --text-placeholder: #D4D4D8;
   
-  /* -------- Accent (Deep Blue-Teal in light mode) -------- */
-  --accent: #2F6F85;
-  --accent-hover: #255C6F;
-  --accent-foreground: #FFFFFF;
+  /* Accent = primary */
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-foreground: var(--primary-foreground);
   --accent-subtle: rgba(47, 111, 133, 0.08);
   
-  /* -------- Semantic Colors -------- */
-  --success: #059669;
-  --success-subtle: #ECFDF5;
-  --success-foreground: #065F46;
-  
-  --warning: #D97706;
-  --warning-subtle: #FFFBEB;
+  /* Semantic colors */
+  --success-foreground: #1D5C47;
+  --warning: #C28023;
+  --warning-subtle: #FDF8F0;
   --warning-foreground: #92400E;
+  --danger-foreground: #8B2E2E;
   
-  --danger: #DC2626;
-  --danger-subtle: #FEF2F2;
-  --danger-foreground: #991B1B;
-  
-  /* -------- Income/Expense semantic -------- */
-  --income: #059669;
-  --expense: #6B7280;
+  /* Income/expense (muted, not neon) */
+  --income: var(--success);
+  --expense: var(--muted);
   
   /* -------- Chart Colors -------- */
   --chart-1: #2F6F85;
-  --chart-2: #10B981;
-  --chart-3: #F59E0B;
+  --chart-2: #3D8B6E;
+  --chart-3: #C28023;
   --chart-4: #6F9EA8;
-  --chart-5: #EC4899;
+  --chart-5: #B87E9A;
   --chart-6: #C87A5A;
   
   /* -------- shadcn/ui Compatibility -------- */
   --background: var(--canvas);
   --foreground: var(--text);
-  /* Ensure cards are explicitly white in light mode and text is black */
-  --card: #FFFFFF;
-  --card-foreground: #1A1A1B;
-  --popover: #FFFFFF;
-  --popover-foreground: #1A1A1B;
-  --primary: var(--accent);
-  --primary-foreground: var(--accent-foreground);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
   --secondary: var(--surface-subtle);
   --secondary-foreground: var(--text);
-  --muted: var(--surface-subtle);
-  --muted-foreground: var(--text-secondary);
-  --input: #FFFFFF;
+  --input: var(--surface);
   --ring: var(--accent);
   --destructive: var(--danger);
   --destructive-foreground: #FFFFFF;
   
-  /* -------- Layout -------- */
-  --topbar-height: 56px;
-  --bottomnav-height: 72px;
-  --content-max-width: 560px;
+  /* Sidebar */
   --sidebar-width: 260px;
   --sidebar-bg: var(--surface);
   --sidebar-border: var(--border);
@@ -184,72 +165,61 @@
   --sidebar-active-text: var(--accent);
 }
 
-/* -------- Dark Theme -------- */
-.dark {
-  /* 
-   * Dark mode layered geology:
-   * - Warm undertones prevent dead blacks
-   * - Clay reads as depth, not red
-   * - Seafoam accents glow naturally
-   */
-  --bg: 
-    /* Layer 3: Cool mineral light - top-left atmospheric */
-    radial-gradient(ellipse 100% 50% at 10% -5%, rgba(111, 158, 168, 0.12) 0%, transparent 45%),
-    /* Layer 2: Warm clay undertone - prevents dead black, adds depth */
-    radial-gradient(ellipse 120% 45% at 85% 105%, rgba(139, 90, 60, 0.08) 0%, transparent 40%),
-    /* Secondary warmth: ochre glow */
-    radial-gradient(ellipse 80% 35% at 25% 90%, rgba(180, 130, 80, 0.05) 0%, transparent 35%),
-    /* Layer 1: Base dark with warm undertone - not pure black */
-    linear-gradient(165deg, #1A1612 0%, #15120F 40%, #12100D 70%, #0F0D0B 100%);
-  --canvas: #0F0D0B;
-  --surface: #18181B;
-  --surface-elevated: #1F1F23;
-  --surface-subtle: #27272A;
-  --border: #3F3F46;
-  --border-subtle: #27272A;
-  --text: #FAFAFA;
-  --text-secondary: #A1A1AA;
+/* -------- Dim Theme (Beta) -------- */
+.dim {
+  --bg: #1A1612;
+  --bg-gradient-a: #1A1612;
+  --bg-gradient-b: #12100D;
+  --surface: #242220;
+  --surface-2: #2E2B28;
+  --text: #F5F5F4;
+  --muted: #A1A1AA;
+  --border: #3D3A36;
+  --primary: #7FD1C2;
+  --primary-hover: #6BBFAF;
+  --primary-foreground: #0F0D0B;
+  --success: #5CB88E;
+  --success-subtle: rgba(92, 184, 142, 0.12);
+  --danger: #E57373;
+  --danger-subtle: rgba(229, 115, 115, 0.12);
+  --shadow: 0px 1px 3px rgba(0, 0, 0, 0.3), 0px 4px 12px rgba(0, 0, 0, 0.4);
+  
+  --canvas: var(--bg);
+  --surface-elevated: #2E2B28;
+  --surface-subtle: var(--surface-2);
+  --border-subtle: #3D3A36;
+  --text-secondary: var(--muted);
   --text-tertiary: #71717A;
   --text-placeholder: #52525B;
   
-  /* Accent (Seafoam in dark mode) */
-  --accent: #7FD1C2;
-  --accent-hover: #6BBFAF;
-  --accent-foreground: #0F0D0B;
-  --accent-subtle: rgba(127, 209, 194, 0.15);
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-foreground: var(--primary-foreground);
+  --accent-subtle: rgba(127, 209, 194, 0.12);
   
-  --success: #10B981;
-  --success-subtle: rgba(16, 185, 129, 0.12);
   --success-foreground: #A7F3D0;
-  
   --warning: #FBBF24;
   --warning-subtle: rgba(251, 191, 36, 0.12);
   --warning-foreground: #FEF3C7;
-  
-  --danger: #EF4444;
-  --danger-subtle: rgba(239, 68, 68, 0.12);
   --danger-foreground: #FECACA;
   
-  --income: #10B981;
-  --expense: #A1A1AA;
+  --income: var(--success);
+  --expense: var(--muted);
   
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 2px 8px -2px rgba(0, 0, 0, 0.6);
-  --shadow-lg: 0 8px 24px -4px rgba(0, 0, 0, 0.7);
-  --shadow-fab: 0 4px 16px -2px rgba(127, 209, 194, 0.4);
+  --shadow-card: var(--shadow);
+  --shadow-fab: 0 4px 16px -2px rgba(127, 209, 194, 0.3);
   
   --background: var(--canvas);
-  --bg-override: var(--canvas);
-  --sidebar-bg: var(--surface);
-  --sidebar-active: var(--accent-subtle);
-  --sidebar-active-text: var(--accent);
-  
-  /* Dark mode input fields - use surface color, not white */
-  --input: var(--surface);
+  --bg-full: linear-gradient(168deg, var(--bg-gradient-a) 0%, var(--bg-gradient-b) 100%);
   --card: var(--surface);
   --card-foreground: var(--text);
   --popover: var(--surface-elevated);
   --popover-foreground: var(--text);
+  --input: var(--surface);
+  
+  --sidebar-bg: var(--surface);
+  --sidebar-active: var(--accent-subtle);
+  --sidebar-active-text: var(--accent);
 }
 
 /* ============================================
@@ -269,7 +239,7 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background: var(--bg-full);
   color: var(--text);
   font-size: var(--text-body);
   font-weight: var(--text-body-weight);
@@ -280,7 +250,74 @@ body {
 
 /* Background utility class */
 .bg-app {
-  background: var(--bg);
+  background: var(--bg-full);
+}
+
+/* Card utility - enforces design system */
+.card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--card-padding);
+}
+
+/* Input utility - enforces design system */
+.input-field {
+  background-color: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  color: var(--text);
+  font-size: var(--text-body);
+  padding: 12px 16px;
+  min-height: var(--button-height);
+  outline: none;
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+
+.input-field:focus {
+  border-color: var(--primary);
+}
+
+/* Primary button - enforces design system */
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: var(--input-radius);
+  font-weight: 600;
+  font-size: var(--text-body);
+  min-height: var(--button-height);
+  padding: 12px 24px;
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary button */
+.btn-secondary {
+  background-color: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  font-weight: 500;
+  font-size: var(--text-body);
+  min-height: var(--button-height);
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.btn-secondary:hover {
+  background-color: var(--surface-2);
 }
 
 .tabular-nums,

@@ -18,17 +18,29 @@ export default function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
-      className={`flex flex-col items-center justify-center text-center rounded-2xl ${
-        compact ? "py-10 px-6" : "py-16 px-8"
-      }`}
       style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        borderRadius: "var(--card-radius)",
         backgroundColor: "var(--surface)",
         border: "1px solid var(--border)",
+        padding: compact ? "40px 24px" : "64px 32px",
       }}
     >
       <div
-        className="mb-4 flex h-14 w-14 items-center justify-center rounded-full"
-        style={{ backgroundColor: "var(--surface-subtle)" }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 56,
+          height: 56,
+          borderRadius: "var(--radius-full)",
+          backgroundColor: "var(--surface-2)",
+          marginBottom: "var(--space-4)",
+        }}
       >
         {icon ?? (
           <Lucide.Inbox
@@ -37,13 +49,15 @@ export default function EmptyState({
           />
         )}
       </div>
-      <h3 className="text-h2" style={{ color: "var(--text)" }}>
+      <h3 style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--text)" }}>
         {title}
       </h3>
       {subtitle && (
-        <p className="mt-2 text-meta max-w-sm">{subtitle}</p>
+        <p style={{ marginTop: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-secondary)", maxWidth: "24rem" }}>
+          {subtitle}
+        </p>
       )}
-      {action && <div className="mt-5">{action}</div>}
+      {action && <div style={{ marginTop: "var(--space-5)" }}>{action}</div>}
     </div>
   );
 }

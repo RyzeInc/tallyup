@@ -1,10 +1,27 @@
+import Skeleton, { SkeletonCard, SkeletonRow } from "@/components/ui/Skeleton";
+
 export default function ReviewLoading() {
   return (
-    <div>
-      <div className="h-6 w-48 rounded bg-neutral-800/50" />
-      <div className="mt-4 space-y-2">
-        <div className="h-6 w-full rounded bg-neutral-800/20" />
-        <div className="h-6 w-full rounded bg-neutral-800/10" />
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-4)",
+      }}
+    >
+      {/* Header skeleton */}
+      <Skeleton style={{ height: 28, width: 180 }} />
+
+      {/* Card skeletons */}
+      <SkeletonCard style={{ minHeight: 100 }} />
+      <SkeletonCard style={{ minHeight: 100 }} />
+      <SkeletonCard style={{ minHeight: 100 }} />
+
+      {/* Row skeletons */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+        <SkeletonRow />
+        <SkeletonRow />
+        <SkeletonRow />
       </div>
     </div>
   );

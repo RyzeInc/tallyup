@@ -7,7 +7,6 @@ import { api } from "convex/_generated/api";
 import {
   DEFAULT_BUCKETS,
   EntryType,
-  cacheKey,
   dollarsToCents,
   centsToDollars,
   todayYYYYMMDD,
@@ -20,23 +19,45 @@ import {
 import RecurringModal from "@/components/RecurringModal";
 import CurrencyInput from "@/components/ui/CurrencyInput";
 import Combobox from "@/components/ui/Combobox";
+import PageHeader from "@/components/ui/PageHeader";
+import * as Lucide from "lucide-react";
+
+/**
+ * Log Tab - Welcoming for beginners, fast for power users
+ * 
+ * Structure:
+ * 1. Amount input as the star (top, always visible)
+ * 2. Type toggle as real segmented control
+ * 3. Core fields only (amount, date, category)
+ * 4. Progressive disclosure chips for optional fields
+ * 5. Premium save interaction with undo snackbar
+ */
 
 export default function LogPage() {
   const { user } = useUser();
 
+  // Check for pre-selected type from quick log
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const preselectedType = sessionStorage.getItem("tallyup.logType");
+      if (preselectedType === "expense" || preselectedType === "income") {
+        setType(preselectedType);
+        sessionStorage.removeItem("tallyup.logType");
+      }
+    }
+  }, []);
+
   const [type, setType] = useState<EntryType>("expense");
-  const [amount, setAmount] = useState("");
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayYYYYMMDD());
 
-  const [bucket, setBucket] = useState<string>(DEFAULT_BUCKETS[0]);
-  const [customBucket, setCustomBucket] = useState("");
+  const [category, setCategory] = useState<string>("");
+  const [customCategory, setCustomCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [touched, setTouched] = useState({ amount: false, date: false, bucket: false });
 
-  // Collapsible optional sections - initialize based on existing data
+  // Progressive disclosure state
   const [showTags, setShowTags] = useState(false);
   const [showPayMode, setShowPayMode] = useState(false);
   const [showNote, setShowNote] = useState(false);
@@ -47,17 +68,17 @@ export default function LogPage() {
 
   const [status, setStatus] = useState<
     { kind: "idle" } |
+    { kind: "saving" } |
     { kind: "ok"; msg: string; undoId?: string } |
     { kind: "err"; msg: string }
   >({ kind: "idle" });
 
   const lastSavedRef = useRef<{
     type: EntryType;
-    bucket: string;
-    category?: string;
+    category: string;
     note?: string;
     methodOrAccount?: string;
-    amount: string;
+    amountCents: number;
     tags?: string[];
   } | null>(null);
 
@@ -65,61 +86,71 @@ export default function LogPage() {
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   const serverBuckets = useQuery(api.entries.listBuckets, { type });
-  const effectiveBuckets = useMemo(() => {
-    const merged = uniqCaseInsensitive([...(DEFAULT_BUCKETS as unknown as string[]), ...((serverBuckets as string[]) ?? [])]);
-    const withoutOther = merged.filter((b) => b.toLowerCase() !== "other");
-    return [...withoutOther, "Other"];
-  }, [serverBuckets]);
+  
+  const categoryOptions = useMemo(() => {
+    const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
+    const merged = uniqCaseInsensitive([...base, ...((serverBuckets as string[]) ?? [])]);
+    if (!merged.includes("Other")) merged.push("Other");
+    return merged;
+  }, [type, serverBuckets]);
 
-  const effectiveBucket = bucket === "Other" ? (customBucket.trim() || "Other") : bucket;
+  const effectiveCategory = category === "Other" ? (customCategory.trim() || "Other") : category;
 
-  // validation touched state controls required-field UI
+  // Form validation
+  const isValidAmount = amountCents !== null && amountCents > 0;
+  const canSave = isValidAmount;
 
   async function onSave() {
-    setStatus({ kind: "idle" });
-
-    const cents = amountCents ?? dollarsToCents(amount);
-    if (!cents || cents <= 0) return setStatus({ kind: "err", msg: "Enter a valid amount > 0." });
+    if (!canSave) return;
+    
+    setStatus({ kind: "saving" });
 
     const ts = yyyymmddToLocalMidnightTs(date);
-
-    // mark touched for UI (tags no longer required)
-    setTouched({ amount: true, date: true, bucket: true });
-
-    if (!effectiveBucket) return setStatus({ kind: "err", msg: "Please fill required fields." });
 
     try {
       const res = await addEntry({
         type,
-        category: effectiveBucket,
-        note: note.trim() ? note.trim() : undefined,
-        methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
-        amountCents: cents,
+        category: effectiveCategory || undefined,
+        note: note.trim() || undefined,
+        methodOrAccount: methodOrAccount.trim() || undefined,
+        amountCents: amountCents!,
         date: ts,
         tags: tags.length > 0 ? tags : undefined,
       });
 
       lastSavedRef.current = {
         type,
-        bucket: effectiveBucket,
-        note: note.trim() ? note.trim() : undefined,
-        methodOrAccount: methodOrAccount.trim() ? methodOrAccount.trim() : undefined,
-        amount,
+        category: effectiveCategory,
+        note: note.trim() || undefined,
+        methodOrAccount: methodOrAccount.trim() || undefined,
+        amountCents: amountCents!,
         tags: tags.length > 0 ? tags : undefined,
       };
-      // reset amountCents
-      setAmountCents(null);
 
-      setAmount("");
+      // Reset form - keep date and type (user preference), clear amount and optional fields
+      setAmountCents(null);
       setNote("");
       setMethodOrAccount("");
       setTags([]);
+      setShowTags(false);
+      setShowPayMode(false);
+      setShowNote(false);
 
       const undoId = (res as any)?.id as string | undefined;
-      setStatus({ kind: "ok", msg: "Saved.", undoId });
-      setTimeout(() => setStatus({ kind: "idle" }), 5000);
+      
+      // Determine message based on whether category was provided
+      const message = effectiveCategory 
+        ? "Saved" 
+        : "Saved to Review (no category)";
+      
+      setStatus({ kind: "ok", msg: message, undoId });
+      
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        setStatus((s) => s.kind === "ok" ? { kind: "idle" } : s);
+      }, 5000);
     } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to save." });
+      setStatus({ kind: "err", msg: e?.message ?? "Failed to save" });
     }
   }
 
@@ -127,67 +158,81 @@ export default function LogPage() {
     if (status.kind !== "ok" || !status.undoId) return;
     try {
       await deleteEntry({ id: status.undoId as any });
-      setStatus({ kind: "ok", msg: "Undone." });
-      setTimeout(() => setStatus({ kind: "idle" }), 1200);
+      setStatus({ kind: "ok", msg: "Undone" });
+      setTimeout(() => setStatus({ kind: "idle" }), 1500);
     } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo." });
+      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo" });
     }
   }
-
-  
 
   const [selected, setSelected] = useState<any | null>(null);
 
   return (
-    <div className="space-y-4 pb-4">
-      {/* Header Card */}
-      <div
-        className="rounded-2xl p-5"
-        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-      >
-        <h1 className="text-h1" style={{ color: "var(--text)" }}>Log entry</h1>
-        <p className="text-meta mt-1">Just the basics — review anytime.</p>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      <PageHeader
+        title="Log"
+        subtitle="Just the basics — review anytime"
+        compact
+      />
 
       <SignedOut>
         <div
-          className="rounded-xl p-6 text-center"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--card-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--space-6)",
+            textAlign: "center",
+          }}
         >
-          <div className="text-meta mb-4" style={{ color: "var(--text-secondary)" }}>
+          <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
             Sign in to start logging
-          </div>
+          </p>
           <SignInButton mode="modal">
-            <button
-              className="rounded-lg px-5 py-2.5 text-sm font-semibold"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              Sign in
-            </button>
+            <button className="btn-primary">Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
 
       <SignedIn>
-        {/* Type Toggle */}
+        {/* Type Toggle - Segmented Control */}
         <div
-          className="grid grid-cols-2 gap-1 rounded-xl p-1"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "4px",
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--input-radius)",
+            border: "1px solid var(--border)",
+            padding: "4px",
+          }}
         >
           <button
             onClick={() => setType("expense")}
-            className="rounded-lg px-4 py-3 text-sm font-semibold transition-colors"
             style={{
-              backgroundColor: type === "expense" ? "var(--accent)" : "transparent",
-              color: type === "expense" ? "var(--accent-foreground)" : "var(--text-secondary)",
+              borderRadius: "calc(var(--input-radius) - 4px)",
+              padding: "var(--space-3)",
+              fontWeight: 600,
+              fontSize: "var(--text-body)",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              backgroundColor: type === "expense" ? "var(--primary)" : "transparent",
+              color: type === "expense" ? "var(--primary-foreground)" : "var(--text-secondary)",
             }}
           >
             Spent
           </button>
           <button
             onClick={() => setType("income")}
-            className="rounded-lg px-4 py-3 text-sm font-semibold transition-colors"
             style={{
+              borderRadius: "calc(var(--input-radius) - 4px)",
+              padding: "var(--space-3)",
+              fontWeight: 600,
+              fontSize: "var(--text-body)",
+              border: "none",
+              cursor: "pointer",
+              transition: "all 150ms ease",
               backgroundColor: type === "income" ? "var(--success)" : "transparent",
               color: type === "income" ? "#fff" : "var(--text-secondary)",
             }}
@@ -196,242 +241,288 @@ export default function LogPage() {
           </button>
         </div>
 
-        {/* Amount Input */}
+        {/* Amount Input - The Star */}
         <div
-          className="rounded-xl p-4"
-          style={{ backgroundColor: "var(--surface)", border: touched.amount && (!amountCents && !amount) ? "1px solid var(--danger)" : "1px solid var(--border)" }}
+          style={{
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--card-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--card-padding)",
+          }}
         >
-          <label className="text-micro mb-2 block">Amount</label>
+          <label
+            style={{
+              display: "block",
+              fontSize: "var(--text-micro)",
+              fontWeight: 500,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            Amount
+          </label>
           <CurrencyInput
             id="amount"
             ariaLabel="Amount"
             valueCents={amountCents ?? undefined}
-            onChange={(c) => {
-              setAmountCents(c);
-              setAmount(c ? (c / 100).toFixed(2) : "");
-            }}
-            invalid={touched.amount && (!amountCents && !amount)}
-            onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
+            onChange={(c) => setAmountCents(c)}
+            invalid={false}
+            autoFocus
           />
         </div>
 
-        {/* Date + Category Row */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.date && !date ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
-            <label className="text-micro mb-2 block">Date</label>
+        {/* Core Fields - Date + Category */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+          {/* Date */}
+          <div
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--card-radius)",
+              border: "1px solid var(--border)",
+              padding: "var(--space-4)",
+            }}
+          >
+            <label
+              style={{
+                display: "block",
+                fontSize: "var(--text-micro)",
+                fontWeight: 500,
+                color: "var(--text-tertiary)",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                marginBottom: "var(--space-2)",
+              }}
+            >
+              Date
+            </label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, date: true }))}
-              className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
               style={{
-                backgroundColor: "var(--surface-subtle)",
-                color: "var(--text)",
+                width: "100%",
+                backgroundColor: "var(--surface-2)",
                 border: "none",
+                borderRadius: "var(--radius-md)",
+                padding: "10px 12px",
+                fontSize: "var(--text-body)",
+                color: "var(--text)",
+                outline: "none",
               }}
             />
           </div>
 
-          <div className="rounded-xl p-4" style={{ backgroundColor: "var(--surface)", border: touched.bucket && !effectiveBucket ? "1px solid var(--danger)" : "1px solid var(--border)" }}>
-            <label className="text-micro mb-2 block">{type === "income" ? "Source" : "Category"}</label>
-              <Combobox
-                value={bucket}
-                onChange={(v) => setBucket(v)}
-                options={useMemo(() => {
-                  const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
-                  const merged = uniqCaseInsensitive([...base]);
-                  if (!merged.includes("Other")) merged.push("Other");
-                  return merged;
-                }, [type])}
-                placeholder="Choose category..."
-                onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
-              />
+          {/* Category */}
+          <div
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--card-radius)",
+              border: "1px solid var(--border)",
+              padding: "var(--space-4)",
+            }}
+          >
+            <label
+              style={{
+                display: "block",
+                fontSize: "var(--text-micro)",
+                fontWeight: 500,
+                color: "var(--text-tertiary)",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                marginBottom: "var(--space-2)",
+              }}
+            >
+              {type === "income" ? "Source" : "Category"}
+            </label>
+            <Combobox
+              value={category}
+              onChange={(v) => setCategory(v)}
+              options={categoryOptions}
+              placeholder="Optional..."
+            />
           </div>
         </div>
 
-        {bucket === "Other" && (
+        {/* Custom Category (when "Other" selected) */}
+        {category === "Other" && (
           <div
-            className="rounded-xl p-4"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--card-radius)",
+              border: "1px solid var(--border)",
+              padding: "var(--space-4)",
+            }}
           >
-            <label className="text-micro mb-2 block">Custom category</label>
-            <input
-              value={customBucket}
-              onChange={(e) => setCustomBucket(e.target.value)}
-              placeholder="e.g., Baby, School, Rental"
-              className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
+            <label
               style={{
-                backgroundColor: "var(--surface-subtle)",
-                color: "var(--text)",
+                display: "block",
+                fontSize: "var(--text-micro)",
+                fontWeight: 500,
+                color: "var(--text-tertiary)",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                marginBottom: "var(--space-2)",
+              }}
+            >
+              Custom {type === "income" ? "source" : "category"}
+            </label>
+            <input
+              value={customCategory}
+              onChange={(e) => setCustomCategory(e.target.value)}
+              placeholder="e.g., Baby, School, Rental"
+              style={{
+                width: "100%",
+                backgroundColor: "var(--surface-2)",
                 border: "none",
+                borderRadius: "var(--radius-md)",
+                padding: "10px 12px",
+                fontSize: "var(--text-body)",
+                color: "var(--text)",
+                outline: "none",
               }}
             />
           </div>
         )}
 
-        {/* Optional Fields - Action Chips Row */}
+        {/* Progressive Disclosure Chips */}
         <div
-          className="rounded-xl p-4"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--card-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--space-4)",
+          }}
         >
-          <div className="flex items-center gap-3 flex-nowrap" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            {/* Context Tag Chip */}
+          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+            {/* Add Tags Chip */}
             <button
               type="button"
-              onClick={() => {
-                setShowTags(!showTags);
-              }}
-              aria-expanded={showTags}
-              aria-controls="context-tags-section"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl text-body font-medium transition-colors"
+              onClick={() => setShowTags(!showTags)}
               style={{
-                minHeight: 44,
-                paddingLeft: 16,
-                paddingRight: 16,
-                whiteSpace: "nowrap",
-                flex: "1 1 0%",
-                minWidth: 0,
-                textAlign: "center",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                padding: "8px 14px",
+                borderRadius: "var(--radius-full)",
+                fontSize: "var(--text-meta)",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 150ms ease",
                 backgroundColor: showTags || tags.length > 0 ? "var(--accent-subtle)" : "transparent",
-                color: showTags || tags.length > 0 ? "var(--accent)" : "var(--text)",
-                border: showTags || tags.length > 0 ? "1px solid var(--accent)" : "1px solid var(--border)",
+                color: showTags || tags.length > 0 ? "var(--primary)" : "var(--text-secondary)",
+                border: showTags || tags.length > 0 ? "1px solid var(--primary)" : "1px solid var(--border)",
               }}
             >
-              {showTags ? (
-                <>Tags{tags.length > 0 && ` (${tags.length})`}</>
-              ) : tags.length > 0 ? (
+              {tags.length > 0 ? (
                 <>Tags ({tags.length})</>
               ) : (
                 <>
-                  <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 500 }}>+</span>
-                  Add Tag
+                  <Lucide.Plus className="h-3.5 w-3.5" />
+                  Add tags
                 </>
               )}
             </button>
 
-            {/* Pay Mode Chip */}
+            {/* Add Method/Account Chip */}
             <button
               type="button"
               onClick={() => {
                 const willShow = !showPayMode;
                 setShowPayMode(willShow);
-                if (willShow) {
-                  setTimeout(() => payModeInputRef.current?.focus(), 50);
-                }
+                if (willShow) setTimeout(() => payModeInputRef.current?.focus(), 50);
               }}
-              aria-expanded={showPayMode}
-              aria-controls="pay-mode-section"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl text-body font-medium transition-colors"
               style={{
-                minHeight: 44,
-                paddingLeft: 16,
-                paddingRight: 16,
-                whiteSpace: "nowrap",
-                flex: "1 1 0%",
-                minWidth: 0,
-                textAlign: "center",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                padding: "8px 14px",
+                borderRadius: "var(--radius-full)",
+                fontSize: "var(--text-meta)",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 150ms ease",
                 backgroundColor: showPayMode || methodOrAccount.trim() ? "var(--accent-subtle)" : "transparent",
-                color: showPayMode || methodOrAccount.trim() ? "var(--accent)" : "var(--text)",
-                border: showPayMode || methodOrAccount.trim() ? "1px solid var(--accent)" : "1px solid var(--border)",
+                color: showPayMode || methodOrAccount.trim() ? "var(--primary)" : "var(--text-secondary)",
+                border: showPayMode || methodOrAccount.trim() ? "1px solid var(--primary)" : "1px solid var(--border)",
               }}
             >
-              {showPayMode ? (
-                <>{type === "expense" ? "Method" : "Account"}{methodOrAccount.trim() && `: ${methodOrAccount.trim()}`}</>
-              ) : methodOrAccount.trim() ? (
-                <>{type === "expense" ? "Method" : "Account"}: {methodOrAccount.trim()}</>
+              {methodOrAccount.trim() ? (
+                <>{type === "expense" ? "Method" : "Account"} ✓</>
               ) : (
                 <>
-                  <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 500 }}>+</span>
-                  Add {type === "expense" ? "Method" : "Account"}
+                  <Lucide.Plus className="h-3.5 w-3.5" />
+                  {type === "expense" ? "Method" : "Account"}
                 </>
               )}
             </button>
 
-            {/* Note Chip */}
+            {/* Add Note Chip */}
             <button
               type="button"
               onClick={() => {
                 const willShow = !showNote;
                 setShowNote(willShow);
-                if (willShow) {
-                  setTimeout(() => noteInputRef.current?.focus(), 50);
-                }
+                if (willShow) setTimeout(() => noteInputRef.current?.focus(), 50);
               }}
-              aria-expanded={showNote}
-              aria-controls="note-section"
-              className="inline-flex items-center justify-center gap-2 rounded-2xl text-body font-medium transition-colors"
               style={{
-                minHeight: 44,
-                paddingLeft: 16,
-                paddingRight: 16,
-                whiteSpace: "nowrap",
-                flex: "1 1 0%",
-                minWidth: 0,
-                textAlign: "center",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                padding: "8px 14px",
+                borderRadius: "var(--radius-full)",
+                fontSize: "var(--text-meta)",
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 150ms ease",
                 backgroundColor: showNote || note.trim() ? "var(--accent-subtle)" : "transparent",
-                color: showNote || note.trim() ? "var(--accent)" : "var(--text)",
-                border: showNote || note.trim() ? "1px solid var(--accent)" : "1px solid var(--border)",
+                color: showNote || note.trim() ? "var(--primary)" : "var(--text-secondary)",
+                border: showNote || note.trim() ? "1px solid var(--primary)" : "1px solid var(--border)",
               }}
             >
-              {showNote ? (
-                <>Note{note.trim() && " ✓"}</>
-              ) : note.trim() ? (
+              {note.trim() ? (
                 <>Note ✓</>
               ) : (
                 <>
-                  <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 500 }}>+</span>
-                  Add Note
+                  <Lucide.Plus className="h-3.5 w-3.5" />
+                  Add note
                 </>
               )}
             </button>
           </div>
 
-          {/* Context Tags Section (Expandable) */}
+          {/* Expanded Tags Section */}
           {showTags && (
-            <div id="context-tags-section" className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-micro">Context Tags</label>
-                <div className="flex gap-2">
-                  {tags.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTags([]);
-                        setShowTags(false);
-                      }}
-                      className="text-xs font-medium px-2 py-1 rounded"
-                      style={{ color: "var(--danger)" }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowTags(false)}
-                    className="text-xs font-medium px-2 py-1 rounded"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Hide
-                  </button>
-                </div>
+            <div style={{ marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
+                <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Context Tags
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowTags(false)}
+                  style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Done
+                </button>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                 {CONTEXT_TAGS.map((tag) => {
                   const isSelected = tags.includes(tag);
                   return (
                     <button
                       key={tag}
                       type="button"
-                      onClick={() => {
-                        setTags((prev) =>
-                          isSelected ? prev.filter((t) => t !== tag) : [...prev, tag]
-                        );
-                      }}
-                      className="rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
+                      onClick={() => setTags((prev) => isSelected ? prev.filter((t) => t !== tag) : [...prev, tag])}
                       style={{
-                        backgroundColor: isSelected ? "var(--accent)" : "transparent",
-                        color: isSelected ? "var(--accent-foreground)" : "var(--text-secondary)",
+                        padding: "6px 12px",
+                        borderRadius: "var(--radius-full)",
+                        fontSize: "var(--text-meta)",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                        color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
                         border: isSelected ? "none" : "1px solid var(--border)",
                       }}
                     >
@@ -443,78 +534,54 @@ export default function LogPage() {
             </div>
           )}
 
-          {/* Pay Mode Section (Expandable) */}
+          {/* Expanded Pay Mode Section */}
           {showPayMode && (
-            <div id="pay-mode-section" className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-micro">{type === "expense" ? "Method" : "Account"}</label>
-                <div className="flex gap-2">
-                  {methodOrAccount.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMethodOrAccount("");
-                        setShowPayMode(false);
-                      }}
-                      className="text-xs font-medium px-2 py-1 rounded"
-                      style={{ color: "var(--danger)" }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowPayMode(false)}
-                    className="text-xs font-medium px-2 py-1 rounded"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Hide
-                  </button>
-                </div>
+            <div style={{ marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)" }}>
+                <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {type === "expense" ? "Payment Method" : "Account"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPayMode(false)}
+                  style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Done
+                </button>
               </div>
               <input
                 ref={payModeInputRef}
                 value={methodOrAccount}
                 onChange={(e) => setMethodOrAccount(e.target.value)}
                 placeholder={type === "expense" ? "e.g., Debit, Discover" : "e.g., Checking, Cash"}
-                className="w-full rounded-lg px-3 py-2.5 text-body outline-none"
                 style={{
-                  backgroundColor: "var(--surface-subtle)",
-                  color: "var(--text)",
+                  width: "100%",
+                  backgroundColor: "var(--surface-2)",
                   border: "none",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px 12px",
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                  outline: "none",
                 }}
               />
             </div>
           )}
 
-          {/* Note Section (Expandable) */}
+          {/* Expanded Note Section */}
           {showNote && (
-            <div id="note-section" className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-micro">Note</label>
-                <div className="flex gap-2">
-                  {note.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNote("");
-                        setShowNote(false);
-                      }}
-                      className="text-xs font-medium px-2 py-1 rounded"
-                      style={{ color: "var(--danger)" }}
-                    >
-                      Clear
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowNote(false)}
-                    className="text-xs font-medium px-2 py-1 rounded"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
-                    Hide
-                  </button>
-                </div>
+            <div style={{ marginTop: "var(--space-4)", paddingTop: "var(--space-4)", borderTop: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)" }}>
+                <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  Note
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowNote(false)}
+                  style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+                >
+                  Done
+                </button>
               </div>
               <textarea
                 ref={noteInputRef}
@@ -522,11 +589,16 @@ export default function LogPage() {
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
                 placeholder="Quick context..."
-                className="w-full resize-none rounded-lg px-3 py-2.5 text-body outline-none"
                 style={{
-                  backgroundColor: "var(--surface-subtle)",
-                  color: "var(--text)",
+                  width: "100%",
+                  resize: "none",
+                  backgroundColor: "var(--surface-2)",
                   border: "none",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px 12px",
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                  outline: "none",
                 }}
               />
             </div>
@@ -536,62 +608,84 @@ export default function LogPage() {
         {/* Save Button */}
         <button
           onClick={onSave}
-          className="w-full rounded-xl px-4 py-3.5 text-body font-semibold transition-colors hover:opacity-95 active:opacity-90"
-          style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+          disabled={!canSave || status.kind === "saving"}
+          style={{
+            width: "100%",
+            backgroundColor: canSave ? "var(--primary)" : "var(--surface-2)",
+            color: canSave ? "var(--primary-foreground)" : "var(--text-tertiary)",
+            border: canSave ? "none" : "1px solid var(--border)",
+            borderRadius: "var(--input-radius)",
+            padding: "var(--space-4)",
+            minHeight: "var(--button-height)",
+            fontWeight: 600,
+            fontSize: "var(--text-body)",
+            cursor: canSave ? "pointer" : "not-allowed",
+            opacity: status.kind === "saving" ? 0.7 : 1,
+            transition: "all 150ms ease",
+          }}
         >
-          Save entry
+          {status.kind === "saving" ? "Saving..." : "Save entry"}
         </button>
 
-        {/* Status + Actions */}
-        {(status.kind === "ok" || status.kind === "err") && (
+        {/* Undo Snackbar */}
+        {status.kind === "ok" && (
           <div
-            className="rounded-xl p-4 flex items-center gap-3"
             style={{
-              backgroundColor: status.kind === "ok" ? "var(--success-subtle)" : "var(--danger-subtle)",
-              border: `1px solid ${status.kind === "ok" ? "var(--success)" : "var(--danger)"}`,
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-3)",
+              backgroundColor: "var(--success-subtle)",
+              border: "1px solid var(--success)",
+              borderRadius: "var(--input-radius)",
+              padding: "var(--space-3) var(--space-4)",
             }}
           >
-            <span
-              className="text-body font-medium"
-              style={{ color: status.kind === "ok" ? "var(--success)" : "var(--danger)" }}
-            >
+            <Lucide.CheckCircle className="h-5 w-5 shrink-0" style={{ color: "var(--success)" }} />
+            <span style={{ flex: 1, fontWeight: 500, color: "var(--success)" }}>
               {status.msg}
             </span>
-            {status.kind === "ok" && status.undoId && (
-              <div className="ml-auto flex gap-2">
-                <button
-                  onClick={onUndo}
-                  className="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-white/10"
-                  style={{ border: "1px solid var(--success)", color: "var(--success)" }}
-                >
-                  Undo
-                </button>
-                <button
-                  onClick={() => {
-                    const last = lastSavedRef.current;
-                    if (!last || !status.undoId) return;
-                    setSelected({
-                      _id: status.undoId,
-                      type: last.type,
-                      bucket: last.bucket,
-                      category: last.category,
-                      note: last.note,
-                      methodOrAccount: last.methodOrAccount,
-                      amountCents: dollarsToCents(last.amount),
-                    });
-                  }}
-                  className="rounded-lg px-3 py-1.5 text-sm font-medium"
-                  style={{ backgroundColor: "var(--success)", color: "#fff" }}
-                >
-                  Save as pattern
-                </button>
-              </div>
+            {status.undoId && (
+              <button
+                onClick={onUndo}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: "var(--text-meta)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  backgroundColor: "transparent",
+                  color: "var(--success)",
+                  border: "1px solid var(--success)",
+                }}
+              >
+                Undo
+              </button>
             )}
           </div>
         )}
 
+        {/* Error message */}
+        {status.kind === "err" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-3)",
+              backgroundColor: "var(--danger-subtle)",
+              border: "1px solid var(--danger)",
+              borderRadius: "var(--input-radius)",
+              padding: "var(--space-3) var(--space-4)",
+            }}
+          >
+            <Lucide.AlertCircle className="h-5 w-5 shrink-0" style={{ color: "var(--danger)" }} />
+            <span style={{ flex: 1, fontWeight: 500, color: "var(--danger)" }}>
+              {status.msg}
+            </span>
+          </div>
+        )}
+
         {/* Hint */}
-        <p className="text-meta text-center">
+        <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", textAlign: "center" }}>
           Skip category? It goes to Review for later.
         </p>
 

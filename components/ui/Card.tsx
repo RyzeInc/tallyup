@@ -1,5 +1,15 @@
 import { ReactNode } from "react";
 
+/**
+ * Card - Design system enforced card component
+ * 
+ * Design rules:
+ * - Always white background (--surface)
+ * - 20px border radius (--card-radius)
+ * - Consistent shadow (--shadow-card)
+ * - 20px padding by default (--card-padding)
+ */
+
 interface CardProps {
   children: ReactNode;
   className?: string;
@@ -13,28 +23,28 @@ export default function Card({
   padding = "md",
   hover = false,
 }: CardProps) {
-  const paddingClass = {
-    none: "",
-    sm: "p-4",
-    md: "p-5",
-    lg: "p-6",
-  }[padding];
+  const paddingStyles = {
+    none: "0",
+    sm: "var(--space-4)",
+    md: "var(--card-padding)",
+    lg: "var(--space-6)",
+  };
 
   return (
     <div
       className={[
-        "rounded-2xl",
-        paddingClass,
         hover ? "transition-shadow hover:shadow-md" : "",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
       style={{
-        backgroundColor: "var(--card)",
-        color: "var(--card-foreground)",
+        backgroundColor: "var(--surface)",
+        color: "var(--text)",
         border: "1px solid var(--border)",
+        borderRadius: "var(--card-radius)",
         boxShadow: "var(--shadow-card)",
+        padding: paddingStyles[padding],
       }}
     >
       {children}
@@ -50,7 +60,7 @@ export function CardHeader({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={`mb-4 ${className}`}>{children}</div>;
+  return <div className={className} style={{ marginBottom: "var(--space-4)" }}>{children}</div>;
 }
 
 export function CardTitle({
@@ -62,8 +72,12 @@ export function CardTitle({
 }) {
   return (
     <h3
-      className={`text-h2 ${className}`}
-      style={{ color: "var(--text)" }}
+      className={className}
+      style={{ 
+        color: "var(--text)",
+        fontSize: "var(--text-h2)",
+        fontWeight: "var(--text-h2-weight)",
+      }}
     >
       {children}
     </h3>
@@ -78,7 +92,14 @@ export function CardDescription({
   className?: string;
 }) {
   return (
-    <p className={`mt-1 text-meta ${className}`}>
+    <p 
+      className={className}
+      style={{ 
+        marginTop: "var(--space-1)",
+        fontSize: "var(--text-meta)",
+        color: "var(--text-secondary)",
+      }}
+    >
       {children}
     </p>
   );
@@ -96,7 +117,14 @@ export function CardContent({
 
 export function CardFooter({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`mt-4 pt-4 border-t flex items-center gap-2 ${className}`} style={{ borderColor: "var(--border)" }}>
+    <div 
+      className={`flex items-center gap-2 ${className}`} 
+      style={{ 
+        marginTop: "var(--space-4)",
+        paddingTop: "var(--space-4)",
+        borderTop: "1px solid var(--border)",
+      }}
+    >
       {children}
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { ReactNode } from "react";
 import BottomNav from "@/components/BottomNav";
 import { TabContainer, TabPanel } from "@/components/PersistentTabs";
 import dynamic from "next/dynamic";
@@ -10,6 +11,53 @@ const OverviewPage = dynamic(() => import("@/app/(app)/overview/page"), { ssr: f
 const ActivityPage = dynamic(() => import("@/app/(app)/activity/page"), { ssr: false });
 const InsightsPage = dynamic(() => import("@/app/(app)/insights/page"), { ssr: false });
 const LogPage = dynamic(() => import("@/app/(app)/log/page"), { ssr: false });
+
+/**
+ * AppShell - Unified shell with:
+ * - Consistent background gradient
+ * - Safe-area padding
+ * - TopBar behavior
+ * - Bottom navigation
+ * 
+ * Design principles:
+ * - 16px page horizontal padding
+ * - No thick teal band at top
+ * - Background gradient never clashes with readable content
+ */
+
+interface TopBarProps {
+  left?: ReactNode;
+  right?: ReactNode;
+}
+
+function TopBar({ left, right }: TopBarProps) {
+  return (
+    <header
+      className="sticky top-0 z-40 flex items-center justify-between safe-area-inset-top"
+      style={{
+        minHeight: "var(--topbar-height)",
+        padding: "0 var(--page-padding)",
+        backgroundColor: "transparent",
+      }}
+    >
+      <div className="flex items-center gap-2">
+        {left || (
+          <span 
+            className="text-lg font-semibold" 
+            style={{ color: "var(--text)", letterSpacing: "-0.01em" }}
+          >
+            TallyUp
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {right}
+      </div>
+    </header>
+  );
+}
+
+export { TopBar };
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -21,19 +69,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     pathname?.startsWith("/insights/") || pathname?.startsWith("/log/");
 
   return (
-    <div className="min-h-screen bg-app" style={{ color: "var(--text)" }}>
+    <div 
+      className="min-h-screen safe-area-inset-top" 
+      style={{ 
+        background: "var(--bg-full)",
+        color: "var(--text)",
+      }}
+    >
       <div
-        className="mx-auto max-w-md px-4 pt-6 pb-28"
-        style={{ minHeight: "calc(100vh - 84px)", position: "relative" }}
+        className="mx-auto"
+        style={{
+          maxWidth: "var(--content-max-width)",
+          paddingLeft: "var(--page-padding)",
+          paddingRight: "var(--page-padding)",
+          paddingBottom: "calc(var(--bottomnav-height) + 24px)",
+          minHeight: "100vh",
+        }}
       >
-        {/* Minimal header */}
-        <header className="mb-6 flex items-center justify-between">
-          <h1 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-            TallyUp
-          </h1>
-        </header>
-
-        <main>
+        <main className="pt-4">
           {isMainTab ? (
             <TabContainer>
               <TabPanel tabId="overview">

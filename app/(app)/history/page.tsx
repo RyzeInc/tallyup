@@ -11,6 +11,7 @@ import ActivityTable from "@/components/activity/ActivityTable";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import EmptyState from "@/components/ui/EmptyState";
+import PageHeader from "@/components/ui/PageHeader";
 import { EntryType, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -266,44 +267,31 @@ export default function HistoryPage() {
     return sorted;
   }, [pages]);
 
-  const filterChip = (active: boolean) =>
-    `rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-      active
-        ? "bg-[var(--accent-subtle)] border-[var(--accent)]"
-        : "hover:bg-[var(--surface-subtle)]"
-    }`;
-
   return (
-    <div className="space-y-4 pb-4">
-      {/* Header Card */}
-      <div
-        className="rounded-2xl p-5"
-        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-h1" style={{ color: "var(--text)" }}>Activity</h1>
-            <p className="text-xs mt-0.5" style={{ color: "var(--text-secondary)" }}>All transactions</p>
-          </div>
-          <GlobalDateRangePicker showAllPresets />
-        </div>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      {/* Header with Date Picker */}
+      <PageHeader
+        title="Activity"
+        subtitle="All transactions"
+        rightSlot={<GlobalDateRangePicker showAllPresets />}
+        compact
+      />
 
       <SignedOut>
         <div
-          className="rounded-xl p-6 text-center"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--card-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--space-6)",
+            textAlign: "center",
+          }}
         >
-          <div className="text-meta mb-4" style={{ color: "var(--text-secondary)" }}>
+          <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
             Sign in to view your activity
-          </div>
+          </p>
           <SignInButton mode="modal">
-            <button
-              className="rounded-lg px-5 py-2.5 text-sm font-semibold"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              Sign in
-            </button>
+            <button className="btn-primary">Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
@@ -311,8 +299,15 @@ export default function HistoryPage() {
       <SignedIn>
         {/* Search Input */}
         <div
-          className="flex items-center gap-3 rounded-xl px-4 py-3"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--input-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--space-3) var(--space-4)",
+          }}
         >
           <Lucide.Search className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
           <input
@@ -321,101 +316,131 @@ export default function HistoryPage() {
             placeholder="Search transactions…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="flex-1 bg-transparent text-body outline-none placeholder:text-[var(--text-tertiary)]"
-            style={{ color: "var(--text)" }}
+            style={{
+              flex: 1,
+              backgroundColor: "transparent",
+              border: "none",
+              outline: "none",
+              fontSize: "var(--text-body)",
+              color: "var(--text)",
+            }}
           />
           {q && (
             <button
               onClick={() => setQ("")}
-              className="shrink-0 rounded-full p-1 transition-colors hover:bg-[var(--surface-subtle)]"
+              style={{
+                padding: "4px",
+                borderRadius: "var(--radius-full)",
+                cursor: "pointer",
+                backgroundColor: "transparent",
+                border: "none",
+              }}
             >
               <Lucide.X className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
             </button>
           )}
         </div>
 
-        {/* Filter Row: Type chips + Filters button */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Type segmented control */}
-          <button
-            onClick={() => setType("all")}
-            className={filterChip(type === "all")}
-            style={{
-              border: `1px solid ${type === "all" ? "var(--accent)" : "var(--border)"}`,
-              color: type === "all" ? "var(--accent)" : "var(--text)",
-            }}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setType("expense")}
-            className={filterChip(type === "expense")}
-            style={{
-              border: `1px solid ${type === "expense" ? "var(--accent)" : "var(--border)"}`,
-              color: type === "expense" ? "var(--accent)" : "var(--text)",
-            }}
-          >
-            <span className="flex items-center gap-1.5">
-              <Lucide.ArrowUpRight className="h-4 w-4" />
-              Spent
-            </span>
-          </button>
-          <button
-            onClick={() => setType("income")}
-            className={filterChip(type === "income")}
-            style={{
-              border: `1px solid ${type === "income" ? "var(--accent)" : "var(--border)"}`,
-              color: type === "income" ? "var(--accent)" : "var(--text)",
-            }}
-          >
-            <span className="flex items-center gap-1.5">
-              <Lucide.ArrowDownLeft className="h-4 w-4" />
-              Received
-            </span>
-          </button>
+        {/* Compact Filter Row */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+          {/* Type chips */}
+          {(["all", "expense", "income"] as const).map((t) => {
+            const isActive = type === t;
+            const label = t === "all" ? "All" : t === "expense" ? "Spent" : "Received";
+            const Icon = t === "expense" ? Lucide.ArrowUpRight : t === "income" ? Lucide.ArrowDownLeft : null;
+            return (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 14px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-meta)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "all 150ms ease",
+                  backgroundColor: isActive ? "var(--accent-subtle)" : "transparent",
+                  color: isActive ? "var(--primary)" : "var(--text)",
+                  border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
+                }}
+              >
+                {Icon && <Icon className="h-4 w-4" />}
+                {label}
+              </button>
+            );
+          })}
 
           {/* Review filter */}
           <button
             onClick={toggleReview}
-            className={filterChip(reviewOnly)}
             style={{
-              border: `1px solid ${reviewOnly ? "var(--warning)" : "var(--border)"}`,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              backgroundColor: reviewOnly ? "var(--warning-subtle)" : "transparent",
               color: reviewOnly ? "var(--warning)" : "var(--text)",
-              backgroundColor: reviewOnly ? "var(--warning-subtle)" : undefined,
+              border: reviewOnly ? "1px solid var(--warning)" : "1px solid var(--border)",
             }}
           >
-            <span className="flex items-center gap-1.5">
-              <Lucide.AlertCircle className="h-4 w-4" />
-              Needs review
-              {reviewCount > 0 && (
-                <span
-                  className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-                  style={{
-                    backgroundColor: "var(--warning)",
-                    color: "white",
-                  }}
-                >
-                  {reviewCount}
-                </span>
-              )}
-            </span>
+            <Lucide.AlertCircle className="h-4 w-4" />
+            Review
+            {reviewCount > 0 && (
+              <span
+                style={{
+                  padding: "2px 6px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  backgroundColor: "var(--warning)",
+                  color: "white",
+                }}
+              >
+                {reviewCount}
+              </span>
+            )}
           </button>
 
           {/* Spacer */}
-          <div className="flex-1" />
+          <div style={{ flex: 1 }} />
 
           {/* Filters button */}
           <button
             onClick={() => setFiltersOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
-            style={{ border: "1px solid var(--border)", color: "var(--text)" }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              backgroundColor: activeFilterCount > 0 ? "var(--accent-subtle)" : "transparent",
+              color: activeFilterCount > 0 ? "var(--primary)" : "var(--text)",
+              border: activeFilterCount > 0 ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
           >
             <Lucide.SlidersHorizontal className="h-4 w-4" />
             Filters
             {activeFilterCount > 0 && (
               <span
-                className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-                style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+                style={{
+                  padding: "2px 6px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  backgroundColor: "var(--primary)",
+                  color: "var(--primary-foreground)",
+                }}
               >
                 {activeFilterCount}
               </span>
@@ -425,13 +450,24 @@ export default function HistoryPage() {
 
         {/* Active filter pills */}
         {activeFilterCount > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
             {selectedCategories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => clearCategory(cat)}
-                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
-                style={{ backgroundColor: "var(--accent-subtle)", color: "var(--accent)" }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-micro)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  backgroundColor: "var(--accent-subtle)",
+                  color: "var(--primary)",
+                  border: "none",
+                }}
               >
                 {cat}
                 <Lucide.X className="h-3 w-3" />
@@ -441,8 +477,19 @@ export default function HistoryPage() {
               <button
                 key={tag}
                 onClick={() => clearTag(tag)}
-                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
-                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-micro)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  backgroundColor: "var(--surface-2)",
+                  color: "var(--text)",
+                  border: "none",
+                }}
               >
                 {tag}
                 <Lucide.X className="h-3 w-3" />
@@ -452,8 +499,19 @@ export default function HistoryPage() {
               <button
                 key={m}
                 onClick={() => clearMethod(m)}
-                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium"
-                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-micro)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  backgroundColor: "var(--surface-2)",
+                  color: "var(--text)",
+                  border: "none",
+                }}
               >
                 {m === "__unspecified__" ? "Unspecified" : m}
                 <Lucide.X className="h-3 w-3" />
@@ -461,16 +519,31 @@ export default function HistoryPage() {
             ))}
             {(minAmount || maxAmount) && (
               <span
-                className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium"
-                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "6px 12px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-micro)",
+                  fontWeight: 500,
+                  backgroundColor: "var(--surface-2)",
+                  color: "var(--text)",
+                }}
               >
                 {minAmount && maxAmount ? `$${minAmount} – $${maxAmount}` : minAmount ? `≥ $${minAmount}` : `≤ $${maxAmount}`}
               </span>
             )}
             <button
               onClick={clearAllFilters}
-              className="text-xs font-medium underline"
-              style={{ color: "var(--text-secondary)" }}
+              style={{
+                fontSize: "var(--text-micro)",
+                fontWeight: 500,
+                color: "var(--text-secondary)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
             >
               Clear all
             </button>
@@ -480,12 +553,17 @@ export default function HistoryPage() {
         {/* Results */}
         {pages.length === 0 && !pageResult ? (
           <div
-            className="rounded-xl p-8 text-center"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--card-radius)",
+              border: "1px solid var(--border)",
+              padding: "var(--space-8)",
+              textAlign: "center",
+            }}
           >
-            <div className="flex items-center justify-center gap-2 text-meta">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)" }}>
               <Lucide.Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-tertiary)" }} />
-              <span>Loading transactions…</span>
+              <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Loading transactions…</span>
             </div>
           </div>
         ) : allEntries.length === 0 ? (
@@ -494,7 +572,7 @@ export default function HistoryPage() {
             subtitle="No entries match your current filters."
           />
         ) : (
-          <div className="space-y-3">
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
             <ActivityTable
               entries={allEntries}
               onDelete={(id) => deleteEntry({ id })}
@@ -507,11 +585,22 @@ export default function HistoryPage() {
             />
 
             {nextCursor && (
-              <div className="text-center pt-2">
+              <div style={{ textAlign: "center", paddingTop: "var(--space-2)" }}>
                 <button
                   onClick={loadMore}
-                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
-                  style={{ border: "1px solid var(--border)", color: "var(--text)" }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "var(--space-2)",
+                    padding: "10px 16px",
+                    borderRadius: "var(--input-radius)",
+                    fontSize: "var(--text-meta)",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    backgroundColor: "transparent",
+                    color: "var(--text)",
+                    border: "1px solid var(--border)",
+                  }}
                 >
                   <Lucide.ChevronDown className="h-4 w-4" />
                   Load more
@@ -555,38 +644,70 @@ export default function HistoryPage() {
 
         {/* Filters Bottom Sheet */}
         {filtersOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 50,
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "center",
+            }}
+          >
             <div
-              className="absolute inset-0 bg-black/40"
+              style={{
+                position: "absolute",
+                inset: 0,
+                backgroundColor: "rgba(0, 0, 0, 0.4)",
+              }}
               onClick={() => setFiltersOpen(false)}
             />
             <div
-              className="relative w-full max-w-md animate-in slide-in-from-bottom-4 duration-200"
+              style={{
+                position: "relative",
+                width: "100%",
+                maxWidth: "28rem",
+              }}
             >
               <div
-                className="rounded-t-2xl border-t border-x p-4 pb-8 max-h-[85vh] overflow-y-auto"
-                style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                style={{
+                  borderTopLeftRadius: "var(--card-radius)",
+                  borderTopRightRadius: "var(--card-radius)",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderBottom: "none",
+                  padding: "var(--space-4)",
+                  paddingBottom: "var(--space-8)",
+                  maxHeight: "85vh",
+                  overflowY: "auto",
+                }}
               >
                 {/* Handle */}
-                <div className="flex justify-center mb-3">
-                  <div className="h-1 w-10 rounded-full" style={{ backgroundColor: "var(--border)" }} />
+                <div style={{ display: "flex", justifyContent: "center", marginBottom: "var(--space-3)" }}>
+                  <div style={{ height: 4, width: 40, borderRadius: "var(--radius-full)", backgroundColor: "var(--border)" }} />
                 </div>
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Filters</h2>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
+                  <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--text)" }}>Filters</h2>
                   <button
                     onClick={() => setFiltersOpen(false)}
-                    className="rounded-full p-2 transition-colors hover:bg-[var(--surface-subtle)]"
+                    style={{
+                      padding: "var(--space-2)",
+                      borderRadius: "var(--radius-full)",
+                      backgroundColor: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   >
                     <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
                   </button>
                 </div>
 
                 {/* Category filter */}
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Category</h3>
-                  <div className="flex flex-wrap gap-2">
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Category</h3>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                     {categoryOptions.map((cat) => {
                       const isSelected = selectedCategories.includes(cat);
                       return (
@@ -599,14 +720,15 @@ export default function HistoryPage() {
                               setSelectedCategories((prev) => [...prev, cat]);
                             }
                           }}
-                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                            isSelected
-                              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                              : "border hover:bg-[var(--surface-subtle)]"
-                          }`}
                           style={{
-                            borderColor: isSelected ? undefined : "var(--border)",
-                            color: isSelected ? undefined : "var(--text)",
+                            padding: "6px 12px",
+                            borderRadius: "var(--radius-full)",
+                            fontSize: "var(--text-micro)",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                            color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                            border: isSelected ? "none" : "1px solid var(--border)",
                           }}
                         >
                           {cat}
@@ -617,9 +739,9 @@ export default function HistoryPage() {
                 </div>
 
                 {/* Context Tags filter */}
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Context Tags</h3>
-                  <div className="flex flex-wrap gap-2">
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Context Tags</h3>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                     {CONTEXT_TAGS.map((tag) => {
                       const isSelected = selectedTags.includes(tag);
                       return (
@@ -632,14 +754,15 @@ export default function HistoryPage() {
                               setSelectedTags((prev) => [...prev, tag]);
                             }
                           }}
-                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                            isSelected
-                              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                              : "border hover:bg-[var(--surface-subtle)]"
-                          }`}
                           style={{
-                            borderColor: isSelected ? undefined : "var(--border)",
-                            color: isSelected ? undefined : "var(--text)",
+                            padding: "6px 12px",
+                            borderRadius: "var(--radius-full)",
+                            fontSize: "var(--text-micro)",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                            color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                            border: isSelected ? "none" : "1px solid var(--border)",
                           }}
                         >
                           {tag}
@@ -650,49 +773,67 @@ export default function HistoryPage() {
                 </div>
 
                 {/* Amount Range filter */}
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Amount Range</h3>
-                  <div className="grid grid-cols-2 gap-3">
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Amount Range</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
                     <div>
-                      <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>Min</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-tertiary)" }}>$</span>
+                      <label style={{ fontSize: "var(--text-micro)", display: "block", marginBottom: "4px", color: "var(--text-secondary)" }}>Min</label>
+                      <div style={{ position: "relative" }}>
+                        <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>$</span>
                         <input
                           type="number"
                           value={minAmount}
                           onChange={(e) => setMinAmount(e.target.value)}
                           placeholder="0"
-                          className="w-full rounded-lg border pl-7 pr-3 py-2 text-sm"
-                          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+                          style={{
+                            width: "100%",
+                            paddingLeft: "28px",
+                            paddingRight: "12px",
+                            padding: "10px 12px 10px 28px",
+                            borderRadius: "var(--radius-md)",
+                            border: "1px solid var(--border)",
+                            backgroundColor: "var(--surface-2)",
+                            fontSize: "var(--text-meta)",
+                            color: "var(--text)",
+                            outline: "none",
+                          }}
                         />
                       </div>
                     </div>
                     <div>
-                      <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>Max</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-tertiary)" }}>$</span>
+                      <label style={{ fontSize: "var(--text-micro)", display: "block", marginBottom: "4px", color: "var(--text-secondary)" }}>Max</label>
+                      <div style={{ position: "relative" }}>
+                        <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "var(--text-meta)", color: "var(--text-tertiary)" }}>$</span>
                         <input
                           type="number"
                           value={maxAmount}
                           onChange={(e) => setMaxAmount(e.target.value)}
                           placeholder="Any"
-                          className="w-full rounded-lg border pl-7 pr-3 py-2 text-sm"
-                          style={{ borderColor: "var(--border)", backgroundColor: "var(--input)", color: "var(--text)" }}
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px 10px 28px",
+                            borderRadius: "var(--radius-md)",
+                            border: "1px solid var(--border)",
+                            backgroundColor: "var(--surface-2)",
+                            fontSize: "var(--text-meta)",
+                            color: "var(--text)",
+                            outline: "none",
+                          }}
                         />
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Method/Account filter - data-driven from user's entries */}
-                <div className="mb-4">
-                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Method / Account</h3>
+                {/* Method/Account filter */}
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Method / Account</h3>
                   {methodOptions.length === 0 ? (
-                    <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                    <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
                       No methods found in your entries
                     </p>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                       {methodOptions.map((method) => {
                         const isUnspecified = method === "__unspecified__";
                         const label = isUnspecified ? "Unspecified" : method;
@@ -707,14 +848,15 @@ export default function HistoryPage() {
                                 setSelectedMethods((prev) => [...prev, method]);
                               }
                             }}
-                            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                              isSelected
-                                ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                                : "border hover:bg-[var(--surface-subtle)]"
-                            }`}
                             style={{
-                              borderColor: isSelected ? undefined : "var(--border)",
-                              color: isSelected ? undefined : "var(--text)",
+                              padding: "6px 12px",
+                              borderRadius: "var(--radius-full)",
+                              fontSize: "var(--text-micro)",
+                              fontWeight: 500,
+                              cursor: "pointer",
+                              backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                              color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                              border: isSelected ? "none" : "1px solid var(--border)",
                               fontStyle: isUnspecified ? "italic" : undefined,
                             }}
                           >
@@ -727,39 +869,43 @@ export default function HistoryPage() {
                 </div>
 
                 {/* Sort */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Sort by</h3>
-                  <div className="grid grid-cols-2 gap-2">
+                <div style={{ marginBottom: "var(--space-6)" }}>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Sort by</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
                     {[
                       { key: "newest", label: "Newest" },
                       { key: "oldest", label: "Oldest" },
                       { key: "highest", label: "Highest" },
                       { key: "lowest", label: "Lowest" },
-                    ].map((opt) => (
-                      <button
-                        key={opt.key}
-                        onClick={() => setSortBy(opt.key as any)}
-                        className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                          sortBy === opt.key
-                            ? "bg-[var(--accent-subtle)] border-[var(--accent)]"
-                            : "hover:bg-[var(--surface-subtle)]"
-                        }`}
-                        style={{
-                          border: `1px solid ${sortBy === opt.key ? "var(--accent)" : "var(--border)"}`,
-                          color: sortBy === opt.key ? "var(--accent)" : "var(--text)",
-                        }}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
+                    ].map((opt) => {
+                      const isActive = sortBy === opt.key;
+                      return (
+                        <button
+                          key={opt.key}
+                          onClick={() => setSortBy(opt.key as any)}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "var(--radius-md)",
+                            fontSize: "var(--text-meta)",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                            backgroundColor: isActive ? "var(--accent-subtle)" : "transparent",
+                            color: isActive ? "var(--primary)" : "var(--text)",
+                            border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 {/* Apply button */}
                 <button
                   onClick={() => setFiltersOpen(false)}
-                  className="w-full rounded-lg py-3 text-sm font-semibold"
-                  style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+                  className="btn-primary"
+                  style={{ width: "100%" }}
                 >
                   Apply Filters
                 </button>
@@ -771,8 +917,18 @@ export default function HistoryPage() {
                       clearAllFilters();
                       setFiltersOpen(false);
                     }}
-                    className="w-full text-center text-meta font-medium py-2 mt-2"
-                    style={{ color: "var(--text-secondary)" }}
+                    style={{
+                      width: "100%",
+                      textAlign: "center",
+                      fontSize: "var(--text-meta)",
+                      fontWeight: 500,
+                      padding: "var(--space-2)",
+                      marginTop: "var(--space-2)",
+                      color: "var(--text-secondary)",
+                      backgroundColor: "transparent",
+                      border: "none",
+                      cursor: "pointer",
+                    }}
                   >
                     Clear all filters
                   </button>

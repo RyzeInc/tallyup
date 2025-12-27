@@ -11,21 +11,22 @@ export default function Skeleton({
   width,
   height,
 }: SkeletonProps) {
-  const baseClass = "bg-[var(--surface-subtle)] animate-shimmer";
-  
-  const variantClass = {
-    text: "h-4 rounded",
-    circular: "rounded-full",
-    rectangular: "rounded-lg",
+  const variantStyles: React.CSSProperties = {
+    text: { height: "16px", borderRadius: "var(--radius-sm)" },
+    circular: { borderRadius: "var(--radius-full)" },
+    rectangular: { borderRadius: "var(--radius-md)" },
   }[variant];
 
-  const style: React.CSSProperties = {};
+  const style: React.CSSProperties = {
+    backgroundColor: "var(--surface-2)",
+    ...variantStyles,
+  };
   if (width) style.width = typeof width === "number" ? `${width}px` : width;
   if (height) style.height = typeof height === "number" ? `${height}px` : height;
 
   return (
     <div
-      className={`${baseClass} ${variantClass} ${className}`}
+      className={`animate-pulse ${className}`}
       style={style}
       aria-hidden="true"
     />
@@ -35,8 +36,16 @@ export default function Skeleton({
 // Common skeleton patterns
 export function SkeletonCard({ className = "" }: { className?: string }) {
   return (
-    <div className={`rounded-xl border bg-[var(--card)] p-4 ${className}`} style={{ borderColor: "var(--border)" }}>
-      <div className="space-y-3">
+    <div
+      className={className}
+      style={{
+        borderRadius: "var(--card-radius)",
+        backgroundColor: "var(--surface)",
+        border: "1px solid var(--border)",
+        padding: "var(--space-4)",
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
         <Skeleton width="40%" height={16} />
         <Skeleton width="100%" height={12} />
         <Skeleton width="60%" height={12} />
@@ -47,9 +56,12 @@ export function SkeletonCard({ className = "" }: { className?: string }) {
 
 export function SkeletonRow({ className = "" }: { className?: string }) {
   return (
-    <div className={`flex items-center gap-4 py-3 ${className}`}>
+    <div
+      className={className}
+      style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", padding: "var(--space-3) 0" }}
+    >
       <Skeleton variant="circular" width={40} height={40} />
-      <div className="flex-1 space-y-2">
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
         <Skeleton width="50%" height={14} />
         <Skeleton width="30%" height={12} />
       </div>
@@ -60,11 +72,27 @@ export function SkeletonRow({ className = "" }: { className?: string }) {
 
 export function SkeletonTable({ rows = 5, className = "" }: { rows?: number; className?: string }) {
   return (
-    <div className={`rounded-xl border bg-[var(--card)] divide-y ${className}`} style={{ borderColor: "var(--border)" }}>
+    <div
+      className={className}
+      style={{
+        borderRadius: "var(--card-radius)",
+        backgroundColor: "var(--surface)",
+        border: "1px solid var(--border)",
+      }}
+    >
       {[...Array(rows)].map((_, i) => (
-        <div key={i} className="flex items-center gap-4 px-4 py-4">
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-4)",
+            padding: "var(--space-4)",
+            borderTop: i > 0 ? "1px solid var(--border)" : undefined,
+          }}
+        >
           <Skeleton width={80} height={14} />
-          <Skeleton className="flex-1" height={14} />
+          <Skeleton style={{ flex: 1 }} height={14} />
           <Skeleton width={60} height={14} />
         </div>
       ))}

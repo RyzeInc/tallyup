@@ -2,76 +2,57 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-type ThemeMode = "system" | "light" | "dark";
+/**
+ * TallyUp Theme System
+ * 
+ * Light-first design stance:
+ * - Default = Light mode (no automatic dark mode on system preference)
+ * - Dark mode available as "Dim (Beta)" in Settings → Appearance
+ * - Cards always white, text always crisp for finance app trust
+ */
+
+type ThemeMode = "light" | "dim";
 
 const ThemeContext = createContext<{
-  theme: "light" | "dark";
-  mode: ThemeMode;
-  setMode: (mode: ThemeMode) => void;
+  theme: "light" | "dim";
+  setTheme: (mode: ThemeMode) => void;
 } | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // mode = user preference (system, light, dark)
-  // theme = resolved actual theme (light, dark)
-  const [mode, setModeState] = useState<ThemeMode>("system");
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // Light-first: default to light, never auto-switch to dark
+  const [theme, setThemeState] = useState<ThemeMode>("light");
 
-  // On mount, read saved preference
+  // On mount, read saved preference (but only allow dim if explicitly set)
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("tallyup.themeMode") as ThemeMode | null;
-      if (saved === "light" || saved === "dark" || saved === "system") {
-        setModeState(saved);
+      const saved = localStorage.getItem("tallyup.theme") as ThemeMode | null;
+      if (saved === "dim") {
+        setThemeState("dim");
       }
+      // Always default to light otherwise
     } catch {}
   }, []);
 
-  // Resolve actual theme based on mode and system preference
+  // Apply theme to document
   useEffect(() => {
-    function resolveTheme() {
-      if (mode === "system") {
-        const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-        return prefersDark ? "dark" : "light";
-      }
-      return mode;
-    }
-
-    const resolved = resolveTheme();
-    setTheme(resolved);
-
-    // Apply to document
-    if (resolved === "dark") {
-      document.documentElement.classList.add("dark");
+    if (theme === "dim") {
+      document.documentElement.classList.add("dim");
+      document.documentElement.classList.remove("light");
     } else {
-      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.remove("dim");
+      document.documentElement.classList.add("light");
     }
+  }, [theme]);
 
-    // Listen for system preference changes when in system mode
-    if (mode === "system") {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = (e: MediaQueryListEvent) => {
-        const newTheme = e.matches ? "dark" : "light";
-        setTheme(newTheme);
-        if (newTheme === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-      };
-      mediaQuery.addEventListener("change", handler);
-      return () => mediaQuery.removeEventListener("change", handler);
-    }
-  }, [mode]);
-
-  function setMode(newMode: ThemeMode) {
-    setModeState(newMode);
+  function setTheme(newTheme: ThemeMode) {
+    setThemeState(newTheme);
     try {
-      localStorage.setItem("tallyup.themeMode", newMode);
+      localStorage.setItem("tallyup.theme", newTheme);
     } catch {}
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, mode, setMode }}>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -82,3 +63,9 @@ export function useTheme() {
   if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
   return ctx;
 }
+
+// Appearance options for Settings page
+export const APPEARANCE_OPTIONS: { value: ThemeMode; label: string; description: string }[] = [
+  { value: "light", label: "Light", description: "Default, optimized for readability" },
+  { value: "dim", label: "Dim (Beta)", description: "Reduced brightness for low-light" },
+];

@@ -5,6 +5,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
+import PageHeader from "@/components/ui/PageHeader";
 import { centsToDollars, CONTEXT_TAGS } from "@/components/utils";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
@@ -719,88 +720,108 @@ export default function InsightsPage() {
   // Render
   // ─────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4 pb-24">
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", paddingBottom: "96px" }}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--text)" }}>
-            Dashboard
-          </h1>
-          <p className="text-sm mt-0.5" style={{ color: "var(--text-secondary)" }}>
-            {label} at a glance
-          </p>
-        </div>
-        <GlobalDateRangePicker showAllPresets />
-      </div>
+      <PageHeader
+        title="Insights"
+        subtitle={`${label} at a glance`}
+        rightSlot={<GlobalDateRangePicker showAllPresets />}
+        compact
+      />
 
       <SignedOut>
         <div
-          className="rounded-xl border p-6 text-center"
-          style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+          style={{
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--card-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--space-6)",
+            textAlign: "center",
+          }}
         >
-          <div className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-            Sign in to view your dashboard
-          </div>
+          <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
+            Sign in to view your insights
+          </p>
           <SignInButton mode="modal">
-            <button
-              className="rounded-lg px-4 py-2.5 text-sm font-semibold"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              Sign in
-            </button>
+            <button className="btn-primary">Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
 
       <SignedIn>
         {!entries ? (
-          <div className="space-y-3">
-            <div className="h-24 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
-            <div className="h-48 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
-            <div className="h-64 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+            <div style={{ height: "96px", borderRadius: "var(--card-radius)", backgroundColor: "var(--surface-2)" }} className="animate-pulse" />
+            <div style={{ height: "192px", borderRadius: "var(--card-radius)", backgroundColor: "var(--surface-2)" }} className="animate-pulse" />
+            <div style={{ height: "256px", borderRadius: "var(--card-radius)", backgroundColor: "var(--surface-2)" }} className="animate-pulse" />
           </div>
         ) : (
           <>
             {/* ─────────────────────────────────────────────────────────────
                 Global Filters Bar
             ───────────────────────────────────────────────────────────── */}
-            <div className="space-y-3">
-              {/* Type filter */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+              {/* Type filter - Segmented Control */}
               <div
-                className="grid grid-cols-3 gap-1 p-1 rounded-xl"
-                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: "4px",
+                  padding: "4px",
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--input-radius)",
+                  border: "1px solid var(--border)",
+                }}
               >
-                {(["all", "income", "expense"] as TypeFilter[]).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => setTypeFilter(type)}
-                    className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                      typeFilter === type ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : ""
-                    }`}
-                    style={{ color: typeFilter === type ? undefined : "var(--text)" }}
-                  >
-                    {type === "all" && <Lucide.LayoutGrid className="h-4 w-4" />}
-                    {type === "income" && <Lucide.ArrowDownLeft className="h-4 w-4" />}
-                    {type === "expense" && <Lucide.ArrowUpRight className="h-4 w-4" />}
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </button>
-                ))}
+                {(["all", "income", "expense"] as TypeFilter[]).map((t) => {
+                  const isActive = typeFilter === t;
+                  const Icon = t === "income" ? Lucide.ArrowDownLeft : t === "expense" ? Lucide.ArrowUpRight : Lucide.LayoutGrid;
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTypeFilter(t)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        padding: "10px 12px",
+                        borderRadius: "calc(var(--input-radius) - 4px)",
+                        fontSize: "var(--text-meta)",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        border: "none",
+                        transition: "all 150ms ease",
+                        backgroundColor: isActive ? "var(--primary)" : "transparent",
+                        color: isActive ? "var(--primary-foreground)" : "var(--text)",
+                      }}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Tag lens chips */}
-              <div className="flex flex-wrap gap-1.5">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                 {CONTEXT_TAGS.map((tag) => {
                   const isSelected = selectedTags.includes(tag);
                   return (
                     <button
                       key={tag}
                       onClick={() => toggleTag(tag)}
-                      className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
-                        isSelected
-                          ? "bg-[var(--accent)] text-[var(--accent-foreground)] border-transparent"
-                          : "bg-[var(--surface)] border-[var(--border)]"
-                      }`}
-                      style={{ color: isSelected ? undefined : "var(--text-secondary)" }}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "var(--radius-full)",
+                        fontSize: "var(--text-micro)",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        transition: "all 150ms ease",
+                        backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                        color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
+                        border: isSelected ? "none" : "1px solid var(--border)",
+                      }}
                     >
                       {tag}
                     </button>
@@ -809,8 +830,17 @@ export default function InsightsPage() {
                 {selectedTags.length > 0 && (
                   <button
                     onClick={() => setSelectedTags([])}
-                    className="rounded-full px-2 py-1.5 text-xs font-medium transition-colors"
-                    style={{ color: "var(--text-tertiary)" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "6px",
+                      borderRadius: "var(--radius-full)",
+                      cursor: "pointer",
+                      backgroundColor: "transparent",
+                      border: "none",
+                      color: "var(--text-tertiary)",
+                    }}
                   >
                     <Lucide.X className="h-3.5 w-3.5" />
                   </button>
@@ -821,16 +851,22 @@ export default function InsightsPage() {
             {/* ─────────────────────────────────────────────────────────────
                 A. "This Period At a Glance" - KPI Tiles
             ───────────────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 gap-3">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
               {/* Income */}
-              <div className="relative">
+              <div style={{ position: "relative" }}>
                 <Link
                   href="/activity?type=income"
-                  className="block rounded-xl border p-3 transition-colors hover:opacity-90"
-                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                  style={{
+                    display: "block",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--card-radius)",
+                    border: "1px solid var(--border)",
+                    padding: "var(--space-3)",
+                    textDecoration: "none",
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
                       Income
                     </div>
                     <button
@@ -838,21 +874,32 @@ export default function InsightsPage() {
                         e.preventDefault();
                         setActiveTooltip(activeTooltip === "income" ? null : "income");
                       }}
-                      className="p-0.5 rounded hover:bg-[var(--surface-subtle)]"
+                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
                     >
                       <Lucide.Info className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
                     </button>
                   </div>
                   <div
-                    className="mt-1 text-xl font-semibold tabular-nums"
-                    style={{ color: "var(--success)", fontFeatureSettings: "'tnum' 1" }}
+                    style={{
+                      marginTop: "4px",
+                      fontSize: "var(--text-xl)",
+                      fontWeight: 600,
+                      color: "var(--success)",
+                      fontFeatureSettings: "'tnum' 1",
+                    }}
                   >
                     {centsToDollars(computed.income)}
                   </div>
                   {prevEntries && (
                     <div
-                      className="text-[10px] mt-1 flex items-center gap-1"
-                      style={{ color: deltas.income.direction === "up" ? "var(--success)" : deltas.income.direction === "down" ? "var(--danger)" : "var(--text-tertiary)" }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "var(--text-micro)",
+                        marginTop: "4px",
+                        color: deltas.income.direction === "up" ? "var(--success)" : deltas.income.direction === "down" ? "var(--danger)" : "var(--text-tertiary)",
+                      }}
                     >
                       {deltas.income.direction === "up" && <Lucide.TrendingUp className="h-3 w-3" />}
                       {deltas.income.direction === "down" && <Lucide.TrendingDown className="h-3 w-3" />}
@@ -866,9 +913,9 @@ export default function InsightsPage() {
                   onClose={() => setActiveTooltip(null)}
                   title="Income"
                 >
-                  <div className="space-y-1">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <div>Sum of all income transactions in period</div>
-                    <div className="font-medium" style={{ color: "var(--text)" }}>
+                    <div style={{ fontWeight: 500, color: "var(--text)" }}>
                       {prevLabel}: {centsToDollars(prevComputed.income)}
                     </div>
                   </div>
@@ -876,14 +923,20 @@ export default function InsightsPage() {
               </div>
 
               {/* Expenses */}
-              <div className="relative">
+              <div style={{ position: "relative" }}>
                 <Link
                   href="/activity?type=expense"
-                  className="block rounded-xl border p-3 transition-colors hover:opacity-90"
-                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                  style={{
+                    display: "block",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--card-radius)",
+                    border: "1px solid var(--border)",
+                    padding: "var(--space-3)",
+                    textDecoration: "none",
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
                       Expenses
                     </div>
                     <button
@@ -891,21 +944,32 @@ export default function InsightsPage() {
                         e.preventDefault();
                         setActiveTooltip(activeTooltip === "expenses" ? null : "expenses");
                       }}
-                      className="p-0.5 rounded hover:bg-[var(--surface-subtle)]"
+                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
                     >
                       <Lucide.Info className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
                     </button>
                   </div>
                   <div
-                    className="mt-1 text-xl font-semibold tabular-nums"
-                    style={{ color: "var(--danger)", fontFeatureSettings: "'tnum' 1" }}
+                    style={{
+                      marginTop: "4px",
+                      fontSize: "var(--text-xl)",
+                      fontWeight: 600,
+                      color: "var(--danger)",
+                      fontFeatureSettings: "'tnum' 1",
+                    }}
                   >
                     {centsToDollars(computed.expense)}
                   </div>
                   {prevEntries && (
                     <div
-                      className="text-[10px] mt-1 flex items-center gap-1"
-                      style={{ color: deltas.expense.direction === "down" ? "var(--success)" : deltas.expense.direction === "up" ? "var(--danger)" : "var(--text-tertiary)" }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "var(--text-micro)",
+                        marginTop: "4px",
+                        color: deltas.expense.direction === "down" ? "var(--success)" : deltas.expense.direction === "up" ? "var(--danger)" : "var(--text-tertiary)",
+                      }}
                     >
                       {deltas.expense.direction === "up" && <Lucide.TrendingUp className="h-3 w-3" />}
                       {deltas.expense.direction === "down" && <Lucide.TrendingDown className="h-3 w-3" />}
@@ -919,9 +983,9 @@ export default function InsightsPage() {
                   onClose={() => setActiveTooltip(null)}
                   title="Expenses"
                 >
-                  <div className="space-y-1">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                     <div>Sum of all expense transactions in period</div>
-                    <div className="font-medium" style={{ color: "var(--text)" }}>
+                    <div style={{ fontWeight: 500, color: "var(--text)" }}>
                       {prevLabel}: {centsToDollars(prevComputed.expense)}
                     </div>
                   </div>
@@ -929,14 +993,20 @@ export default function InsightsPage() {
               </div>
 
               {/* Net */}
-              <div className="relative">
+              <div style={{ position: "relative" }}>
                 <Link
                   href="/activity"
-                  className="block rounded-xl border p-3 transition-colors hover:opacity-90"
-                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                  style={{
+                    display: "block",
+                    backgroundColor: "var(--surface)",
+                    borderRadius: "var(--card-radius)",
+                    border: "1px solid var(--border)",
+                    padding: "var(--space-3)",
+                    textDecoration: "none",
+                  }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
                       Net
                     </div>
                     <button
@@ -944,21 +1014,32 @@ export default function InsightsPage() {
                         e.preventDefault();
                         setActiveTooltip(activeTooltip === "net" ? null : "net");
                       }}
-                      className="p-0.5 rounded hover:bg-[var(--surface-subtle)]"
+                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
                     >
                       <Lucide.Info className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
                     </button>
                   </div>
                   <div
-                    className="mt-1 text-xl font-semibold tabular-nums"
-                    style={{ color: computed.net >= 0 ? "var(--success)" : "var(--danger)", fontFeatureSettings: "'tnum' 1" }}
+                    style={{
+                      marginTop: "4px",
+                      fontSize: "var(--text-xl)",
+                      fontWeight: 600,
+                      color: computed.net >= 0 ? "var(--success)" : "var(--danger)",
+                      fontFeatureSettings: "'tnum' 1",
+                    }}
                   >
                     {computed.net >= 0 ? "+" : ""}{centsToDollars(computed.net)}
                   </div>
                   {prevEntries && (
                     <div
-                      className="text-[10px] mt-1 flex items-center gap-1"
-                      style={{ color: deltas.net.direction === "up" ? "var(--success)" : deltas.net.direction === "down" ? "var(--danger)" : "var(--text-tertiary)" }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontSize: "var(--text-micro)",
+                        marginTop: "4px",
+                        color: deltas.net.direction === "up" ? "var(--success)" : deltas.net.direction === "down" ? "var(--danger)" : "var(--text-tertiary)",
+                      }}
                     >
                       {deltas.net.direction === "up" && <Lucide.TrendingUp className="h-3 w-3" />}
                       {deltas.net.direction === "down" && <Lucide.TrendingDown className="h-3 w-3" />}

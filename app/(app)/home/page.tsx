@@ -7,19 +7,29 @@ import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
+import PageHeader from "@/components/ui/PageHeader";
+
+/**
+ * Home Tab - Clean, confident first impression
+ * 
+ * Structure:
+ * 1. Compact time range selector in header
+ * 2. Balance Summary Card (Net as hero, Income/Expenses below)
+ * 3. Quick Log row (Spent/Received buttons)
+ * 4. Recent transactions grouped by date
+ */
 
 // Home-specific time scopes (Option C - Locked but Switchable)
 type HomeScope = "this-month" | "last-month" | "this-week" | "last-week" | "last-90-days";
 
-const SCOPE_OPTIONS: { key: HomeScope; label: string }[] = [
-  { key: "this-month", label: "This Month" },
-  { key: "last-month", label: "Last Month" },
-  { key: "this-week", label: "This Week" },
-  { key: "last-week", label: "Last Week" },
-  { key: "last-90-days", label: "Last 90 Days" },
+const SCOPE_OPTIONS: { key: HomeScope; label: string; short: string }[] = [
+  { key: "this-month", label: "This Month", short: "This Month" },
+  { key: "last-month", label: "Last Month", short: "Last Month" },
+  { key: "this-week", label: "This Week", short: "This Week" },
+  { key: "last-week", label: "Last Week", short: "Last Week" },
+  { key: "last-90-days", label: "Last 90 Days", short: "90 Days" },
 ];
 
 function getScopeDates(scope: HomeScope): { startDate: number; endDate: number; label: string } {
@@ -61,37 +71,6 @@ function getScopeDates(scope: HomeScope): { startDate: number; endDate: number; 
   }
 }
 
-function getTimeAwareness(scope: HomeScope): string {
-  const now = new Date();
-  const { startDate, endDate } = getScopeDates(scope);
-
-  // Calculate days info based on scope
-  if (scope === "this-month") {
-    const dayOfMonth = now.getDate();
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const remaining = daysInMonth - dayOfMonth;
-    return `Day ${dayOfMonth} of ${daysInMonth} · ${remaining} day${remaining !== 1 ? "s" : ""} remaining`;
-  }
-
-  if (scope === "this-week") {
-    const dayOfWeek = now.getDay();
-    const dayNum = dayOfWeek === 0 ? 7 : dayOfWeek; // Monday = 1, Sunday = 7
-    const remaining = 7 - dayNum;
-    return `Day ${dayNum} of 7 · ${remaining} day${remaining !== 1 ? "s" : ""} remaining`;
-  }
-
-  if (scope === "last-month" || scope === "last-week") {
-    const days = Math.round((endDate - startDate) / (24 * 60 * 60 * 1000));
-    return `${days} days · Completed period`;
-  }
-
-  if (scope === "last-90-days") {
-    return "Rolling 90-day window";
-  }
-
-  return "";
-}
-
 function getLastTransactionText(lastDate?: number): string | null {
   if (!lastDate) return null;
   
@@ -100,18 +79,121 @@ function getLastTransactionText(lastDate?: number): string | null {
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
 
-  if (lastDate >= todayStart) return "Last transaction: Today";
-  if (lastDate >= yesterdayStart) return "Last transaction: Yesterday";
+  if (lastDate >= todayStart) return "Last entry: Today";
+  if (lastDate >= yesterdayStart) return "Last entry: Yesterday";
 
   const daysAgo = Math.floor((todayStart - lastDate) / (24 * 60 * 60 * 1000));
-  if (daysAgo < 7) return `Last transaction: ${daysAgo} days ago`;
+  if (daysAgo < 7) return `Last entry: ${daysAgo} days ago`;
 
-  return `Last transaction: ${txDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+  return `Last entry: ${txDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
+// Group entries by date label (Today, Yesterday, Dec 24, etc.)
+function groupEntriesByDate(entries: Entry[]): Map<string, Entry[]> {
+  const groups = new Map<string, Entry[]>();
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+
+  for (const entry of entries) {
+    let label: string;
+    if (entry.date >= todayStart) {
+      label = "Today";
+    } else if (entry.date >= yesterdayStart) {
+      label = "Yesterday";
+    } else {
+      const d = new Date(entry.date);
+      label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    }
+
+    if (!groups.has(label)) {
+      groups.set(label, []);
+    }
+    groups.get(label)!.push(entry);
+  }
+
+  return groups;
+}
+
+// Time Range Selector (compact dropdown-style)
+function TimeRangeSelector({ 
+  scope, 
+  onScopeChange 
+}: { 
+  scope: HomeScope; 
+  onScopeChange: (s: HomeScope) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = SCOPE_OPTIONS.find(o => o.key === scope)!;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+        style={{
+          backgroundColor: "var(--surface)",
+          border: "1px solid var(--border)",
+          color: "var(--text)",
+          minHeight: 36,
+        }}
+      >
+        {current.short}
+        <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
+      </button>
+
+      {open && (
+        <>
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setOpen(false)}
+          />
+          <div
+            className="absolute right-0 top-full mt-1 z-20 py-1 min-w-[140px] rounded-xl shadow-lg"
+            style={{
+              backgroundColor: "var(--surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {SCOPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => {
+                  onScopeChange(opt.key);
+                  setOpen(false);
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-[var(--surface-2)]"
+                style={{
+                  color: opt.key === scope ? "var(--primary)" : "var(--text)",
+                  backgroundColor: opt.key === scope ? "var(--accent-subtle)" : "transparent",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+type Entry = {
+  _id: string;
+  type: "expense" | "income";
+  amountCents: number;
+  date: number;
+  category?: string;
+  bucket?: string;
+  note?: string;
+  merchant?: string;
+  tags?: string[];
+  excludeFromTotals?: boolean;
+  methodOrAccount?: string;
+};
+
 export default function HomePage() {
-  const router = useRouter();
-  const { activeTab } = useTabs();
+  const { activeTab, setActiveTab } = useTabs();
   
   // Home scope always defaults to "this-month" - no persistence
   const [scope, setScope] = useState<HomeScope>("this-month");
@@ -127,21 +209,6 @@ export default function HomePage() {
   // Edit modal state
   const [editEntry, setEditEntry] = useState<Entry | null>(null);
 
-  // Entry type for type safety
-  type Entry = {
-    _id: string;
-    type: "expense" | "income";
-    amountCents: number;
-    date: number;
-    category?: string;
-    bucket?: string;
-    note?: string;
-    merchant?: string;
-    tags?: string[];
-    excludeFromTotals?: boolean;
-    methodOrAccount?: string;
-  };
-
   // Fetch entries for selected scope
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 500 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 200 }) as Entry[] | undefined;
@@ -153,437 +220,494 @@ export default function HomePage() {
     let income = 0;
     let expense = 0;
     let lastTransactionDate: number | undefined;
-    const categorySpend = new Map<string, number>();
 
     for (const e of entries) {
       if (e.excludeFromTotals) continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
 
-      // Track last transaction
       if (!lastTransactionDate || e.date > lastTransactionDate) {
         lastTransactionDate = e.date;
-      }
-
-      // Track category spending for noteworthy insight
-      if (e.type === "expense") {
-        const cat = (e.category ?? e.bucket ?? "Uncategorized").trim() || "Uncategorized";
-        categorySpend.set(cat, (categorySpend.get(cat) ?? 0) + e.amountCents);
       }
     }
 
     const net = income - expense;
-
-    // Find largest single expense
-    let largestExpense: { amount: number; note?: string; category?: string } | null = null;
-    for (const e of entries) {
-      if (e.type === "expense" && !e.excludeFromTotals) {
-        if (!largestExpense || e.amountCents > largestExpense.amount) {
-          largestExpense = {
-            amount: e.amountCents,
-            note: e.note || e.merchant,
-            category: e.category ?? e.bucket,
-          };
-        }
-      }
-    }
-
-    // Find top category
-    let topCategory: { name: string; amount: number } | null = null;
-    for (const [name, amount] of categorySpend.entries()) {
-      if (!topCategory || amount > topCategory.amount) {
-        topCategory = { name, amount };
-      }
-    }
 
     return {
       income,
       expense,
       net,
       lastTransactionDate,
-      largestExpense,
-      topCategory,
-      totalExpenseCategories: categorySpend.size,
     };
   }, [entries]);
 
-  // Recent transactions (last 6)
+  // Recent transactions (last 10)
   const recentEntries = useMemo(() => {
     if (!entries) return [];
     return [...entries]
       .sort((a, b) => b.date - a.date)
-      .slice(0, 6);
+      .slice(0, 10);
   }, [entries]);
 
-  // Smart action chips
-  const actionChips = useMemo(() => {
-    const chips: { label: string; href: string; icon: React.ReactNode; count?: number }[] = [];
-    
-    // Review uncategorized
-    const reviewCount = inbox?.length ?? 0;
-    if (reviewCount > 0) {
-      chips.push({
-        label: `Review ${reviewCount} uncategorized`,
-        href: "/review",
-        icon: <Lucide.AlertCircle className="h-4 w-4" style={{ color: "var(--warning)" }} />,
-        count: reviewCount,
-      });
-    }
+  // Grouped entries for display
+  const groupedEntries = useMemo(() => groupEntriesByDate(recentEntries), [recentEntries]);
 
-    // Reimbursables pending
-    const reimbursables = entries?.filter(e => 
-      e.tags?.some((t: string) => t.toLowerCase() === "reimbursable") && 
-      e.type === "expense"
-    ).length ?? 0;
-    if (reimbursables > 0) {
-      chips.push({
-        label: `${reimbursables} reimbursable${reimbursables !== 1 ? "s" : ""} pending`,
-        href: "/activity?tag=Reimbursable",
-        icon: <Lucide.Receipt className="h-4 w-4" style={{ color: "var(--accent)" }} />,
-        count: reimbursables,
-      });
-    }
-
-    // Business expenses to tag (entries without Business tag that might need it)
-    const businessTaggable = entries?.filter(e =>
-      e.type === "expense" &&
-      !e.tags?.some((t: string) => t.toLowerCase() === "business") &&
-      e.tags?.some((t: string) => t.toLowerCase() === "tax-deductible")
-    ).length ?? 0;
-    if (businessTaggable > 0 && chips.length < 3) {
-      chips.push({
-        label: `Tag ${businessTaggable} business expense${businessTaggable !== 1 ? "s" : ""}`,
-        href: "/activity?tag=Tax-Deductible",
-        icon: <Lucide.Briefcase className="h-4 w-4" style={{ color: "var(--accent)" }} />,
-        count: businessTaggable,
-      });
-    }
-
-    // Limit to 3 chips max
-    return chips.slice(0, 3);
-  }, [inbox, entries]);
-
-  // Time awareness text
-  const timeAwareness = getTimeAwareness(scope);
   const lastTxText = getLastTransactionText(snapshot?.lastTransactionDate);
+  const reviewCount = inbox?.length ?? 0;
 
-  // Noteworthy highlight (max one, conditional)
-  const noteworthyHighlight = useMemo(() => {
-    if (!snapshot || !entries || entries.length < 3) return null;
-
-    // Only show if we have meaningful data
-    const totalSpent = snapshot.expense;
-    if (totalSpent === 0) return null;
-
-    // Pick one highlight based on what's most interesting
-    // Priority 1: Largest expense if it's significant (>25% of total spending)
-    if (snapshot.largestExpense && snapshot.largestExpense.amount > totalSpent * 0.25) {
-      const desc = snapshot.largestExpense.note || snapshot.largestExpense.category || "expense";
-      return {
-        text: `Largest expense: ${centsToDollars(snapshot.largestExpense.amount)}`,
-        subtext: desc,
-        icon: <Lucide.TrendingUp className="h-5 w-5" style={{ color: "var(--accent)" }} />,
-      };
+  // Quick log handlers
+  function handleQuickLog(type: "expense" | "income") {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("tallyup.logType", type);
     }
-
-    // Priority 2: Top category if it dominates (>40% of spending)
-    if (snapshot.topCategory && snapshot.topCategory.amount > totalSpent * 0.4) {
-      const pct = Math.round((snapshot.topCategory.amount / totalSpent) * 100);
-      return {
-        text: `Most spending: ${snapshot.topCategory.name}`,
-        subtext: `${pct}% of expenses · ${centsToDollars(snapshot.topCategory.amount)}`,
-        icon: <Lucide.PieChart className="h-5 w-5" style={{ color: "var(--accent)" }} />,
-      };
-    }
-
-    return null;
-  }, [snapshot, entries]);
-
-  const openLog = useCallback(() => {
-    router.push("/log");
-  }, [router]);
+    setActiveTab("log");
+  }
 
   return (
-    <div className="space-y-4 pb-24">
-      {/* 1. Scope Toggle (Simple Pills) */}
-      <div className="overflow-x-auto -mx-4 px-4">
-        <div className="flex gap-2 min-w-max">
-          {SCOPE_OPTIONS.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => setScope(opt.key)}
-              className="px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap"
-              style={{
-                backgroundColor: scope === opt.key ? "var(--accent)" : "var(--surface)",
-                color: scope === opt.key ? "var(--accent-foreground)" : "var(--text-secondary)",
-                border: scope === opt.key ? "none" : "1px solid var(--border)",
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Active Lens Indicator - shows when viewing non-default scope */}
-      {scope !== "this-month" && (
-        <div
-          className="flex items-center justify-between rounded-lg px-3 py-2"
-          style={{ backgroundColor: "var(--accent-subtle, var(--surface-subtle))", border: "1px solid var(--accent)" }}
-        >
-          <div className="flex items-center gap-2">
-            <Lucide.Eye className="h-4 w-4" style={{ color: "var(--accent)" }} />
-            <span className="text-sm font-medium" style={{ color: "var(--accent)" }}>
-              Viewing: {label}
-            </span>
-          </div>
-          <button
-            onClick={() => setScope("this-month")}
-            className="text-xs font-medium px-2 py-1 rounded hover:bg-[var(--surface-subtle)] transition-colors"
-            style={{ color: "var(--accent)" }}
-          >
-            Reset
-          </button>
-        </div>
-      )}
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      {/* Header with compact time range */}
+      <PageHeader
+        title="Home"
+        rightSlot={<TimeRangeSelector scope={scope} onScopeChange={setScope} />}
+        compact
+      />
 
       <SignedOut>
         <div
-          className="rounded-2xl p-6 text-center"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          style={{
+            backgroundColor: "var(--surface)",
+            borderRadius: "var(--card-radius)",
+            border: "1px solid var(--border)",
+            padding: "var(--space-6)",
+            textAlign: "center",
+          }}
         >
-          <div className="text-body mb-4" style={{ color: "var(--text-secondary)" }}>
+          <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
             Sign in to view your finances
-          </div>
+          </p>
           <SignInButton mode="modal">
-            <button
-              className="rounded-lg px-5 py-2.5 font-semibold text-sm"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              Sign in
-            </button>
+            <button className="btn-primary">Sign in</button>
           </SignInButton>
         </div>
       </SignedOut>
 
       <SignedIn>
-        {/* Loading state */}
+        {/* Loading skeleton */}
         {(!entries || !inbox) && (
-          <div className="space-y-4">
-            <div className="h-32 rounded-2xl animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
-            <div className="h-16 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
-            <div className="h-48 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+            <div 
+              className="animate-shimmer" 
+              style={{ 
+                height: 160, 
+                borderRadius: "var(--card-radius)",
+                backgroundColor: "var(--surface-subtle)",
+              }} 
+            />
+            <div 
+              className="animate-shimmer" 
+              style={{ 
+                height: 64, 
+                borderRadius: "var(--card-radius)",
+                backgroundColor: "var(--surface-subtle)",
+              }} 
+            />
+            <div 
+              className="animate-shimmer" 
+              style={{ 
+                height: 200, 
+                borderRadius: "var(--card-radius)",
+                backgroundColor: "var(--surface-subtle)",
+              }} 
+            />
           </div>
         )}
 
         {entries && inbox && snapshot && (
           <>
-            {/* 2. Financial Snapshot (Net / Income / Expense) */}
+            {/* Balance Summary Card */}
             <div
-              className="rounded-2xl p-5"
-              style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+              style={{
+                backgroundColor: "var(--surface)",
+                borderRadius: "var(--card-radius)",
+                border: "1px solid var(--border)",
+                boxShadow: "var(--shadow-card)",
+                padding: "var(--card-padding)",
+              }}
             >
-              {/* Net - Primary anchor */}
-              <div className="text-center mb-4">
-                <div className="text-micro mb-1" style={{ color: "var(--text-tertiary)" }}>
-                  Net
-                </div>
+              {/* Title */}
+              <p 
+                style={{ 
+                  fontSize: "var(--text-meta)", 
+                  color: "var(--text-secondary)",
+                  marginBottom: "var(--space-2)",
+                  textAlign: "center",
+                }}
+              >
+                {label}
+              </p>
+
+              {/* Net - Hero number */}
+              <div style={{ textAlign: "center", marginBottom: "var(--space-4)" }}>
                 <div
-                  className="text-4xl font-bold tabular-nums"
-                  style={{ color: snapshot.net >= 0 ? "var(--success)" : "var(--danger)" }}
+                  className="tabular-nums"
+                  style={{
+                    fontSize: "var(--text-kpi)",
+                    fontWeight: "var(--text-kpi-weight)",
+                    letterSpacing: "var(--text-kpi-tracking)",
+                    color: snapshot.net >= 0 ? "var(--success)" : "var(--danger)",
+                    lineHeight: 1.1,
+                  }}
                 >
                   {snapshot.net >= 0 ? "+" : ""}{centsToDollars(snapshot.net)}
                 </div>
+                <p 
+                  style={{ 
+                    fontSize: "var(--text-micro)", 
+                    color: "var(--text-tertiary)",
+                    marginTop: "var(--space-1)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Net
+                </p>
               </div>
 
-              {/* Income / Expense row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center py-3 rounded-xl" style={{ backgroundColor: "var(--surface-subtle)" }}>
-                  <div className="text-micro mb-0.5" style={{ color: "var(--text-tertiary)" }}>Income</div>
-                  <div className="text-xl font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+              {/* Income / Expenses row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+                <div
+                  style={{
+                    backgroundColor: "var(--surface-2)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "var(--space-3)",
+                    textAlign: "center",
+                  }}
+                >
+                  <p 
+                    className="tabular-nums"
+                    style={{ 
+                      fontSize: "1.125rem", 
+                      fontWeight: 600, 
+                      color: "var(--success)",
+                    }}
+                  >
                     {centsToDollars(snapshot.income)}
-                  </div>
+                  </p>
+                  <p 
+                    style={{ 
+                      fontSize: "var(--text-micro)", 
+                      color: "var(--text-tertiary)",
+                      marginTop: "var(--space-1)",
+                    }}
+                  >
+                    Received
+                  </p>
                 </div>
-                <div className="text-center py-3 rounded-xl" style={{ backgroundColor: "var(--surface-subtle)" }}>
-                  <div className="text-micro mb-0.5" style={{ color: "var(--text-tertiary)" }}>Expenses</div>
-                  <div className="text-xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
+                <div
+                  style={{
+                    backgroundColor: "var(--surface-2)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "var(--space-3)",
+                    textAlign: "center",
+                  }}
+                >
+                  <p 
+                    className="tabular-nums"
+                    style={{ 
+                      fontSize: "1.125rem", 
+                      fontWeight: 600, 
+                      color: "var(--text)",
+                    }}
+                  >
                     {centsToDollars(snapshot.expense)}
-                  </div>
+                  </p>
+                  <p 
+                    style={{ 
+                      fontSize: "var(--text-micro)", 
+                      color: "var(--text-tertiary)",
+                      marginTop: "var(--space-1)",
+                    }}
+                  >
+                    Spent
+                  </p>
                 </div>
               </div>
 
-              {/* 3. Time Awareness Strip */}
-              <div className="mt-4 pt-3 border-t text-center" style={{ borderColor: "var(--border)" }}>
-                <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-                  {label} · {timeAwareness}
-                </div>
-                {lastTxText && (
-                  <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-                    {lastTxText}
-                  </div>
-                )}
-              </div>
+              {/* Last entry */}
+              {lastTxText && (
+                <p
+                  style={{
+                    fontSize: "var(--text-meta)",
+                    color: "var(--text-tertiary)",
+                    textAlign: "center",
+                    marginTop: "var(--space-4)",
+                    paddingTop: "var(--space-3)",
+                    borderTop: "1px solid var(--border)",
+                  }}
+                >
+                  {lastTxText}
+                </p>
+              )}
             </div>
 
-            {/* 4. Add Transaction CTA */}
-            <button
-              onClick={openLog}
-              className="w-full flex items-center justify-center gap-3 rounded-xl py-4 px-5 font-semibold transition-all hover:opacity-90 active:scale-[0.98]"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              <Lucide.Plus className="h-5 w-5" />
-              Add Transaction
-            </button>
+            {/* Quick Log Row */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+              <button
+                onClick={() => handleQuickLog("expense")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "var(--space-2)",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--input-radius)",
+                  padding: "var(--space-4)",
+                  minHeight: "var(--button-height)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                }}
+              >
+                <Lucide.ArrowUpRight className="h-5 w-5" style={{ color: "var(--danger)" }} />
+                Spent
+              </button>
+              <button
+                onClick={() => handleQuickLog("income")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "var(--space-2)",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--input-radius)",
+                  padding: "var(--space-4)",
+                  minHeight: "var(--button-height)",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                }}
+              >
+                <Lucide.ArrowDownLeft className="h-5 w-5" style={{ color: "var(--success)" }} />
+                Received
+              </button>
+            </div>
 
-            {/* 5. Smart Action Chips (Conditional) */}
-            {actionChips.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {actionChips.map((chip, i) => (
+            {/* Review Alert */}
+            {reviewCount > 0 && (
+              <Link
+                href="/review"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-3)",
+                  backgroundColor: "var(--warning-subtle)",
+                  border: "1px solid var(--warning)",
+                  borderRadius: "var(--input-radius)",
+                  padding: "var(--space-3) var(--space-4)",
+                  textDecoration: "none",
+                }}
+              >
+                <Lucide.AlertCircle className="h-5 w-5 shrink-0" style={{ color: "var(--warning)" }} />
+                <span style={{ flex: 1, fontWeight: 500, color: "var(--text)" }}>
+                  {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} need review
+                </span>
+                <Lucide.ChevronRight className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+              </Link>
+            )}
+
+            {/* Recent Transactions - Grouped by date */}
+            {recentEntries.length > 0 && (
+              <div
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--card-radius)",
+                  border: "1px solid var(--border)",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "var(--space-4)",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <span style={{ fontWeight: 600, color: "var(--text)" }}>Recent</span>
                   <Link
-                    key={i}
-                    href={chip.href}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-colors hover:opacity-80"
-                    style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
+                    href="/activity"
+                    style={{
+                      fontSize: "var(--text-meta)",
+                      fontWeight: 500,
+                      color: "var(--primary)",
+                      textDecoration: "none",
+                    }}
                   >
-                    {chip.icon}
-                    {chip.label}
+                    See all →
                   </Link>
+                </div>
+
+                {Array.from(groupedEntries.entries()).map(([dateLabel, dateEntries], groupIdx) => (
+                  <div key={dateLabel}>
+                    {/* Date group header */}
+                    <div
+                      style={{
+                        padding: "var(--space-2) var(--space-4)",
+                        backgroundColor: "var(--surface-2)",
+                        fontSize: "var(--text-micro)",
+                        fontWeight: 500,
+                        color: "var(--text-tertiary)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        borderTop: groupIdx > 0 ? "1px solid var(--border)" : undefined,
+                      }}
+                    >
+                      {dateLabel}
+                    </div>
+
+                    {/* Entries in this group */}
+                    {dateEntries.map((e, idx) => {
+                      const isIncome = e.type === "income";
+                      const amountColor = isIncome ? "var(--success)" : "var(--text)";
+                      const amountPrefix = isIncome ? "+" : "−";
+
+                      return (
+                        <button
+                          key={e._id}
+                          onClick={() => setEditEntry(e)}
+                          style={{
+                            width: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "var(--space-3)",
+                            padding: "var(--space-3) var(--space-4)",
+                            backgroundColor: "transparent",
+                            border: "none",
+                            borderTop: idx > 0 ? "1px solid var(--border)" : undefined,
+                            cursor: "pointer",
+                            textAlign: "left",
+                            minHeight: 52,
+                          }}
+                        >
+                          {/* Icon */}
+                          <div
+                            style={{
+                              width: 36,
+                              height: 36,
+                              borderRadius: "50%",
+                              backgroundColor: "var(--surface-2)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {isIncome ? (
+                              <Lucide.ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
+                            ) : (
+                              <Lucide.ArrowUpRight className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                            )}
+                          </div>
+
+                          {/* Title & category */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p
+                              style={{
+                                fontWeight: 500,
+                                color: "var(--text)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {e.note || e.merchant || e.category || e.bucket || "Untitled"}
+                            </p>
+                            <p
+                              style={{
+                                fontSize: "var(--text-meta)",
+                                color: "var(--text-secondary)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              <span>{e.category || e.bucket || "Uncategorized"}</span>
+                              {e.tags && e.tags.length > 0 && (
+                                <>
+                                  <span>·</span>
+                                  <span>{e.tags[0]}</span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+
+                          {/* Amount */}
+                          <span
+                            className="tabular-nums"
+                            style={{
+                              fontWeight: 600,
+                              color: amountColor,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {amountPrefix}{centsToDollars(Math.abs(e.amountCents))}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             )}
 
-            {/* 6. Recent Transactions List */}
-            {recentEntries.length > 0 && (
-              <div
-                className="rounded-xl overflow-hidden"
-                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-              >
-                <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: "var(--border)" }}>
-                  <span className="text-h2" style={{ color: "var(--text)" }}>Recent</span>
-                  <Link href="/activity" className="text-meta font-medium" style={{ color: "var(--accent)" }}>
-                    See all →
-                  </Link>
-                </div>
-                <div>
-                  {recentEntries.map((e, i) => {
-                    const isIncome = e.type === "income";
-                    const amountColor = isIncome ? "var(--success)" : "var(--text)";
-                    const amountPrefix = isIncome ? "+" : "−";
-
-                    // Relative date
-                    const now = new Date();
-                    const txDate = new Date(e.date);
-                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-                    const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-                    let dateLabel: string;
-                    if (e.date >= todayStart) dateLabel = "Today";
-                    else if (e.date >= yesterdayStart) dateLabel = "Yesterday";
-                    else dateLabel = txDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-                    return (
-                      <button
-                        key={e._id}
-                        onClick={() => setEditEntry(e)}
-                        className={`w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-subtle)] text-left ${i > 0 ? "border-t" : ""}`}
-                        style={{ borderColor: "var(--border)" }}
-                      >
-                        {/* Payment method icon placeholder */}
-                        <div
-                          className="flex h-9 w-9 items-center justify-center rounded-full shrink-0"
-                          style={{ backgroundColor: "var(--surface-subtle)" }}
-                        >
-                          {isIncome ? (
-                            <Lucide.ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
-                          ) : (
-                            <Lucide.ArrowUpRight className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
-                          )}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="text-body font-medium truncate" style={{ color: "var(--text)" }}>
-                            {e.note || e.merchant || e.category || e.bucket || "Untitled"}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-meta" style={{ color: "var(--text-secondary)" }}>
-                            <span className="truncate">{e.category || e.bucket || "Uncategorized"}</span>
-                            {e.tags && e.tags.length > 0 && (
-                              <>
-                                <span>·</span>
-                                <span className="truncate">{e.tags.slice(0, 1).join(", ")}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 text-right">
-                          <div
-                            className="text-body font-semibold tabular-nums"
-                            style={{ color: amountColor }}
-                          >
-                            {amountPrefix}{centsToDollars(Math.abs(e.amountCents))}
-                          </div>
-                          <div className="text-meta" style={{ color: "var(--text-tertiary)" }}>
-                            {dateLabel}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Empty state for recent transactions */}
+            {/* Empty state */}
             {recentEntries.length === 0 && (
               <div
-                className="rounded-xl p-8 text-center"
-                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--card-radius)",
+                  border: "1px solid var(--border)",
+                  padding: "var(--space-8)",
+                  textAlign: "center",
+                }}
               >
                 <div
-                  className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
-                  style={{ backgroundColor: "var(--surface-subtle)" }}
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: "50%",
+                    backgroundColor: "var(--surface-2)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto var(--space-3)",
+                  }}
                 >
                   <Lucide.Receipt className="h-6 w-6" style={{ color: "var(--text-tertiary)" }} />
                 </div>
-                <div className="text-body font-medium mb-1" style={{ color: "var(--text)" }}>
+                <p style={{ fontWeight: 500, color: "var(--text)", marginBottom: "var(--space-1)" }}>
                   No transactions yet
-                </div>
-                <div className="text-meta mb-4" style={{ color: "var(--text-secondary)" }}>
+                </p>
+                <p style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
                   Add your first transaction to get started
-                </div>
+                </p>
                 <button
-                  onClick={openLog}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm"
-                  style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+                  onClick={() => handleQuickLog("expense")}
+                  className="btn-primary"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}
                 >
                   <Lucide.Plus className="h-4 w-4" />
                   Add Transaction
                 </button>
               </div>
-            )}
-
-            {/* 7. Noteworthy Highlight (Conditional, Max One) */}
-            {noteworthyHighlight && (
-              <Link
-                href="/insights"
-                className="flex items-center gap-4 rounded-xl p-4 transition-colors hover:opacity-90"
-                style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-              >
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-full shrink-0"
-                  style={{ backgroundColor: "var(--accent-subtle, var(--surface-subtle))" }}
-                >
-                  {noteworthyHighlight.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-body font-medium truncate" style={{ color: "var(--text)" }}>
-                    {noteworthyHighlight.text}
-                  </div>
-                  <div className="text-meta truncate" style={{ color: "var(--text-secondary)" }}>
-                    {noteworthyHighlight.subtext}
-                  </div>
-                </div>
-                <Lucide.ChevronRight className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
-              </Link>
             )}
 
             {/* Edit Entry Modal */}

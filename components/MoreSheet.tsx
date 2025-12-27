@@ -15,6 +15,7 @@ interface MenuGroup {
   items: {
     href: string;
     label: string;
+    description?: string;
     icon: React.ReactNode;
     badge?: number;
   }[];
@@ -24,22 +25,52 @@ const menuGroups: MenuGroup[] = [
   {
     title: "Workflows",
     items: [
-      { href: "/rules", label: "Rules", icon: <Lucide.BookOpen className="h-5 w-5" /> },
-      { href: "/recurring", label: "Recurring", icon: <Lucide.FileText className="h-5 w-5" /> },
+      { 
+        href: "/rules", 
+        label: "Rules", 
+        description: "Auto-categorize transactions",
+        icon: <Lucide.BookOpen className="h-5 w-5" /> 
+      },
+      { 
+        href: "/recurring", 
+        label: "Recurring", 
+        description: "Track subscriptions & bills",
+        icon: <Lucide.RefreshCw className="h-5 w-5" /> 
+      },
     ],
   },
   {
     title: "Account",
     items: [
-      { href: "/settings", label: "Settings", icon: <Lucide.Settings className="h-5 w-5" /> },
-      { href: "/profile", label: "Profile", icon: <Lucide.User className="h-5 w-5" /> },
+      { 
+        href: "/settings", 
+        label: "Settings", 
+        description: "Appearance & preferences",
+        icon: <Lucide.Settings className="h-5 w-5" /> 
+      },
+      { 
+        href: "/profile", 
+        label: "Profile", 
+        description: "Your account details",
+        icon: <Lucide.User className="h-5 w-5" /> 
+      },
     ],
   },
   {
     title: "Support",
     items: [
-      { href: "/help", label: "Help", icon: <Lucide.HelpCircle className="h-5 w-5" /> },
-      { href: "/feedback", label: "Feedback", icon: <Lucide.MessageSquare className="h-5 w-5" /> },
+      { 
+        href: "/help", 
+        label: "Help", 
+        description: "FAQs & documentation",
+        icon: <Lucide.HelpCircle className="h-5 w-5" /> 
+      },
+      { 
+        href: "/feedback", 
+        label: "Feedback", 
+        description: "Share ideas or report bugs",
+        icon: <Lucide.MessageSquare className="h-5 w-5" /> 
+      },
     ],
   },
 ];
@@ -68,10 +99,23 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+      }}
+    >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40 transition-opacity"
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.4)",
+        }}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -82,31 +126,49 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
         role="dialog"
         aria-modal="true"
         aria-label="More options"
-        className="relative w-full max-w-md animate-in slide-in-from-bottom-4 duration-200"
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: "28rem",
+        }}
       >
         <div
-          className="rounded-t-2xl border-t border-x p-4 pb-8"
           style={{
+            borderTopLeftRadius: "var(--card-radius)",
+            borderTopRightRadius: "var(--card-radius)",
             backgroundColor: "var(--surface)",
-            borderColor: "var(--border)",
+            border: "1px solid var(--border)",
+            borderBottom: "none",
+            padding: "var(--space-4)",
+            paddingBottom: "var(--space-8)",
           }}
         >
           {/* Handle */}
-          <div className="flex justify-center mb-3">
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "var(--space-3)" }}>
             <div
-              className="h-1 w-10 rounded-full"
-              style={{ backgroundColor: "var(--border)" }}
+              style={{
+                height: 4,
+                width: 40,
+                borderRadius: "var(--radius-full)",
+                backgroundColor: "var(--border)",
+              }}
             />
           </div>
 
           {/* Header */}
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-h2" style={{ color: "var(--text)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
+            <h2 style={{ fontSize: "var(--text-lg)", fontWeight: 600, color: "var(--text)" }}>
               More
             </h2>
             <button
               onClick={onClose}
-              className="rounded-full p-2 hover:bg-[var(--surface-subtle)] transition-colors"
+              style={{
+                padding: "var(--space-2)",
+                borderRadius: "var(--radius-full)",
+                backgroundColor: "transparent",
+                border: "none",
+                cursor: "pointer",
+              }}
               aria-label="Close"
             >
               <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
@@ -114,31 +176,73 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
           </div>
 
           {/* Menu Groups */}
-          <div className="space-y-6">
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
             {menuGroups.map((group) => (
               <div key={group.title}>
-                <div className="text-micro mb-3 px-1">
+                <div
+                  style={{
+                    fontSize: "var(--text-micro)",
+                    fontWeight: 500,
+                    color: "var(--text-tertiary)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    marginBottom: "var(--space-2)",
+                    paddingLeft: "4px",
+                  }}
+                >
                   {group.title}
                 </div>
-                <div className="space-y-1">
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                   {group.items.map((item) => (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={onClose}
-                      className="flex items-center gap-3 rounded-xl px-4 py-3.5 hover:bg-[var(--surface-subtle)] transition-colors"
-                      style={{ color: "var(--text)" }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-3)",
+                        padding: "var(--space-3) var(--space-4)",
+                        borderRadius: "var(--input-radius)",
+                        textDecoration: "none",
+                        color: "var(--text)",
+                        minHeight: "52px",
+                      }}
                     >
-                      <span style={{ color: "var(--text-secondary)" }}>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 40,
+                          height: 40,
+                          borderRadius: "var(--radius-md)",
+                          backgroundColor: "var(--surface-2)",
+                          color: "var(--text-secondary)",
+                          flexShrink: 0,
+                        }}
+                      >
                         {item.icon}
                       </span>
-                      <span className="flex-1 text-body font-medium">{item.label}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "var(--text-body)", fontWeight: 500 }}>
+                          {item.label}
+                        </div>
+                        {item.description && (
+                          <div style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)", marginTop: "2px" }}>
+                            {item.description}
+                          </div>
+                        )}
+                      </div>
                       {item.badge !== undefined && item.badge > 0 && (
                         <span
-                          className="rounded-full px-2.5 py-1 text-sm font-semibold"
                           style={{
-                            backgroundColor: "var(--accent)",
-                            color: "var(--accent-foreground)",
+                            padding: "4px 10px",
+                            borderRadius: "var(--radius-full)",
+                            fontSize: "var(--text-meta)",
+                            fontWeight: 600,
+                            backgroundColor: "var(--primary)",
+                            color: "var(--primary-foreground)",
                           }}
                         >
                           {item.badge}
@@ -146,7 +250,7 @@ export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreShe
                       )}
                       <Lucide.ChevronRight
                         className="h-4 w-4"
-                        style={{ color: "var(--text-tertiary)" }}
+                        style={{ color: "var(--text-tertiary)", flexShrink: 0 }}
                       />
                     </Link>
                   ))}
