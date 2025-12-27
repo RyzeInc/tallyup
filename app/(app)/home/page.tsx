@@ -1,13 +1,15 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
+import EditEntryModal from "@/components/EditEntryModal";
+import { useTabs } from "@/components/PersistentTabs";
 
 // Home-specific time scopes (Option C - Locked but Switchable)
 type HomeScope = "this-month" | "last-month" | "this-week" | "last-week" | "last-90-days";
@@ -109,10 +111,21 @@ function getLastTransactionText(lastDate?: number): string | null {
 
 export default function HomePage() {
   const quickLog = useQuickLog();
+  const { activeTab } = useTabs();
   
   // Home scope always defaults to "this-month" - no persistence
   const [scope, setScope] = useState<HomeScope>("this-month");
   const { startDate, endDate, label } = useMemo(() => getScopeDates(scope), [scope]);
+
+  // Reset scope to "this-month" when tab becomes active (Option C behavior)
+  useEffect(() => {
+    if (activeTab === "overview") {
+      setScope("this-month");
+    }
+  }, [activeTab]);
+
+  // Edit modal state
+  const [editEntry, setEditEntry] = useState<Entry | null>(null);
 
   // Entry type for type safety
   type Entry = {
@@ -225,9 +238,24 @@ export default function HomePage() {
     if (reimbursables > 0) {
       chips.push({
         label: `${reimbursables} reimbursable${reimbursables !== 1 ? "s" : ""} pending`,
-        href: "/activity?tags=Reimbursable",
+        href: "/activity?tag=Reimbursable",
         icon: <Lucide.Receipt className="h-4 w-4" style={{ color: "var(--accent)" }} />,
         count: reimbursables,
+      });
+    }
+
+    // Business expenses to tag (entries without Business tag that might need it)
+    const businessTaggable = entries?.filter(e =>
+      e.type === "expense" &&
+      !e.tags?.some((t: string) => t.toLowerCase() === "business") &&
+      e.tags?.some((t: string) => t.toLowerCase() === "tax-deductible")
+    ).length ?? 0;
+    if (businessTaggable > 0 && chips.length < 3) {
+      chips.push({
+        label: `Tag ${businessTaggable} business expense${businessTaggable !== 1 ? "s" : ""}`,
+        href: "/activity?tag=Tax-Deductible",
+        icon: <Lucide.Briefcase className="h-4 w-4" style={{ color: "var(--accent)" }} />,
+        count: businessTaggable,
       });
     }
 
@@ -296,6 +324,28 @@ export default function HomePage() {
           ))}
         </div>
       </div>
+
+      {/* Active Lens Indicator - shows when viewing non-default scope */}
+      {scope !== "this-month" && (
+        <div
+          className="flex items-center justify-between rounded-lg px-3 py-2"
+          style={{ backgroundColor: "var(--accent-subtle, var(--surface-subtle))", border: "1px solid var(--accent)" }}
+        >
+          <div className="flex items-center gap-2">
+            <Lucide.Eye className="h-4 w-4" style={{ color: "var(--accent)" }} />
+            <span className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+              Viewing: {label}
+            </span>
+          </div>
+          <button
+            onClick={() => setScope("this-month")}
+            className="text-xs font-medium px-2 py-1 rounded hover:bg-[var(--surface-subtle)] transition-colors"
+            style={{ color: "var(--accent)" }}
+          >
+            Reset
+          </button>
+        </div>
+      )}
 
       <SignedOut>
         <div
@@ -431,10 +481,10 @@ export default function HomePage() {
                     else dateLabel = txDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
                     return (
-                      <Link
+                      <button
                         key={e._id}
-                        href={`/activity?edit=${e._id}`}
-                        className={`flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-subtle)] ${i > 0 ? "border-t" : ""}`}
+                        onClick={() => setEditEntry(e)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--surface-subtle)] text-left ${i > 0 ? "border-t" : ""}`}
                         style={{ borderColor: "var(--border)" }}
                       >
                         {/* Payment method icon placeholder */}
@@ -475,7 +525,7 @@ export default function HomePage() {
                             {dateLabel}
                           </div>
                         </div>
-                      </Link>
+                      </button>
                     );
                   })}
                 </div>
@@ -534,6 +584,16 @@ export default function HomePage() {
                 </div>
                 <Lucide.ChevronRight className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
               </Link>
+            )}
+
+            {/* Edit Entry Modal */}
+            {editEntry && (
+              <EditEntryModal
+                entry={editEntry}
+                onClose={() => setEditEntry(null)}
+                onSaved={() => setEditEntry(null)}
+                onDeleted={() => setEditEntry(null)}
+              />
             )}
           </>
         )}

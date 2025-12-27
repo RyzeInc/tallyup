@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import RecurringModal from "@/components/RecurringModal";
+import EditEntryModal from "@/components/EditEntryModal";
 import ActivityTable from "@/components/activity/ActivityTable";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
@@ -161,6 +162,32 @@ export default function HistoryPage() {
   }, [pages, sortBy, minAmount, maxAmount, selectedMethods]);
 
   const [selected, setSelected] = useState<any | null>(null);
+
+  // Edit modal state - triggered by ?edit=id query param
+  const editId = searchParams.get("edit");
+  const [editEntry, setEditEntry] = useState<any | null>(null);
+
+  // Load entry for editing when editId changes
+  useEffect(() => {
+    if (editId && allEntries.length > 0) {
+      const entry = allEntries.find((e) => e._id === editId);
+      if (entry) {
+        setEditEntry(entry);
+      }
+    } else if (!editId) {
+      setEditEntry(null);
+    }
+  }, [editId, allEntries]);
+
+  // Close edit modal and clear URL param
+  function closeEditModal() {
+    setEditEntry(null);
+    // Remove edit param from URL
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("edit");
+    const qs = p.toString();
+    router.replace(qs ? `/activity?${qs}` : `/activity`);
+  }
 
   async function loadMore() {
     if (!nextCursor) return;
@@ -488,6 +515,26 @@ export default function HistoryPage() {
             entry={selected}
             onClose={() => setSelected(null)}
             onCreated={() => setSelected(null)}
+          />
+        )}
+
+        {/* Edit Entry Modal */}
+        {editEntry && (
+          <EditEntryModal
+            entry={editEntry}
+            onClose={closeEditModal}
+            onSaved={() => {
+              // Refresh the list
+              setPages([]);
+              setCursorList([undefined]);
+              setSeenIds({});
+            }}
+            onDeleted={() => {
+              // Refresh the list
+              setPages([]);
+              setCursorList([undefined]);
+              setSeenIds({});
+            }}
           />
         )}
 
