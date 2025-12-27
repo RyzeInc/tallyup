@@ -88,7 +88,7 @@ export default function RecurringModal({
       <div
         className="absolute inset-0"
         onClick={onClose}
-        style={{ backgroundColor: document.documentElement.classList.contains("dark") ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.12)" }}
+        style={{ backgroundColor: document.documentElement.classList.contains("dim") ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.12)" }}
       />
       <div className="relative z-10 w-[420px] rounded-2xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}>
         <div className="text-sm font-semibold">Save pattern</div>

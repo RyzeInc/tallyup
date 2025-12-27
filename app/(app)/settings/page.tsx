@@ -7,7 +7,7 @@ import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import { useTheme } from "@/components/ThemeProvider";
+import { useTheme, APPEARANCE_OPTIONS } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 
 type ExpenseSpace = typeof EXPENSE_SPACES[number];
@@ -565,26 +565,28 @@ export default function SettingsPage() {
               className="rounded-xl p-4"
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { key: "system" as const, label: "System", icon: Lucide.Monitor },
-                  { key: "light" as const, label: "Light", icon: Lucide.Sun },
-                  { key: "dark" as const, label: "Dark", icon: Lucide.Moon },
-                ].map(({ key, label, icon: Icon }) => (
-                  <button
-                    key={key}
-                    onClick={() => changeTheme(key)}
-                    className={`flex flex-col items-center gap-2 rounded-xl p-4 transition-colors ${
-                      theme === key ? "ring-2 ring-[var(--accent)]" : ""
-                    }`}
-                    style={{
-                      backgroundColor: theme === key ? "var(--accent-subtle)" : "var(--surface-subtle)",
-                    }}
-                  >
-                    <Icon className="h-6 w-6" style={{ color: theme === key ? "var(--accent)" : "var(--text-secondary)" }} />
-                    <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{label}</span>
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-3">
+                {APPEARANCE_OPTIONS.map(({ value, label, description }) => {
+                  const Icon = value === "light" ? Lucide.Sun : Lucide.Moon;
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => changeTheme(value)}
+                      className={`flex flex-col items-start gap-2 rounded-xl p-4 transition-colors ${
+                        theme === value ? "ring-2 ring-[var(--accent)]" : ""
+                      }`}
+                      style={{
+                        backgroundColor: theme === value ? "var(--accent-subtle)" : "var(--surface-subtle)",
+                      }}
+                    >
+                      <Icon className="h-6 w-6" style={{ color: theme === value ? "var(--accent)" : "var(--text-secondary)" }} />
+                      <div style={{ textAlign: "left" }}>
+                        <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{label}</div>
+                        <div className="text-xs" style={{ color: "var(--text-secondary)", marginTop: 2 }}>{description}</div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -733,7 +735,7 @@ export default function SettingsPage() {
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Theme</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                {theme === "system" ? "System" : theme === "light" ? "Light" : "Dark"}
+                {theme === "light" ? "Light" : "Dim (Beta)"}
               </div>
             </div>
             <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
