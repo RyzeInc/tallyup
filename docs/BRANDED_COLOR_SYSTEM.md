@@ -34,8 +34,12 @@ This color system is inspired by the coastal painting: sand, water, and clay ton
 
 **Usage**: 
 - Default screen background behind cards
-- Subtle radial gradient: `radial-gradient(ellipse at top, rgba(143, 182, 190, 0.08) 0%, #F1E6D6 30%, #E4D2BA 100%)`
-- No texture, no noise, just color
+- **Three-layer geological system** (not a single gradient):
+  1. **Base sand** (linear, 168°) - warm beige ground
+  2. **Clay undercurrent** (radial, lower third, ~8% opacity) - wet sand density
+  3. **Mineral light** (radial, top-left bias, ~14% opacity) - air, not spotlight
+- Light enters the screen, doesn't emanate from content
+- No texture, no noise - just layered color
 
 ### 💧 Water Zone (Clarity Layer)
 **Emotion**: Clarity, perspective, calm
@@ -153,8 +157,16 @@ Ordered by priority:
 ```css
 /* Light Mode */
 :root {
-  /* Background */
-  --bg: radial-gradient(ellipse at top, rgba(143, 182, 190, 0.08) 0%, #F1E6D6 30%, #E4D2BA 100%);
+  /* Layered background - geology, not lighting */
+  --bg: 
+    /* Mineral light: top-left bias, cool blue-teal (air) */
+    radial-gradient(ellipse 120% 60% at 15% -10%, rgba(143, 182, 190, 0.14) 0%, transparent 50%),
+    /* Clay undercurrent: lower third warmth (wet sand density) */
+    radial-gradient(ellipse 140% 50% at 80% 110%, rgba(200, 122, 90, 0.08) 0%, transparent 45%),
+    /* Ochre mid-warmth */
+    radial-gradient(ellipse 100% 40% at 20% 95%, rgba(212, 165, 116, 0.06) 0%, transparent 40%),
+    /* Base sand: uneven, warm */
+    linear-gradient(168deg, #F4EAE0 0%, #E8D5BF 35%, #E4D2BA 65%, #DCC9AD 100%);
   --canvas: #F1E6D6;
   
   /* Surfaces */
@@ -171,8 +183,16 @@ Ordered by priority:
 
 /* Dark Mode */
 .dark {
-  /* Background */
-  --bg: radial-gradient(ellipse at top, rgba(111, 158, 168, 0.12) 0%, #1A1612 30%, #0F0D0B 100%);
+  /* Layered background - warm undertones prevent dead blacks */
+  --bg: 
+    /* Cool mineral light: top-left atmospheric */
+    radial-gradient(ellipse 100% 50% at 10% -5%, rgba(111, 158, 168, 0.12) 0%, transparent 45%),
+    /* Warm clay undertone: depth */
+    radial-gradient(ellipse 120% 45% at 85% 105%, rgba(139, 90, 60, 0.08) 0%, transparent 40%),
+    /* Ochre glow */
+    radial-gradient(ellipse 80% 35% at 25% 90%, rgba(180, 130, 80, 0.05) 0%, transparent 35%),
+    /* Base dark with warm undertone */
+    linear-gradient(165deg, #1A1612 0%, #15120F 40%, #12100D 70%, #0F0D0B 100%);
   --canvas: #0F0D0B;
   
   /* Surfaces */

@@ -68,22 +68,46 @@
   --ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
   
-  /* -------- Background Gradient (Branded Sand → Water painting) -------- */
+  /* -------- Background System (Layered Geology, Not Lighting) -------- */
+  /* 
+   * Three-layer system:
+   * Layer 1 (bottom): Base sand - warm, grounded
+   * Layer 2 (middle): Clay undercurrent - warmth, density, "wet sand"
+   * Layer 3 (top): Mineral light - cool, clarity, air
+   * 
+   * Light enters the screen, not emanates from content.
+   */
+  
   /* Sand zone: grounded, safe, human */
   --bg-sand-light: #F1E6D6;
   --bg-sand-mid: #E4D2BA;
   --bg-sand-dark: #D6C1A4;
+  --bg-sand-warm: #E8D5BF;
   
   /* Water zone: clarity, perspective, calm */
   --bg-water-soft: #8FB6BE;
   --bg-water-deep: #6F9EA8;
   
-  /* Clay zone: atmospheric, emotional memory (use sparingly) */
+  /* Clay zone: atmospheric, emotional memory */
   --bg-clay-soft: #C87A5A;
   --bg-clay-muted: #B56A52;
+  --bg-clay-ochre: #D4A574;
   
-  /* Primary app background: subtle sand gradient */
-  --bg: radial-gradient(ellipse at top, rgba(143, 182, 190, 0.08) 0%, #F1E6D6 30%, #E4D2BA 100%);
+  /* 
+   * Layered background composition:
+   * - Mineral light: top-left bias, cool blue-teal (air, not spotlight)
+   * - Clay undercurrent: lower third, warm rust/ochre (wet sand density)
+   * - Base sand: full screen warm beige (ground)
+   */
+  --bg: 
+    /* Layer 3: Mineral light - enters from top-left, not centered */
+    radial-gradient(ellipse 120% 60% at 15% -10%, rgba(143, 182, 190, 0.14) 0%, transparent 50%),
+    /* Layer 2: Clay undercurrent - lower third warmth, wet sand feeling */
+    radial-gradient(ellipse 140% 50% at 80% 110%, rgba(200, 122, 90, 0.08) 0%, transparent 45%),
+    /* Secondary clay: ochre mid-warmth */
+    radial-gradient(ellipse 100% 40% at 20% 95%, rgba(212, 165, 116, 0.06) 0%, transparent 40%),
+    /* Layer 1: Base sand - uneven, not perfectly centered */
+    linear-gradient(168deg, #F4EAE0 0%, #E8D5BF 35%, #E4D2BA 65%, #DCC9AD 100%);
   
   /* -------- Light Theme Palette -------- */
   --canvas: var(--bg-sand-light);
@@ -162,8 +186,21 @@
 
 /* -------- Dark Theme -------- */
 .dark {
-  /* Dark background: mineral/clay blend */
-  --bg: radial-gradient(ellipse at top, rgba(111, 158, 168, 0.12) 0%, #1A1612 30%, #0F0D0B 100%);
+  /* 
+   * Dark mode layered geology:
+   * - Warm undertones prevent dead blacks
+   * - Clay reads as depth, not red
+   * - Seafoam accents glow naturally
+   */
+  --bg: 
+    /* Layer 3: Cool mineral light - top-left atmospheric */
+    radial-gradient(ellipse 100% 50% at 10% -5%, rgba(111, 158, 168, 0.12) 0%, transparent 45%),
+    /* Layer 2: Warm clay undertone - prevents dead black, adds depth */
+    radial-gradient(ellipse 120% 45% at 85% 105%, rgba(139, 90, 60, 0.08) 0%, transparent 40%),
+    /* Secondary warmth: ochre glow */
+    radial-gradient(ellipse 80% 35% at 25% 90%, rgba(180, 130, 80, 0.05) 0%, transparent 35%),
+    /* Layer 1: Base dark with warm undertone - not pure black */
+    linear-gradient(165deg, #1A1612 0%, #15120F 40%, #12100D 70%, #0F0D0B 100%);
   --canvas: #0F0D0B;
   --surface: #18181B;
   --surface-elevated: #1F1F23;
