@@ -38,7 +38,7 @@ const CATEGORY_ORDER_KEY = "tallyup.categoryOrder";
 export default function SettingsPage() {
   const { user } = useUser();
   const { startDate, endDate, label } = useTimeRange();
-  const { mode: theme, setMode: changeTheme } = useTheme();
+  const { theme, setTheme: changeTheme } = useTheme();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
   // Category/tag management state
