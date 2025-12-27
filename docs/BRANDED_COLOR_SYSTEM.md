@@ -89,7 +89,7 @@ This color system is inspired by the coastal painting: sand, water, and clay ton
 
 ### Dark Mode
 **Background**: Dark mineral/clay blend  
-**Cards**: Charcoal (#8181B1)  
+**Cards**: Charcoal (#18181B)  
 **Primary Accent**: Seafoam
 
 ```css

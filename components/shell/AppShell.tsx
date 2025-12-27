@@ -22,7 +22,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     pathname?.startsWith("/insights/") || pathname?.startsWith("/log/");
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--text)" }}>
+    <div className="min-h-screen bg-app" style={{ color: "var(--text)" }}>
       <div
         className="mx-auto max-w-md px-4 pt-6 pb-28"
         style={{ minHeight: "calc(100vh - 84px)", position: "relative" }}

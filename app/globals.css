@@ -236,6 +236,11 @@ body {
   min-height: 100vh;
 }
 
+/* Background utility class */
+.bg-app {
+  background: var(--bg);
+}
+
 .tabular-nums,
 .text-money {
   font-variant-numeric: tabular-nums;
