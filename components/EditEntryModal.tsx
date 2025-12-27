@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
@@ -44,6 +44,7 @@ export default function EditEntryModal({
 }: EditEntryModalProps) {
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   // Form state
   const [type, setType] = useState<"expense" | "income">(entry.type);
@@ -59,6 +60,10 @@ export default function EditEntryModal({
   const [methodOrAccount, setMethodOrAccount] = useState(entry.methodOrAccount ?? "");
   const [tags, setTags] = useState<string[]>(entry.tags ?? []);
   const [needsReview, setNeedsReview] = useState(entry.needsReview ?? false);
+
+  // Expandable sections for Note and Method
+  const [showNote, setShowNote] = useState(!!entry.note);
+  const [showMethod, setShowMethod] = useState(!!entry.methodOrAccount);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -135,7 +140,7 @@ export default function EditEntryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40"
@@ -143,22 +148,32 @@ export default function EditEntryModal({
         aria-hidden="true"
       />
 
-      {/* Modal */}
+      {/* Modal - bottom sheet on mobile, centered dialog on desktop */}
       <div
+        ref={sheetRef}
         role="dialog"
         aria-modal="true"
         aria-label="Edit transaction"
-        className="relative w-full max-w-md max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
+        className="relative w-full max-w-md animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-150"
       >
         <div
-          className="rounded-2xl border p-5 shadow-lg"
+          className="rounded-t-2xl sm:rounded-2xl border-t sm:border shadow-lg flex flex-col"
           style={{
             backgroundColor: "var(--surface)",
             borderColor: "var(--border)",
+            maxHeight: "calc(100dvh - 80px)", // Leave room for nav bar
           }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
+          {/* Handle (mobile only) */}
+          <div className="flex justify-center pt-3 sm:hidden">
+            <div
+              className="h-1 w-10 rounded-full"
+              style={{ backgroundColor: "var(--border)" }}
+            />
+          </div>
+
+          {/* Header - sticky */}
+          <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--border)" }}>
             <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
               Edit Transaction
             </h2>
@@ -170,240 +185,315 @@ export default function EditEntryModal({
             </button>
           </div>
 
-          {/* Error message */}
-          {error && (
-            <div
-              className="mb-4 rounded-lg px-4 py-3 text-sm"
-              style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
-            >
-              {error}
-            </div>
-          )}
-
-          {/* Type toggle */}
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setType("expense")}
-              className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                type === "expense"
-                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                  : "border hover:bg-[var(--surface-subtle)]"
-              }`}
-              style={{
-                borderColor: type === "expense" ? undefined : "var(--border)",
-                color: type === "expense" ? undefined : "var(--text)",
-              }}
-            >
-              Spent
-            </button>
-            <button
-              type="button"
-              onClick={() => setType("income")}
-              className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                type === "income"
-                  ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                  : "border hover:bg-[var(--surface-subtle)]"
-              }`}
-              style={{
-                borderColor: type === "income" ? undefined : "var(--border)",
-                color: type === "income" ? undefined : "var(--text)",
-              }}
-            >
-              Received
-            </button>
-          </div>
-
-          {/* Amount */}
-          <div className="mb-4">
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Amount
-            </label>
-            <div className="relative">
-              <span
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-medium"
-                style={{ color: "var(--text-tertiary)" }}
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto px-5 py-4" style={{ minHeight: 0 }}>
+            {/* Error message */}
+            {error && (
+              <div
+                className="mb-4 rounded-lg px-4 py-3 text-sm"
+                style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
               >
-                $
-              </span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amountStr}
-                onChange={(e) => setAmountStr(e.target.value)}
-                className="w-full rounded-lg border px-3 py-3 pl-8 text-lg font-semibold tabular-nums"
+                {error}
+              </div>
+            )}
+
+            {/* Type toggle */}
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setType("expense")}
+                className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                  type === "expense"
+                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    : "border hover:bg-[var(--surface-subtle)]"
+                }`}
+                style={{
+                  borderColor: type === "expense" ? undefined : "var(--border)",
+                  color: type === "expense" ? undefined : "var(--text)",
+                }}
+              >
+                Spent
+              </button>
+              <button
+                type="button"
+                onClick={() => setType("income")}
+                className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                  type === "income"
+                    ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                    : "border hover:bg-[var(--surface-subtle)]"
+                }`}
+                style={{
+                  borderColor: type === "income" ? undefined : "var(--border)",
+                  color: type === "income" ? undefined : "var(--text)",
+                }}
+              >
+                Received
+              </button>
+            </div>
+
+            {/* Amount & Date row */}
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1.5"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Amount
+                </label>
+                <div className="relative">
+                  <span
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-base font-medium"
+                    style={{ color: "var(--text-tertiary)" }}
+                  >
+                    $
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={amountStr}
+                    onChange={(e) => setAmountStr(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2.5 pl-7 text-base font-semibold tabular-nums"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--input)",
+                      color: "var(--text)",
+                    }}
+                  />
+                </div>
+              </div>
+              <div>
+                <label
+                  className="block text-xs font-medium mb-1.5"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    backgroundColor: "var(--input)",
+                    color: "var(--text)",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Category */}
+            <div className="mb-4">
+              <label
+                className="block text-xs font-medium mb-1.5"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2.5 text-sm"
                 style={{
                   borderColor: "var(--border)",
                   backgroundColor: "var(--input)",
                   color: "var(--text)",
                 }}
-              />
+              >
+                <option value="">Select category...</option>
+                {categoryOptions.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
 
-          {/* Date */}
-          <div className="mb-4">
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Date
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              style={{
-                borderColor: "var(--border)",
-                backgroundColor: "var(--input)",
-                color: "var(--text)",
-              }}
-            />
-          </div>
+            {/* Tags */}
+            <div className="mb-4">
+              <label
+                className="block text-xs font-medium mb-2"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Tags
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {CONTEXT_TAGS.map((tag) => {
+                  const selected = tags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTag(tag)}
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                        selected
+                          ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                          : "hover:bg-[var(--surface-subtle)]"
+                      }`}
+                      style={{
+                        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                        color: selected ? undefined : "var(--text)",
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-          {/* Category */}
-          <div className="mb-4">
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Category
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              style={{
-                borderColor: "var(--border)",
-                backgroundColor: "var(--input)",
-                color: "var(--text)",
-              }}
-            >
-              <option value="">Select category...</option>
-              {categoryOptions.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tags */}
-          <div className="mb-4">
-            <label
-              className="block text-xs font-medium mb-2"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Tags
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {CONTEXT_TAGS.map((tag) => {
-                const selected = tags.includes(tag);
-                return (
+            {/* Optional fields as expandable chips */}
+            <div className="mb-4">
+              <div className="flex flex-wrap gap-2">
+                {/* Note chip/field */}
+                {!showNote ? (
                   <button
-                    key={tag}
                     type="button"
-                    onClick={() => toggleTag(tag)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                      selected
-                        ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                        : "hover:bg-[var(--surface-subtle)]"
-                    }`}
+                    onClick={() => setShowNote(true)}
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
                     style={{
-                      border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
-                      color: selected ? undefined : "var(--text)",
+                      border: "1px dashed var(--border)",
+                      color: "var(--text-secondary)",
                     }}
                   >
-                    {tag}
+                    <Lucide.Plus className="h-3 w-3" />
+                    Add Note
                   </button>
-                );
-              })}
+                ) : null}
+
+                {/* Method chip/field */}
+                {!showMethod ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowMethod(true)}
+                    className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+                    style={{
+                      border: "1px dashed var(--border)",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    <Lucide.Plus className="h-3 w-3" />
+                    Add Method
+                  </button>
+                ) : null}
+              </div>
+
+              {/* Expanded Note field */}
+              {showNote && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label
+                      className="text-xs font-medium"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Note
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNote("");
+                        setShowNote(false);
+                      }}
+                      className="text-xs hover:underline"
+                      style={{ color: "var(--text-tertiary)" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Optional description..."
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--input)",
+                      color: "var(--text)",
+                    }}
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* Expanded Method field */}
+              {showMethod && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label
+                      className="text-xs font-medium"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      Payment Method
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMethodOrAccount("");
+                        setShowMethod(false);
+                      }}
+                      className="text-xs hover:underline"
+                      style={{ color: "var(--text-tertiary)" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={methodOrAccount}
+                    onChange={(e) => setMethodOrAccount(e.target.value)}
+                    placeholder="e.g., Chase Visa, Cash..."
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--input)",
+                      color: "var(--text)",
+                    }}
+                    autoFocus={!showNote}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Needs Review toggle */}
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={needsReview}
+                  onChange={(e) => setNeedsReview(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                  style={{ accentColor: "var(--accent)" }}
+                />
+                <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                  Flag for review
+                </span>
+              </label>
             </div>
           </div>
 
-          {/* Note */}
-          <div className="mb-4">
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Note
-            </label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Optional description..."
-              className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              style={{
-                borderColor: "var(--border)",
-                backgroundColor: "var(--input)",
-                color: "var(--text)",
-              }}
-            />
-          </div>
-
-          {/* Method/Account */}
-          <div className="mb-4">
-            <label
-              className="block text-xs font-medium mb-1.5"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              Payment Method / Account
-            </label>
-            <input
-              type="text"
-              value={methodOrAccount}
-              onChange={(e) => setMethodOrAccount(e.target.value)}
-              placeholder="e.g., Chase Visa, Cash..."
-              className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              style={{
-                borderColor: "var(--border)",
-                backgroundColor: "var(--input)",
-                color: "var(--text)",
-              }}
-            />
-          </div>
-
-          {/* Needs Review toggle */}
-          <div className="mb-6">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={needsReview}
-                onChange={(e) => setNeedsReview(e.target.checked)}
-                className="h-4 w-4 rounded"
-                style={{ accentColor: "var(--accent)" }}
-              />
-              <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                Flag for review
-              </span>
-            </label>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3">
+          {/* Actions - sticky footer */}
+          <div
+            className="flex items-center gap-3 px-5 py-4 border-t"
+            style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}
+          >
             <button
               onClick={handleDelete}
               disabled={deleting || saving}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+              className="rounded-lg px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50"
               style={{
                 border: "1px solid var(--danger)",
                 color: "var(--danger)",
                 backgroundColor: "transparent",
               }}
             >
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting ? "..." : "Delete"}
             </button>
             <div className="flex-1" />
             <button
               onClick={onClose}
               disabled={saving || deleting}
-              className="rounded-lg px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+              className="rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
               style={{
                 border: "1px solid var(--border)",
                 color: "var(--text)",
@@ -414,7 +504,7 @@ export default function EditEntryModal({
             <button
               onClick={handleSave}
               disabled={saving || deleting}
-              className="rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50"
+              className="rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
               style={{
                 backgroundColor: "var(--accent)",
                 color: "var(--accent-foreground)",
