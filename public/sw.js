@@ -4,12 +4,10 @@
 
 const CACHE_VERSION = 'tallyup-v1';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
-const OFFLINE_URL = '/offline';
 
 // Static assets and app shell routes that are safe to cache
 const STATIC_ASSETS = [
   '/',
-  '/offline',
   '/log',
   '/summary',
   '/inbox',
@@ -108,12 +106,9 @@ self.addEventListener('fetch', (event) => {
             if (cachedResponse) {
               return cachedResponse;
             }
-            // If it's a page request and not in cache, show offline page
-            if (request.mode === 'navigate') {
-              return caches.match(OFFLINE_URL);
-            }
-            // Otherwise return a generic offline response
-            return new Response('Offline', {
+            // Network unavailable and not in cache
+            // Let browser show default offline page
+            return new Response('Network request failed', {
               status: 503,
               statusText: 'Service Unavailable',
               headers: new Headers({
