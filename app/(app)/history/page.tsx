@@ -52,27 +52,38 @@ export default function HistoryPage() {
     }
   }, [searchParams]);
 
-  // Sync URL filters
-  useEffect(() => {
-    const cat = searchParams.get("category");
-    const tag = searchParams.get("tag");
-    if (cat) setSelectedCategories([cat]);
-    if (tag) setSelectedTags([tag]);
-    setType((searchParams.get("type") as any) ?? "all");
-  }, [searchParams]);
+  // Track if this is initial mount to avoid URL sync loops
+  const isInitialMount = useRef(true);
+  const lastUrlUpdate = useRef<string>("");
 
-  // Update URL when filters change
+  // Update URL when filters change (but not on initial mount or when reading from URL)
   useEffect(() => {
+    // Skip on initial mount - state is already initialized from URL
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
     const p = new URLSearchParams();
     if (type && type !== "all") p.set("type", type);
     if (q) p.set("q", q);
     if (reviewOnly) p.set("review", "1");
     if (selectedCategories.length === 1) p.set("category", selectedCategories[0]);
     if (selectedTags.length === 1) p.set("tag", selectedTags[0]);
+    
+    // Preserve edit param if present
+    const editParam = searchParams.get("edit");
+    if (editParam) p.set("edit", editParam);
+    
     const qs = p.toString();
     const url = qs ? `/activity?${qs}` : `/activity`;
-    router.replace(url);
-  }, [type, q, reviewOnly, selectedCategories, selectedTags, router]);
+    
+    // Avoid updating if URL is the same (prevents loops)
+    if (url !== lastUrlUpdate.current) {
+      lastUrlUpdate.current = url;
+      router.replace(url);
+    }
+  }, [type, q, selectedCategories, selectedTags, router, reviewOnly, searchParams]);
 
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
@@ -524,13 +535,17 @@ export default function HistoryPage() {
             entry={editEntry}
             onClose={closeEditModal}
             onSaved={() => {
-              // Refresh the list
+              // Close the modal first (this clears editEntry and URL param)
+              closeEditModal();
+              // Then refresh the list
               setPages([]);
               setCursorList([undefined]);
               setSeenIds({});
             }}
             onDeleted={() => {
-              // Refresh the list
+              // Close the modal first
+              closeEditModal();
+              // Then refresh the list
               setPages([]);
               setCursorList([undefined]);
               setSeenIds({});
