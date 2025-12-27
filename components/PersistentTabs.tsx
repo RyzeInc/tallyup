@@ -7,9 +7,18 @@ type TabId = "overview" | "activity" | "insights" | "log";
 interface TabsContextValue {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
+  previousTab: TabId | null;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
+
+// Store scroll positions per tab (persists across re-renders)
+const scrollPositions: Record<TabId, number> = {
+  overview: 0,
+  activity: 0,
+  insights: 0,
+  log: 0,
+};
 
 export function useTabs() {
   const ctx = useContext(TabsContext);
@@ -28,18 +37,27 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     if (path.startsWith("/log")) return "log";
     return "log"; // default to log
   });
+  
+  const [previousTab, setPreviousTab] = useState<TabId | null>(null);
 
   // Update URL without navigation when tab changes, but keep domain clean
   const setActiveTabWithHistory = useCallback((tab: TabId) => {
+    // Save current scroll position before switching
+    if (typeof window !== "undefined") {
+      scrollPositions[activeTab] = window.scrollY;
+    }
+    
+    setPreviousTab(activeTab);
     setActiveTab(tab);
+    
     // Keep URL at root domain without showing routes
     if (typeof window !== "undefined" && window.location.pathname !== "/") {
       window.history.replaceState(null, "", "/");
     }
-  }, []);
+  }, [activeTab]);
 
   return (
-    <TabsContext.Provider value={{ activeTab, setActiveTab: setActiveTabWithHistory }}>
+    <TabsContext.Provider value={{ activeTab, setActiveTab: setActiveTabWithHistory, previousTab }}>
       {children}
     </TabsContext.Provider>
   );
@@ -51,32 +69,30 @@ interface TabPanelProps {
 }
 
 export function TabPanel({ tabId, children }: TabPanelProps) {
-  const { activeTab } = useTabs();
+  const { activeTab, previousTab } = useTabs();
   const isActive = activeTab === tabId;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const scrollPosRef = useRef<number>(0);
+  const wasJustActivated = isActive && previousTab !== null && previousTab !== tabId;
+  const hasRestoredRef = useRef(false);
 
-  // Preserve scroll position when tab becomes inactive
+  // Restore scroll position when this tab becomes active
   useEffect(() => {
-    if (!isActive && containerRef.current) {
-      scrollPosRef.current = containerRef.current.scrollTop;
+    if (wasJustActivated && !hasRestoredRef.current) {
+      hasRestoredRef.current = true;
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        window.scrollTo(0, scrollPositions[tabId]);
+      });
     }
-  }, [isActive]);
-
-  // Restore scroll position when tab becomes active
-  useEffect(() => {
-    if (isActive && containerRef.current && scrollPosRef.current > 0) {
-      containerRef.current.scrollTop = scrollPosRef.current;
+    
+    if (!isActive) {
+      hasRestoredRef.current = false;
     }
-  }, [isActive]);
+  }, [isActive, wasJustActivated, tabId]);
 
   return (
     <div
-      ref={containerRef}
       style={{
         display: isActive ? "block" : "none",
-        height: "100%",
-        overflow: "auto",
       }}
       aria-hidden={!isActive}
     >
@@ -87,7 +103,7 @@ export function TabPanel({ tabId, children }: TabPanelProps) {
 
 export function TabContainer({ children }: { children: ReactNode }) {
   return (
-    <div style={{ height: "100%", position: "relative" }}>
+    <div style={{ position: "relative" }}>
       {children}
     </div>
   );
