@@ -83,7 +83,7 @@
   --bg-clay-muted: #B56A52;
   
   /* Primary app background: subtle sand gradient */
-  --bg: radial-gradient(ellipse at top, rgba(143, 182, 190, 0.08) 0%, var(--bg-sand-light) 30%, var(--bg-sand-mid) 100%);
+  --bg: radial-gradient(ellipse at top, rgba(143, 182, 190, 0.08) 0%, #F1E6D6 30%, #E4D2BA 100%);
   
   /* -------- Light Theme Palette -------- */
   --canvas: var(--bg-sand-light);
@@ -146,8 +146,6 @@
   --ring: var(--accent);
   --destructive: var(--danger);
   --destructive-foreground: #FFFFFF;
-  /* Keep bg pointing at canvas (legacy) while body uses --bg gradient */
-  --bg: var(--canvas);
   
   /* -------- Layout -------- */
   --topbar-height: 56px;
