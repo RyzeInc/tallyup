@@ -5,11 +5,48 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/components/ToastProvider";
 import { OptimisticLinksProvider } from "@/components/OptimisticLinksProvider";
 import AuthGate from "@/components/AuthGate";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
+import type { Metadata, Viewport } from "next";
+
+export const metadata: Metadata = {
+  title: "TallyUp - Event-First Personal Finance",
+  description: "Event-first financial truth engine focused on awareness, not optimization",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TallyUp",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
       <html lang="en">
+        <head>
+          <link rel="manifest" href="/manifest.webmanifest" />
+          <meta name="mobile-web-app-capable" content="yes" />
+          <meta name="apple-mobile-web-app-capable" content="yes" />
+          <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+          <meta name="apple-mobile-web-app-title" content="TallyUp" />
+        </head>
         <body style={{ background: "var(--bg)", minHeight: "100vh" }}>
           <ThemeProvider>
             <ToastProvider>
@@ -21,6 +58,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </OptimisticLinksProvider>
             </ToastProvider>
           </ThemeProvider>
+          <ServiceWorkerRegistration />
         </body>
       </html>
     </ClerkProvider>

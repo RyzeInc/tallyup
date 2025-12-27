@@ -1,5 +1,34 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## TallyUp - Event-First Personal Finance PWA
+
+TallyUp is an installable Progressive Web App focused on financial truth, resilience, and fast daily use.
+
+### PWA Features ✨
+
+- 📱 **Installable**: Add to home screen on mobile and desktop
+- ⚡ **Fast**: Conservative caching of static assets for instant load times
+- 🔒 **Secure**: Zero caching of auth tokens or financial data
+- 🌐 **Offline Ready**: Graceful offline fallback page
+- 🎨 **Native Feel**: Full-screen standalone mode
+
+See [docs/PWA_GUIDE.md](docs/PWA_GUIDE.md) for complete PWA documentation.
+
+## Quick Start - Generate PWA Icons
+
+Before running the app, generate the required PWA icons:
+
+**Option 1: Using Node.js (requires sharp)**
+```bash
+npm install sharp
+node scripts/generate-icons.js
+```
+
+**Option 2: Using Browser (no dependencies)**
+1. Open `http://localhost:3000/generate-icons.html` after starting the dev server
+2. Click "Generate All Icons"
+3. Download each icon and save to `/public/icons/` with the exact filename shown
+
 ## Getting Started
 
 First, run the development server:

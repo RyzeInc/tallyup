@@ -1,0 +1,35 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Modern gradient background -->
+  <rect width="512" height="512" rx="120" fill="url(#gradient)"/>
+  
+  <!-- Tally marks design - representing counting/tracking -->
+  <g transform="translate(140, 180)">
+    <!-- First tally group -->
+    <rect x="0" y="0" width="16" height="120" rx="8" fill="white" opacity="0.9"/>
+    <rect x="28" y="0" width="16" height="120" rx="8" fill="white" opacity="0.9"/>
+    <rect x="56" y="0" width="16" height="120" rx="8" fill="white" opacity="0.9"/>
+    <rect x="84" y="0" width="16" height="120" rx="8" fill="white" opacity="0.9"/>
+    <rect x="-8" y="50" width="112" height="20" rx="10" fill="white" opacity="0.95" transform="rotate(-20 50 60)"/>
+    
+    <!-- Second tally group -->
+    <rect x="140" y="0" width="16" height="120" rx="8" fill="white" opacity="0.8"/>
+    <rect x="168" y="0" width="16" height="120" rx="8" fill="white" opacity="0.8"/>
+    <rect x="196" y="0" width="16" height="120" rx="8" fill="white" opacity="0.8"/>
+  </g>
+  
+  <!-- Upward arrow suggesting growth/progress -->
+  <path d="M256 380 L256 420 M236 400 L256 380 L276 400" 
+        stroke="white" 
+        stroke-width="20" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" 
+        fill="none" 
+        opacity="0.7"/>
+  
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>
