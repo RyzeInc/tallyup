@@ -10,14 +10,12 @@ import { useTimeRange } from "@/components/TimeRangeProvider";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuickLog } from "@/components/log/QuickLogProvider";
 
 const COLORS = ["#2F6F85", "#10B981", "#F59E0B", "#6F9EA8", "#EC4899", "#C87A5A"];
 
 export default function SummaryPage() {
   const { user } = useUser();
   const router = useRouter();
-  const quickLog = useQuickLog();
   const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
@@ -93,11 +91,11 @@ export default function SummaryPage() {
   const reviewCount = inbox?.length ?? 0;
 
   function openLogSpent() {
-    quickLog.open();
+    router.push("/log");
   }
 
   function openLogReceived() {
-    quickLog.open();
+    router.push("/log");
   }
 
   return (

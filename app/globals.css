@@ -243,6 +243,13 @@
   --sidebar-bg: var(--surface);
   --sidebar-active: var(--accent-subtle);
   --sidebar-active-text: var(--accent);
+  
+  /* Dark mode input fields - use surface color, not white */
+  --input: var(--surface);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text);
 }
 
 /* ============================================

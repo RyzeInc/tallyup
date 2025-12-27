@@ -7,7 +7,7 @@ import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
-import { useQuickLog } from "@/components/log/QuickLogProvider";
+import { useRouter } from "next/navigation";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
 
@@ -110,7 +110,7 @@ function getLastTransactionText(lastDate?: number): string | null {
 }
 
 export default function HomePage() {
-  const quickLog = useQuickLog();
+  const router = useRouter();
   const { activeTab } = useTabs();
   
   // Home scope always defaults to "this-month" - no persistence
@@ -300,8 +300,8 @@ export default function HomePage() {
   }, [snapshot, entries]);
 
   const openLog = useCallback(() => {
-    quickLog.open();
-  }, [quickLog]);
+    router.push("/log");
+  }, [router]);
 
   return (
     <div className="space-y-4 pb-24">
