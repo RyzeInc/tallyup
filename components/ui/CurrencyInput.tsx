@@ -11,6 +11,7 @@ export default function CurrencyInput({
   currency = "USD",
   invalid,
   onBlur,
+  autoFocus,
 }: {
   valueCents?: number;
   onChange?: (cents: number | null) => void;
@@ -20,6 +21,7 @@ export default function CurrencyInput({
   currency?: string;
   invalid?: boolean;
   onBlur?: () => void;
+  autoFocus?: boolean;
 }) {
   const [text, setText] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -84,6 +86,7 @@ export default function CurrencyInput({
       aria-label={ariaLabel ?? "Amount"}
       value={text}
       placeholder={placeholder}
+      autoFocus={autoFocus}
       onFocus={() => setIsFocused(true)}
       onPaste={(e) => {
         e.preventDefault();
