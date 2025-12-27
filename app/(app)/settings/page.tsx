@@ -7,6 +7,7 @@ import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { useTheme } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 
 type ExpenseSpace = typeof EXPENSE_SPACES[number];
@@ -37,6 +38,7 @@ const CATEGORY_ORDER_KEY = "tallyup.categoryOrder";
 export default function SettingsPage() {
   const { user } = useUser();
   const { startDate, endDate, label } = useTimeRange();
+  const { mode: theme, setMode: changeTheme } = useTheme();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
   // Category/tag management state
@@ -96,28 +98,6 @@ export default function SettingsPage() {
     result.splice(to, 0, removed);
     return result;
   }, []);
-
-  // Theme state
-  const [theme, setTheme] = useState<"system" | "light" | "dark">("system");
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("tallyup.theme") ?? "system";
-      setTheme(saved as any);
-    } catch {}
-  }, []);
-  function changeTheme(t: "system" | "light" | "dark") {
-    setTheme(t);
-    try {
-      localStorage.setItem("tallyup.theme", t);
-      document.documentElement.classList.remove("light", "dark");
-      if (t === "system") {
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        document.documentElement.classList.add(prefersDark ? "dark" : "light");
-      } else {
-        document.documentElement.classList.add(t);
-      }
-    } catch {}
-  }
 
   // Privacy settings
   const [hideAmounts, setHideAmounts] = useState(false);

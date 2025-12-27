@@ -2,41 +2,79 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-const ThemeContext = createContext<{ theme: "light" | "dark"; toggle: () => void } | undefined>(undefined);
+type ThemeMode = "system" | "light" | "dark";
+
+const ThemeContext = createContext<{
+  theme: "light" | "dark";
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+} | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Start with a deterministic default so server and initial client render match.
-  // We will read the saved preference on mount and update via effect to avoid hydration mismatches.
+  // mode = user preference (system, light, dark)
+  // theme = resolved actual theme (light, dark)
+  const [mode, setModeState] = useState<ThemeMode>("system");
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
-  // On mount, read saved preference (or system preference) and apply it.
+  // On mount, read saved preference
   useEffect(() => {
     try {
-      const s = localStorage.getItem("theme");
-      if (s === "dark" || s === "light") {
-        setTheme(s);
-        return;
+      const saved = localStorage.getItem("tallyup.themeMode") as ThemeMode | null;
+      if (saved === "light" || saved === "dark" || saved === "system") {
+        setModeState(saved);
       }
-      // Fallback: try system preference
-      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setTheme(prefersDark ? "dark" : "light");
     } catch {}
   }, []);
 
-  // Persist theme and update document class whenever it changes.
+  // Resolve actual theme based on mode and system preference
   useEffect(() => {
-    try {
-      localStorage.setItem("theme", theme);
-    } catch {}
-    if (theme === "dark") document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
-  }, [theme]);
+    function resolveTheme() {
+      if (mode === "system") {
+        const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+        return prefersDark ? "dark" : "light";
+      }
+      return mode;
+    }
 
-  function toggle() {
-    setTheme((t) => (t === "light" ? "dark" : "light"));
+    const resolved = resolveTheme();
+    setTheme(resolved);
+
+    // Apply to document
+    if (resolved === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+
+    // Listen for system preference changes when in system mode
+    if (mode === "system") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const handler = (e: MediaQueryListEvent) => {
+        const newTheme = e.matches ? "dark" : "light";
+        setTheme(newTheme);
+        if (newTheme === "dark") {
+          document.documentElement.classList.add("dark");
+        } else {
+          document.documentElement.classList.remove("dark");
+        }
+      };
+      mediaQuery.addEventListener("change", handler);
+      return () => mediaQuery.removeEventListener("change", handler);
+    }
+  }, [mode]);
+
+  function setMode(newMode: ThemeMode) {
+    setModeState(newMode);
+    try {
+      localStorage.setItem("tallyup.themeMode", newMode);
+    } catch {}
   }
 
-  return <ThemeContext.Provider value={{ theme, toggle }}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={{ theme, mode, setMode }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

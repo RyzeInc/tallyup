@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import ThemeToggle from "@/components/ThemeToggle";
 import BottomNav from "@/components/BottomNav";
 import { TabContainer, TabPanel } from "@/components/PersistentTabs";
 import dynamic from "next/dynamic";
@@ -32,7 +31,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <h1 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
             TallyUp
           </h1>
-          <ThemeToggle />
         </header>
 
         <main>
