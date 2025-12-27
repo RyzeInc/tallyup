@@ -3,6 +3,7 @@ interface SkeletonProps {
   variant?: "text" | "circular" | "rectangular";
   width?: string | number;
   height?: string | number;
+  style?: React.CSSProperties;
 }
 
 export default function Skeleton({
@@ -10,6 +11,7 @@ export default function Skeleton({
   variant = "text",
   width,
   height,
+  style: customStyle,
 }: SkeletonProps) {
   const variantStyles: React.CSSProperties = {
     text: { height: "16px", borderRadius: "var(--radius-sm)" },
@@ -27,18 +29,19 @@ export default function Skeleton({
   return (
     <div
       className={`animate-pulse ${className}`}
-      style={style}
+      style={{ ...style, ...customStyle }}
       aria-hidden="true"
     />
   );
 }
 
 // Common skeleton patterns
-export function SkeletonCard({ className = "" }: { className?: string }) {
+export function SkeletonCard({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div
       className={className}
       style={{
+        ...style,
         borderRadius: "var(--card-radius)",
         backgroundColor: "var(--surface)",
         border: "1px solid var(--border)",
