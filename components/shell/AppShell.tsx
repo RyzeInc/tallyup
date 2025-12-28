@@ -11,6 +11,7 @@ const OverviewPage = dynamic(() => import("@/app/(app)/overview/page"), { ssr: f
 const ActivityPage = dynamic(() => import("@/app/(app)/activity/page"), { ssr: false });
 const InsightsPage = dynamic(() => import("@/app/(app)/insights/page"), { ssr: false });
 const LogPage = dynamic(() => import("@/app/(app)/log/page"), { ssr: false });
+const MorePage = dynamic(() => import("@/app/(app)/more/page"), { ssr: false });
 
 /**
  * AppShell - Unified shell with:
@@ -62,11 +63,11 @@ export { TopBar };
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
-  // Check if we're on a main tab route (overview, activity, insights, log) or root
+  // Check if we're on a main tab route (overview, activity, insights, log, more) or root
   const isMainTab = pathname === "/" || 
-                    pathname === "/overview" || pathname === "/activity" || pathname === "/insights" || pathname === "/log" ||
+                    pathname === "/overview" || pathname === "/activity" || pathname === "/insights" || pathname === "/log" || pathname === "/more" ||
                     pathname?.startsWith("/overview/") || pathname?.startsWith("/activity/") || 
-                    pathname?.startsWith("/insights/") || pathname?.startsWith("/log/");
+                    pathname?.startsWith("/insights/") || pathname?.startsWith("/log/") || pathname?.startsWith("/more/");
 
   return (
     <div 
@@ -100,6 +101,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </TabPanel>
               <TabPanel tabId="log">
                 <LogPage />
+              </TabPanel>
+              <TabPanel tabId="more">
+                <MorePage />
               </TabPanel>
             </TabContainer>
           ) : (

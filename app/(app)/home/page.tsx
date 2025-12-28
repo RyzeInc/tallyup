@@ -254,14 +254,6 @@ export default function HomePage() {
   const lastTxText = getLastTransactionText(snapshot?.lastTransactionDate);
   const reviewCount = inbox?.length ?? 0;
 
-  // Quick log handlers
-  function handleQuickLog(type: "expense" | "income") {
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("tallyup.logType", type);
-    }
-    setActiveTab("log");
-  }
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       {/* Header with compact time range */}
@@ -449,65 +441,22 @@ export default function HomePage() {
               )}
             </div>
 
-            {/* Quick Log Row */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+            {/* Review Alert - opens first review item for editing */}
+            {reviewCount > 0 && inbox && inbox[0] && (
               <button
-                onClick={() => handleQuickLog("expense")}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "var(--space-2)",
-                  backgroundColor: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--input-radius)",
-                  padding: "var(--space-4)",
-                  minHeight: "var(--button-height)",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: "var(--text-body)",
-                  color: "var(--text)",
-                }}
-              >
-                <Lucide.ArrowUpRight className="h-5 w-5" style={{ color: "var(--danger)" }} />
-                Spent
-              </button>
-              <button
-                onClick={() => handleQuickLog("income")}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "var(--space-2)",
-                  backgroundColor: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--input-radius)",
-                  padding: "var(--space-4)",
-                  minHeight: "var(--button-height)",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: "var(--text-body)",
-                  color: "var(--text)",
-                }}
-              >
-                <Lucide.ArrowDownLeft className="h-5 w-5" style={{ color: "var(--success)" }} />
-                Received
-              </button>
-            </div>
-
-            {/* Review Alert */}
-            {reviewCount > 0 && (
-              <Link
-                href="/review"
+                onClick={() => setEditEntry(inbox[0] as Entry)}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: "var(--space-3)",
+                  width: "100%",
                   backgroundColor: "var(--warning-subtle)",
                   border: "1px solid var(--warning)",
                   borderRadius: "var(--input-radius)",
                   padding: "var(--space-3) var(--space-4)",
                   textDecoration: "none",
+                  cursor: "pointer",
+                  textAlign: "left",
                 }}
               >
                 <Lucide.AlertCircle className="h-5 w-5 shrink-0" style={{ color: "var(--warning)" }} />
@@ -515,7 +464,7 @@ export default function HomePage() {
                   {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} need review
                 </span>
                 <Lucide.ChevronRight className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
-              </Link>
+              </button>
             )}
 
             {/* Recent Transactions - Grouped by date */}
@@ -699,7 +648,7 @@ export default function HomePage() {
                   Add your first transaction to get started
                 </p>
                 <button
-                  onClick={() => handleQuickLog("expense")}
+                  onClick={() => setActiveTab("log")}
                   className="btn-primary"
                   style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}
                 >

@@ -52,6 +52,42 @@ export default function HistoryPage() {
     }
   }, [searchParams]);
 
+  // Sync URL params to state when URL changes (for drill-down navigation)
+  const prevSearchParams = useRef(searchParams.toString());
+  useEffect(() => {
+    const currentParams = searchParams.toString();
+    if (currentParams !== prevSearchParams.current) {
+      prevSearchParams.current = currentParams;
+      
+      // Update state from URL params
+      const urlType = searchParams.get("type");
+      if (urlType === "income" || urlType === "expense") {
+        setType(urlType);
+      } else if (!urlType) {
+        setType("all");
+      }
+      
+      const urlCategory = searchParams.get("category");
+      if (urlCategory) {
+        setSelectedCategories([urlCategory]);
+      } else {
+        setSelectedCategories([]);
+      }
+      
+      const urlTag = searchParams.get("tag");
+      if (urlTag) {
+        setSelectedTags([urlTag]);
+      } else {
+        setSelectedTags([]);
+      }
+      
+      const urlQ = searchParams.get("q");
+      if (urlQ !== null) {
+        setQ(urlQ);
+      }
+    }
+  }, [searchParams]);
+
   // Track if this is initial mount to avoid URL sync loops
   const isInitialMount = useRef(true);
   const lastUrlUpdate = useRef<string>("");

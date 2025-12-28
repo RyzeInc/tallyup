@@ -823,29 +823,27 @@ export default function InsightsPage() {
                     </button>
                   );
                 })}
-              </div>
 
-              {/* Tag lens button - opens sheet instead of chip wall */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {/* Lens filter - inline with type filter */}
                 <button
                   onClick={() => setLensSheetOpen(true)}
                   style={{
-                    display: "flex",
+                    display: "inline-flex",
                     alignItems: "center",
                     gap: "6px",
-                    padding: "8px 12px",
-                    borderRadius: "var(--radius-full)",
+                    padding: "10px 14px",
+                    borderRadius: "calc(var(--input-radius) - 4px)",
                     fontSize: "var(--text-meta)",
                     fontWeight: 500,
                     cursor: "pointer",
                     transition: "all 150ms ease",
-                    backgroundColor: selectedTags.length > 0 ? "var(--primary)" : "var(--surface)",
+                    backgroundColor: selectedTags.length > 0 ? "var(--primary)" : "transparent",
                     color: selectedTags.length > 0 ? "var(--primary-foreground)" : "var(--text)",
-                    border: selectedTags.length > 0 ? "none" : "1px solid var(--border)",
+                    border: "none",
                   }}
                 >
-                  <Lucide.Filter className="h-3.5 w-3.5" />
-                  {selectedTags.length > 0 ? `${selectedTags.length} lens${selectedTags.length > 1 ? "es" : ""}` : "Add lens"}
+                  <Lucide.SlidersHorizontal className="h-4 w-4" />
+                  {selectedTags.length > 0 ? `Lens (${selectedTags.length})` : "Lens"}
                 </button>
                 {selectedTags.length > 0 && (
                   <button

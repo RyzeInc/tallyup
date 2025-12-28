@@ -3,7 +3,7 @@
 import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { flushSync } from "react-dom";
 
-type TabId = "overview" | "activity" | "insights" | "log";
+type TabId = "overview" | "activity" | "insights" | "log" | "more";
 
 interface TabsContextValue {
   activeTab: TabId;
@@ -19,6 +19,7 @@ const scrollPositions: Record<TabId, number> = {
   activity: 0,
   insights: 0,
   log: 0,
+  more: 0,
 };
 
 export function useTabs() {

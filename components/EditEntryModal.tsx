@@ -141,7 +141,7 @@ export default function EditEntryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40"
@@ -149,22 +149,27 @@ export default function EditEntryModal({
         aria-hidden="true"
       />
 
-      {/* Modal */}
+      {/* Modal - Sheet style on mobile, centered on desktop */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Edit transaction"
-        className="relative w-full max-w-md max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
+        className="relative w-full sm:max-w-sm animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-150"
+        style={{ maxHeight: "85vh" }}
       >
         <div
-          className="rounded-2xl border p-5 shadow-lg"
+          className="rounded-t-2xl sm:rounded-2xl border-t sm:border shadow-lg overflow-hidden flex flex-col"
           style={{
             backgroundColor: "var(--surface)",
             borderColor: "var(--border)",
+            maxHeight: "85vh",
           }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-5">
+          {/* Header - Fixed */}
+          <div 
+            className="flex items-center justify-between px-5 py-4 border-b shrink-0"
+            style={{ borderColor: "var(--border)" }}
+          >
             <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
               Edit Transaction
             </h2>
@@ -175,6 +180,9 @@ export default function EditEntryModal({
               <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
             </button>
           </div>
+
+          {/* Scrollable content */}
+          <div className="overflow-y-auto px-5 py-4 flex-1" style={{ maxHeight: "calc(85vh - 140px)" }}>
 
           {/* Error message */}
           {error && (
@@ -376,7 +384,7 @@ export default function EditEntryModal({
           </div>
 
           {/* Needs Review toggle */}
-          <div className="mb-6">
+          <div>
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -390,9 +398,13 @@ export default function EditEntryModal({
               </span>
             </label>
           </div>
+          </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3">
+          {/* Fixed Footer Actions */}
+          <div 
+            className="flex items-center gap-3 px-5 py-4 border-t shrink-0"
+            style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}
+          >
             <button
               onClick={handleDelete}
               disabled={deleting || saving}

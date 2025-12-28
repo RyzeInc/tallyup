@@ -393,7 +393,7 @@ export default function LogPage() {
             padding: "var(--space-4)",
           }}
         >
-          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "center" }}>
             {/* Add Tags Chip */}
             <button
               type="button"
