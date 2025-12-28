@@ -56,11 +56,14 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 safe-area-inset-bottom"
+        className="fixed bottom-0 left-0 right-0 safe-area-inset-bottom"
         style={{
           backgroundColor: "var(--surface)",
           borderTop: "1px solid var(--border)",
           boxShadow: "0 -1px 3px rgba(0, 0, 0, 0.03)",
+          isolation: "isolate", // Create new stacking context
+          zIndex: 9999, // Ensure it's above everything
+          pointerEvents: "auto", // Ensure clicks are captured
         }}
       >
         <div className="mx-auto" style={{ maxWidth: "var(--content-max-width)" }}>
