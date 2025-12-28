@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
@@ -16,7 +16,7 @@ import { useTabs } from "./PersistentTabs";
  * - Standard 5-tab bar layout
  * - Middle Log tab has subtle emphasis (larger icon, small background highlight)
  * - No floating pill that blocks content
- * - Compose opens a bottom sheet with "Spent" / "Received" options
+ * - Center button navigates directly to /log
  * - Tap targets ≥ 44px
  */
 
@@ -28,140 +28,10 @@ interface NavTab {
   isCenter?: boolean;
 }
 
-// Compose Sheet - Opens when Log is tapped
-function ComposeSheet({ 
-  open, 
-  onClose, 
-  onSelectType 
-}: { 
-  open: boolean; 
-  onClose: () => void;
-  onSelectType: (type: "expense" | "income") => void;
-}) {
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (open) {
-      window.addEventListener("keydown", onKey);
-      return () => window.removeEventListener("keydown", onKey);
-    }
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40 transition-opacity"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Sheet */}
-      <div
-        ref={sheetRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Log transaction"
-        className="relative w-full max-w-md animate-slide-in-from-bottom"
-      >
-        <div
-          style={{
-            backgroundColor: "var(--surface)",
-            borderTopLeftRadius: "var(--card-radius)",
-            borderTopRightRadius: "var(--card-radius)",
-            borderTop: "1px solid var(--border)",
-            borderLeft: "1px solid var(--border)",
-            borderRight: "1px solid var(--border)",
-            padding: "var(--space-4)",
-            paddingBottom: "calc(var(--space-6) + env(safe-area-inset-bottom, 0px))",
-          }}
-        >
-          {/* Handle */}
-          <div className="flex justify-center mb-4">
-            <div
-              className="h-1 w-10 rounded-full"
-              style={{ backgroundColor: "var(--border)" }}
-            />
-          </div>
-
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 
-              style={{ 
-                color: "var(--text)",
-                fontSize: "var(--text-h2)",
-                fontWeight: "var(--text-h2-weight)",
-              }}
-            >
-              Log transaction
-            </h2>
-            <button
-              onClick={onClose}
-              className="rounded-full p-2 transition-colors"
-              style={{ minHeight: 44, minWidth: 44 }}
-              aria-label="Close"
-            >
-              <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
-            </button>
-          </div>
-
-          {/* Quick Log Buttons */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => {
-                onSelectType("expense");
-                onClose();
-              }}
-              className="flex items-center justify-center gap-3 transition-colors"
-              style={{
-                backgroundColor: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--input-radius)",
-                padding: "var(--space-4)",
-                minHeight: "var(--button-height)",
-                color: "var(--text)",
-                fontWeight: 600,
-              }}
-            >
-              <Lucide.ArrowUpRight className="h-5 w-5" style={{ color: "var(--danger)" }} />
-              Spent
-            </button>
-            <button
-              onClick={() => {
-                onSelectType("income");
-                onClose();
-              }}
-              className="flex items-center justify-center gap-3 transition-colors"
-              style={{
-                backgroundColor: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--input-radius)",
-                padding: "var(--space-4)",
-                minHeight: "var(--button-height)",
-                color: "var(--text)",
-                fontWeight: 600,
-              }}
-            >
-              <Lucide.ArrowDownLeft className="h-5 w-5" style={{ color: "var(--success)" }} />
-              Received
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function BottomNav({ currentPath }: { currentPath?: string }) {
   const pathname = currentPath ?? usePathname();
   const { activeTab, setActiveTab } = useTabs();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [composeOpen, setComposeOpen] = useState(false);
 
   // Get review count for badge
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
@@ -183,14 +53,6 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
     MoreHorizontal: Lucide.MoreHorizontal,
   };
 
-  function handleLogSelect(type: "expense" | "income") {
-    // Navigate to log tab and store the selected type
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("tallyup.logType", type);
-    }
-    setActiveTab("log");
-  }
-
   return (
     <>
       <nav
@@ -208,12 +70,12 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
               const Icon = iconMap[t.iconName];
               const showBadge = t.id === "activity" && reviewCount > 0;
 
-              // Center Log tab - slightly emphasized
+              // Center Log tab - navigates directly to /log
               if (t.isCenter) {
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setComposeOpen(true)}
+                    onClick={() => setActiveTab("log")}
                     className="flex flex-col items-center justify-center py-2 px-3 transition-colors"
                     style={{ 
                       minHeight: 64,
@@ -297,11 +159,6 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
       </nav>
 
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} pendingReviewCount={reviewCount} />
-      <ComposeSheet 
-        open={composeOpen} 
-        onClose={() => setComposeOpen(false)} 
-        onSelectType={handleLogSelect}
-      />
     </>
   );
 }
