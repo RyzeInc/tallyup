@@ -1451,7 +1451,7 @@ export default function InsightsPage() {
                           paddingAngle={2}
                           dataKey="amount"
                           nameKey="name"
-                          onClick={(data) => {
+                          onClick={(data: { name?: string }) => {
                             if (data?.name) {
                               drillDown({ type: "expense", category: data.name });
                             }
