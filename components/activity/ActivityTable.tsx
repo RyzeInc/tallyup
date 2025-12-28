@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useMemo, useState, useRef, useCallback } from "react";
+import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES } from "@/components/utils";
+import { useToast } from "@/components/ToastProvider";
 import Link from "next/link";
 
 // Swipe threshold in px
@@ -22,14 +23,42 @@ export default function ActivityTable({
   onSavePattern?: (entry: any) => void;
   onBulkComplete?: () => void;
 }) {
+  const toast = useToast();
+  
+  // Selection mode state
+  const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+  
   const bulkMarkReviewed = useMutation(api.entries.bulkMarkReviewed);
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   // Bulk action sheet state
   const [bulkAction, setBulkAction] = useState<"none" | "tag" | "category">("none");
+
+  // Long-press for entering select mode
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Exit select mode when selection is cleared
+  useEffect(() => {
+    if (selectMode && selectedIds.length === 0) {
+      // Keep select mode open if user just cleared, allow manual exit
+    }
+  }, [selectMode, selectedIds.length]);
+
+  function enterSelectMode(entryId?: string) {
+    setSelectMode(true);
+    if (entryId) {
+      setSelected({ [entryId]: true });
+    }
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelected({});
+    setBulkAction("none");
+  }
 
   // Swipe state per row
   const [swipeOffset, setSwipeOffset] = useState<Record<string, number>>({});
@@ -52,11 +81,12 @@ export default function ActivityTable({
   async function handleBulkMarkReviewed() {
     try {
       await bulkMarkReviewed({ ids: selectedIds as any });
-      clearSelection();
+      toast.success(`${selectedIds.length} items marked as reviewed`);
+      exitSelectMode();
       onBulkComplete?.();
     } catch (e) {
       console.error(e);
-      alert("Failed to apply bulk action.");
+      toast.error("Failed to mark as reviewed");
     }
   }
 
@@ -66,11 +96,12 @@ export default function ActivityTable({
       for (const id of selectedIds) {
         await deleteEntry({ id: id as any });
       }
-      clearSelection();
+      toast.success(`${selectedIds.length} entries deleted`);
+      exitSelectMode();
       onBulkComplete?.();
     } catch (e) {
       console.error(e);
-      alert("Failed to delete entries.");
+      toast.error("Failed to delete entries");
     }
   }
 
@@ -84,12 +115,12 @@ export default function ActivityTable({
           await updateEntry({ id: id as any, tags: [...currentTags, tag] });
         }
       }
-      clearSelection();
-      setBulkAction("none");
+      toast.success(`Added "${tag}" to ${selectedIds.length} entries`);
+      exitSelectMode();
       onBulkComplete?.();
     } catch (e) {
       console.error(e);
-      alert("Failed to add tag.");
+      toast.error("Failed to add tag");
     }
   }
 
@@ -98,12 +129,12 @@ export default function ActivityTable({
       for (const id of selectedIds) {
         await updateEntry({ id: id as any, category });
       }
-      clearSelection();
-      setBulkAction("none");
+      toast.success(`Changed category to "${category}"`);
+      exitSelectMode();
       onBulkComplete?.();
     } catch (e) {
       console.error(e);
-      alert("Failed to change category.");
+      toast.error("Failed to change category");
     }
   }
 
@@ -151,129 +182,56 @@ export default function ActivityTable({
 
   return (
     <div className="space-y-3">
-      {/* Bulk Actions Bar */}
-      {selectedIds.length > 0 && (
+      {/* Selection Mode Header - Sticky at top when in select mode */}
+      {selectMode && (
         <div
-          className="sticky top-0 z-10 rounded-xl px-4 py-3"
-          style={{ backgroundColor: "var(--accent-subtle)", border: "1px solid var(--accent)" }}
+          className="sticky top-0 z-10 rounded-xl px-4 py-3 flex items-center justify-between"
+          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--accent)" }}
         >
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className="text-body font-semibold" style={{ color: "var(--accent)" }}>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={exitSelectMode}
+              className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+              aria-label="Exit selection mode"
+            >
+              <Lucide.X className="h-5 w-5" style={{ color: "var(--text)" }} />
+            </button>
+            <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
               {selectedIds.length} selected
             </span>
-            <div className="ml-auto flex flex-wrap gap-2">
-              <button
-                onClick={selectAll}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
-                style={{ border: "1px solid var(--border)", color: "var(--text)", backgroundColor: "var(--surface)" }}
-              >
-                Select all
-              </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={selectAll}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+              style={{ color: "var(--primary)" }}
+            >
+              Select all
+            </button>
+            {selectedIds.length > 0 && (
               <button
                 onClick={clearSelection}
-                className="rounded-lg px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[var(--surface-subtle)]"
-                style={{ border: "1px solid var(--border)", color: "var(--text)", backgroundColor: "var(--surface)" }}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+                style={{ color: "var(--text-secondary)" }}
               >
                 Clear
               </button>
-              <button
-                onClick={handleBulkMarkReviewed}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-                style={{ backgroundColor: "var(--success)", color: "white" }}
-              >
-                <span className="flex items-center gap-1">
-                  <Lucide.Check className="h-3 w-3" />
-                  Mark reviewed
-                </span>
-              </button>
-              <button
-                onClick={() => setBulkAction("tag")}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-                style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-              >
-                <span className="flex items-center gap-1">
-                  <Lucide.Tag className="h-3 w-3" />
-                  Add tag
-                </span>
-              </button>
-              <button
-                onClick={() => setBulkAction("category")}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-                style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-              >
-                <span className="flex items-center gap-1">
-                  <Lucide.Folder className="h-3 w-3" />
-                  Category
-                </span>
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold"
-                style={{ backgroundColor: "var(--danger)", color: "white" }}
-              >
-                <span className="flex items-center gap-1">
-                  <Lucide.Trash2 className="h-3 w-3" />
-                  Delete
-                </span>
-              </button>
-            </div>
+            )}
           </div>
+        </div>
+      )}
 
-          {/* Tag selection panel */}
-          {bulkAction === "tag" && (
-            <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
-              <div className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                Select tag to add:
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {CONTEXT_TAGS.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => handleBulkAddTag(tag)}
-                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-                    style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
-                  >
-                    {tag}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setBulkAction("none")}
-                  className="rounded-full px-3 py-1.5 text-xs font-medium"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Category selection panel */}
-          {bulkAction === "category" && (
-            <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
-              <div className="text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-                Select category:
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {categoryOptions.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => handleBulkChangeCategory(cat)}
-                    className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-                    style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
-                  >
-                    {cat}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setBulkAction("none")}
-                  className="rounded-full px-3 py-1.5 text-xs font-medium"
-                  style={{ color: "var(--text-secondary)" }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+      {/* Select Mode Toggle - Show when not in select mode */}
+      {!selectMode && entries.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setSelectMode(true)}
+            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            <Lucide.CheckSquare className="h-3.5 w-3.5" />
+            Select
+          </button>
         </div>
       )}
 
@@ -330,18 +288,41 @@ export default function ActivityTable({
               <div
                 className="relative flex items-center gap-3 px-4 py-3 transition-transform bg-[var(--surface)]"
                 style={{ transform: `translateX(${offset}px)` }}
-                onTouchStart={(e) => handleTouchStart(r._id, e)}
-                onTouchMove={(e) => handleTouchMove(r._id, e)}
-                onTouchEnd={() => handleTouchEnd(r._id, r)}
+                onTouchStart={(e) => {
+                  handleTouchStart(r._id, e);
+                  // Long press to enter select mode
+                  longPressTimer.current = setTimeout(() => {
+                    enterSelectMode(r._id);
+                  }, 500);
+                }}
+                onTouchMove={(e) => {
+                  handleTouchMove(r._id, e);
+                  // Cancel long press on move
+                  if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                  }
+                  if (!selectMode) {
+                    handleTouchEnd(r._id, r);
+                  }
+                }}
               >
-                {/* Checkbox */}
-                <input
-                  type="checkbox"
-                  checked={!!selected[r._id]}
-                  onChange={() => toggle(r._id)}
-                  className="h-4 w-4 rounded shrink-0"
-                  style={{ accentColor: "var(--accent)" }}
-                />
+                {/* Checkbox - only show in select mode */}
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={!!selected[r._id]}
+                    onChange={() => toggle(r._id)}
+                    className="h-5 w-5 rounded shrink-0"
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                )}
 
               {/* Icon */}
               <div
@@ -420,21 +401,151 @@ export default function ActivityTable({
                 </div>
               </div>
 
-              {/* Actions Menu */}
-              <div className="relative shrink-0">
-                <button
-                  onClick={() => onSavePattern?.(r)}
-                  className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-subtle)]"
-                  title="Save as pattern"
-                >
-                  <Lucide.Bookmark className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
-                </button>
-              </div>
+              {/* Actions Menu - only show when not in select mode */}
+              {!selectMode && (
+                <div className="relative shrink-0">
+                  <button
+                    onClick={() => onSavePattern?.(r)}
+                    className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-subtle)]"
+                    title="Save as pattern"
+                  >
+                    <Lucide.Bookmark className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                  </button>
+                </div>
+              )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Fixed Bottom Action Bar - shown when in select mode with items selected */}
+      {selectMode && selectedIds.length > 0 && (
+        <div
+          className="fixed left-0 right-0 z-50 p-4"
+          style={{
+            bottom: "calc(72px + env(safe-area-inset-bottom, 0px))",
+            backgroundColor: "var(--background)",
+          }}
+        >
+          <div
+            className="mx-auto max-w-md rounded-2xl p-3 shadow-lg flex items-center justify-around"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <button
+              onClick={handleBulkMarkReviewed}
+              className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl hover:bg-[var(--surface-subtle)]"
+            >
+              <Lucide.Check className="h-5 w-5" style={{ color: "var(--success)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                Reviewed
+              </span>
+            </button>
+
+            <button
+              onClick={() => setBulkAction("tag")}
+              className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl hover:bg-[var(--surface-subtle)]"
+            >
+              <Lucide.Tag className="h-5 w-5" style={{ color: "var(--accent)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                Tag
+              </span>
+            </button>
+
+            <button
+              onClick={() => setBulkAction("category")}
+              className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl hover:bg-[var(--surface-subtle)]"
+            >
+              <Lucide.Folder className="h-5 w-5" style={{ color: "var(--primary)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                Category
+              </span>
+            </button>
+
+            <button
+              onClick={handleBulkDelete}
+              className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl hover:bg-[var(--surface-subtle)]"
+            >
+              <Lucide.Trash2 className="h-5 w-5" style={{ color: "var(--error)" }} />
+              <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                Delete
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tag Selection Sheet */}
+      {bulkAction === "tag" && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50"
+          onClick={() => setBulkAction("none")}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl p-4 max-h-[50vh] overflow-y-auto"
+            style={{ backgroundColor: "var(--surface)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Add Tag</h3>
+              <button
+                onClick={() => setBulkAction("none")}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+              >
+                <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {CONTEXT_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => handleBulkAddTag(tag)}
+                  className="px-4 py-3 rounded-xl text-left text-sm font-medium hover:bg-[var(--surface-subtle)]"
+                  style={{ color: "var(--text)", border: "1px solid var(--border)" }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Selection Sheet */}
+      {bulkAction === "category" && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50"
+          onClick={() => setBulkAction("none")}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl p-4 max-h-[50vh] overflow-y-auto"
+            style={{ backgroundColor: "var(--surface)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Change Category</h3>
+              <button
+                onClick={() => setBulkAction("none")}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+              >
+                <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {categoryOptions.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => handleBulkChangeCategory(cat)}
+                  className="px-4 py-3 rounded-xl text-left text-sm font-medium hover:bg-[var(--surface-subtle)]"
+                  style={{ color: "var(--text)", border: "1px solid var(--border)" }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

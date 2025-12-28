@@ -82,7 +82,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           maxWidth: "var(--content-max-width)",
           paddingLeft: "var(--page-padding)",
           paddingRight: "var(--page-padding)",
-          paddingBottom: "calc(var(--bottomnav-height) + 24px)",
+          paddingBottom: "calc(var(--bottomnav-height) + env(safe-area-inset-bottom, 0px) + 24px)",
           minHeight: "100vh",
         }}
       >

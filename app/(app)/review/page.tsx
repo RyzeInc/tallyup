@@ -7,10 +7,13 @@ import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES } from "@/components/utils";
 import Link from "next/link";
+import { useToast } from "@/components/ToastProvider";
+import EmptyState from "@/components/ui/EmptyState";
 
 type Step = "confirm" | "category" | "tags" | "done";
 
 export default function ReviewWizardPage() {
+  const toast = useToast();
   const inbox = useQuery(api.entries.listInbox, { limit: 80 }) as any[] | undefined;
   const updateEntry = useMutation(api.entries.updateEntry);
 
@@ -79,13 +82,15 @@ export default function ReviewWizardPage() {
         needsReview: false,
       });
       setCompleted((c) => c + 1);
+      toast.success("Entry reviewed", { description: pendingCategory ? `Categorized as ${pendingCategory}` : undefined });
       goToNext();
     } catch (e) {
       console.error("Failed to update entry:", e);
+      toast.error("Failed to save", { description: "Please try again" });
     } finally {
       setSaving(false);
     }
-  }, [currentEntry, pendingCategory, pendingTags, updateEntry, goToNext]);
+  }, [currentEntry, pendingCategory, pendingTags, updateEntry, goToNext, toast]);
 
   // Toggle a tag
   const toggleTag = useCallback((tag: string) => {
@@ -213,28 +218,20 @@ export default function ReviewWizardPage() {
           </div>
         ) : !currentEntry ? (
           /* No entries to review */
-          <div
-            className="rounded-xl p-8 text-center"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <div
-              className="inline-flex h-16 w-16 items-center justify-center rounded-full mb-4"
-              style={{ backgroundColor: "var(--success-subtle)" }}
-            >
-              <Lucide.CheckCircle2 className="h-8 w-8" style={{ color: "var(--success)" }} />
-            </div>
-            <h2 className="text-h1 mb-2" style={{ color: "var(--text)" }}>Nothing to review</h2>
-            <p className="text-meta mb-6" style={{ color: "var(--text-secondary)" }}>
-              All your entries are categorized
-            </p>
-            <Link
-              href="/overview"
-              className="inline-block rounded-lg px-5 py-2.5 text-sm font-semibold"
-              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
-            >
-              Back to Home
-            </Link>
-          </div>
+          <EmptyState
+            icon={<Lucide.CheckCircle2 className="h-8 w-8" style={{ color: "var(--success)" }} />}
+            title="Nothing to review"
+            subtitle="All your entries are categorized"
+            action={
+              <Link
+                href="/overview"
+                className="inline-block rounded-lg px-5 py-2.5 text-sm font-semibold"
+                style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+              >
+                Back to Home
+              </Link>
+            }
+          />
         ) : (
           /* Review wizard steps */
           <div className="space-y-4">

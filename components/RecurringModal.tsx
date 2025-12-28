@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import { centsToDollars, dollarsToCents } from "./utils";
@@ -25,8 +25,17 @@ export default function RecurringModal({
   const link = useMutation((api as any).recurring.linkEntriesToRule as any);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const { push } = useToast();
+  const toast = useToast();
   const { add } = useOptimisticLinks();
+
+  // Handle escape key
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function onCreate() {
     if (autolink && !autolinkConfirm) {
@@ -55,7 +64,7 @@ export default function RecurringModal({
       if (id) {
         // optimistic local UI update
         add(entry._id);
-        push({ title: "Pattern saved", body: `${displayName || "Pattern"} — saved`, kind: "success" });
+        toast.success("Pattern saved", { description: `${displayName || "Pattern"} — saved` });
 
         // link current entry
         await link({ ruleId: id, entryIds: [entry._id] });
@@ -65,7 +74,7 @@ export default function RecurringModal({
           // future improvement: expand to detect and link many historical matches
           try {
             await link({ ruleId: id, entryIds: [entry._id] });
-            push({ title: "Applied to existing", body: `Applied to matching entries`, kind: "success" });
+            toast.success("Applied to existing", { description: "Applied to matching entries" });
           } catch (e) {
             // ignore errors here
           }
@@ -77,7 +86,7 @@ export default function RecurringModal({
       onClose();
     } catch (e: any) {
       setErr(e?.message ?? "Failed to create");
-      push({ title: "Failed to save pattern", body: e?.message ?? "Unknown error", kind: "error" });
+      toast.error("Failed to save pattern", { description: e?.message ?? "Unknown error" });
     } finally {
       setBusy(false);
     }
@@ -88,26 +97,60 @@ export default function RecurringModal({
       <div
         className="absolute inset-0"
         onClick={onClose}
-        style={{ backgroundColor: document.documentElement.classList.contains("dim") ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.12)" }}
+        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
       />
-      <div className="relative z-10 w-[420px] rounded-2xl p-4" style={{ backgroundColor: "var(--card)", border: "1px solid var(--border)", color: "var(--card-foreground)" }}>
-        <div className="text-sm font-semibold">Save pattern</div>
-        <div className="mt-2 text-xs text-neutral-400">Save a pattern to recognize similar future entries. Auto-apply is off by default and requires explicit confirmation.</div>
+      <div 
+        className="relative z-10 w-[420px] max-w-[calc(100vw-32px)] rounded-2xl p-5" 
+        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Save pattern"
+      >
+        <div className="text-lg font-semibold" style={{ color: "var(--text)" }}>Save pattern</div>
+        <div className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+          Save a pattern to recognize similar future entries. Auto-apply is off by default and requires explicit confirmation.
+        </div>
 
-        <div className="mt-3 space-y-3 text-sm">
+        <div className="mt-4 space-y-4">
           <div>
-            <div className="text-xs text-neutral-400 mb-1">Name</div>
-            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full rounded-xl border px-3 py-2 text-sm outline-none" />
+            <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Name</div>
+            <input 
+              value={displayName} 
+              onChange={(e) => setDisplayName(e.target.value)} 
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+              style={{ 
+                backgroundColor: "var(--surface-subtle)", 
+                border: "1px solid var(--border)",
+                color: "var(--text)"
+              }}
+            />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <div className="text-xs text-neutral-400 mb-1">Amount</div>
-              <input value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full rounded-xl border px-3 py-2 text-sm outline-none" />
+              <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Amount</div>
+              <input 
+                value={amount} 
+                onChange={(e) => setAmount(e.target.value)} 
+                className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+                style={{ 
+                  backgroundColor: "var(--surface-subtle)", 
+                  border: "1px solid var(--border)",
+                  color: "var(--text)"
+                }}
+              />
             </div>
             <div>
-              <div className="text-xs text-neutral-400 mb-1">Cadence</div>
-              <select defaultValue="monthly" className="w-full rounded-xl border px-3 py-2 text-sm outline-none">
+              <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Cadence</div>
+              <select 
+                defaultValue="monthly" 
+                className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+                style={{ 
+                  backgroundColor: "var(--surface-subtle)", 
+                  border: "1px solid var(--border)",
+                  color: "var(--text)"
+                }}
+              >
                 <option value="monthly">Monthly</option>
                 <option value="weekly">Weekly</option>
                 <option value="biweekly">Biweekly</option>
@@ -116,35 +159,81 @@ export default function RecurringModal({
             </div>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={autolink} onChange={(e) => { setAutolink(e.target.checked); if (!e.target.checked) setAutolinkConfirm(false); }} />
-              <span className="text-xs text-neutral-400">Auto-apply to future entries (off by default)</span>
+          <div className="flex flex-col gap-3">
+            <label className="flex items-center gap-2.5">
+              <input 
+                type="checkbox" 
+                checked={autolink} 
+                onChange={(e) => { setAutolink(e.target.checked); if (!e.target.checked) setAutolinkConfirm(false); }}
+                className="h-4 w-4 rounded"
+                style={{ accentColor: "var(--primary)" }}
+              />
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Auto-apply to future entries (off by default)</span>
             </label>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={applyToExisting} onChange={(e) => setApplyToExisting(e.target.checked)} />
-              <span className="text-xs text-neutral-400">Apply to existing entries (optional)</span>
+            <label className="flex items-center gap-2.5">
+              <input 
+                type="checkbox" 
+                checked={applyToExisting} 
+                onChange={(e) => setApplyToExisting(e.target.checked)}
+                className="h-4 w-4 rounded"
+                style={{ accentColor: "var(--primary)" }}
+              />
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Apply to existing entries (optional)</span>
             </label>
 
-            {autolink ? (
-              <div className="rounded-xl border px-3 py-2 text-xs" style={{ borderColor: "var(--border)", backgroundColor: "var(--popover)", color: "var(--popover-foreground)" }}>
-                <div className="font-medium">Auto-apply confirmation</div>
-                <div className="text-xs mt-1">Auto-apply will automatically fill this pattern on future entries. It's best for stable, regular payments (e.g., rent, salary). Please confirm that you understand:</div>
-                <label className="mt-2 flex items-center gap-2">
-                  <input type="checkbox" checked={autolinkConfirm} onChange={(e) => setAutolinkConfirm(e.target.checked)} />
-                  <span className="text-xs">I understand this will automatically apply to future entries</span>
+            {autolink && (
+              <div 
+                className="rounded-xl p-3"
+                style={{ 
+                  backgroundColor: "var(--warning-subtle)", 
+                  border: "1px solid var(--warning)"
+                }}
+              >
+                <div className="font-medium text-sm" style={{ color: "var(--warning)" }}>Auto-apply confirmation</div>
+                <div className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
+                  Auto-apply will automatically fill this pattern on future entries. It's best for stable, regular payments (e.g., rent, salary). Please confirm:
+                </div>
+                <label className="mt-3 flex items-center gap-2.5">
+                  <input 
+                    type="checkbox" 
+                    checked={autolinkConfirm} 
+                    onChange={(e) => setAutolinkConfirm(e.target.checked)}
+                    className="h-4 w-4 rounded"
+                    style={{ accentColor: "var(--warning)" }}
+                  />
+                  <span className="text-sm" style={{ color: "var(--text)" }}>I understand this will automatically apply to future entries</span>
                 </label>
               </div>
-            ) : null}
+            )}
           </div>
 
-          {err ? <div className="text-xs text-rose-400">{err}</div> : null}
+          {err && (
+            <div 
+              className="text-sm rounded-lg p-2.5"
+              style={{ backgroundColor: "var(--error-subtle)", color: "var(--error)" }}
+            >
+              {err}
+            </div>
+          )}
         </div>
 
-        <div className="mt-4 flex gap-2">
-          <button onClick={onClose} className="rounded-xl border px-3 py-2 text-xs">Cancel</button>
-          <button onClick={onCreate} disabled={busy} className="ml-auto rounded-xl bg-white px-3 py-2 text-xs font-semibold text-neutral-900 disabled:opacity-60">Save pattern</button>
+        <div className="mt-5 flex gap-3">
+          <button 
+            onClick={onClose} 
+            className="rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+            style={{ border: "1px solid var(--border)", color: "var(--text)" }}
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={onCreate} 
+            disabled={busy} 
+            className="ml-auto rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+            style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+          >
+            {busy ? "Saving…" : "Save pattern"}
+          </button>
         </div>
       </div>
     </div>

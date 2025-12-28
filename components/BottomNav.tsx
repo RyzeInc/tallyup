@@ -148,6 +148,7 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
                     color: isActive ? "var(--primary)" : "var(--text-tertiary)",
                     touchAction: "manipulation",
                   }}
+                  aria-label={t.label}
                   aria-current={isActive ? "page" : undefined}
                 >
                   <span className="relative">

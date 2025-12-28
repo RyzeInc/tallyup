@@ -1,7 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState, useRef, useEffect } from "react";
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
@@ -10,6 +10,8 @@ import { centsToDollars, CONTEXT_TAGS } from "@/components/utils";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTabs } from "@/components/PersistentTabs";
 import {
   ResponsiveContainer,
   LineChart,
@@ -196,15 +198,35 @@ function KpiTooltip({
 // Main Component
 // ─────────────────────────────────────────────────────────────
 export default function InsightsPage() {
+  const router = useRouter();
+  const { setActiveTab } = useTabs();
   const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
   
   // Filters
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNetOnly, setShowNetOnly] = useState(false);
+  const [lensSheetOpen, setLensSheetOpen] = useState(false);
   
   // Tooltip state
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+
+  // Drill-down navigation: navigate to Activity with pre-applied filters
+  const drillDown = useCallback((filters: {
+    type?: "income" | "expense";
+    category?: string;
+    tag?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (filters.type) params.set("type", filters.type);
+    if (filters.category) params.set("category", filters.category);
+    if (filters.tag) params.set("tag", filters.tag);
+    
+    // Navigate to activity tab with filters
+    const url = params.toString() ? `/activity?${params.toString()}` : "/activity";
+    router.push(url);
+    setActiveTab("activity");
+  }, [router, setActiveTab]);
 
   // Data
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
@@ -803,30 +825,28 @@ export default function InsightsPage() {
                 })}
               </div>
 
-              {/* Tag lens chips */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {CONTEXT_TAGS.map((tag) => {
-                  const isSelected = selectedTags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      onClick={() => toggleTag(tag)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: "var(--radius-full)",
-                        fontSize: "var(--text-micro)",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        transition: "all 150ms ease",
-                        backgroundColor: isSelected ? "var(--primary)" : "transparent",
-                        color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
-                        border: isSelected ? "none" : "1px solid var(--border)",
-                      }}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
+              {/* Tag lens button - opens sheet instead of chip wall */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <button
+                  onClick={() => setLensSheetOpen(true)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 12px",
+                    borderRadius: "var(--radius-full)",
+                    fontSize: "var(--text-meta)",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 150ms ease",
+                    backgroundColor: selectedTags.length > 0 ? "var(--primary)" : "var(--surface)",
+                    color: selectedTags.length > 0 ? "var(--primary-foreground)" : "var(--text)",
+                    border: selectedTags.length > 0 ? "none" : "1px solid var(--border)",
+                  }}
+                >
+                  <Lucide.Filter className="h-3.5 w-3.5" />
+                  {selectedTags.length > 0 ? `${selectedTags.length} lens${selectedTags.length > 1 ? "es" : ""}` : "Add lens"}
+                </button>
                 {selectedTags.length > 0 && (
                   <button
                     onClick={() => setSelectedTags([])}
@@ -841,8 +861,9 @@ export default function InsightsPage() {
                       border: "none",
                       color: "var(--text-tertiary)",
                     }}
+                    aria-label="Clear lens filters"
                   >
-                    <Lucide.X className="h-3.5 w-3.5" />
+                    <Lucide.X className="h-4 w-4" />
                   </button>
                 )}
               </div>
@@ -854,30 +875,32 @@ export default function InsightsPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
               {/* Income */}
               <div style={{ position: "relative" }}>
-                <Link
-                  href="/activity?type=income"
+                <button
+                  onClick={() => drillDown({ type: "income" })}
                   style={{
                     display: "block",
+                    width: "100%",
+                    textAlign: "left",
                     backgroundColor: "var(--surface)",
                     borderRadius: "var(--card-radius)",
                     border: "1px solid var(--border)",
                     padding: "var(--space-3)",
-                    textDecoration: "none",
+                    cursor: "pointer",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
                       Income
                     </div>
-                    <button
+                    <span
                       onClick={(e) => {
-                        e.preventDefault();
+                        e.stopPropagation();
                         setActiveTooltip(activeTooltip === "income" ? null : "income");
                       }}
-                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
+                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
                     >
                       <Lucide.Info className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
-                    </button>
+                    </span>
                   </div>
                   <div
                     style={{
@@ -907,7 +930,7 @@ export default function InsightsPage() {
                       <span style={{ color: "var(--text-tertiary)" }}>({deltas.income.percent})</span>
                     </div>
                   )}
-                </Link>
+                </button>
                 <KpiTooltip
                   open={activeTooltip === "income"}
                   onClose={() => setActiveTooltip(null)}
@@ -924,30 +947,32 @@ export default function InsightsPage() {
 
               {/* Expenses */}
               <div style={{ position: "relative" }}>
-                <Link
-                  href="/activity?type=expense"
+                <button
+                  onClick={() => drillDown({ type: "expense" })}
                   style={{
                     display: "block",
+                    width: "100%",
+                    textAlign: "left",
                     backgroundColor: "var(--surface)",
                     borderRadius: "var(--card-radius)",
                     border: "1px solid var(--border)",
                     padding: "var(--space-3)",
-                    textDecoration: "none",
+                    cursor: "pointer",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
                       Expenses
                     </div>
-                    <button
+                    <span
                       onClick={(e) => {
-                        e.preventDefault();
+                        e.stopPropagation();
                         setActiveTooltip(activeTooltip === "expenses" ? null : "expenses");
                       }}
-                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
+                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
                     >
                       <Lucide.Info className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
-                    </button>
+                    </span>
                   </div>
                   <div
                     style={{
@@ -977,7 +1002,7 @@ export default function InsightsPage() {
                       <span style={{ color: "var(--text-tertiary)" }}>({deltas.expense.percent})</span>
                     </div>
                   )}
-                </Link>
+                </button>
                 <KpiTooltip
                   open={activeTooltip === "expenses"}
                   onClose={() => setActiveTooltip(null)}
@@ -994,30 +1019,32 @@ export default function InsightsPage() {
 
               {/* Net */}
               <div style={{ position: "relative" }}>
-                <Link
-                  href="/activity"
+                <button
+                  onClick={() => drillDown({})}
                   style={{
                     display: "block",
+                    width: "100%",
+                    textAlign: "left",
                     backgroundColor: "var(--surface)",
                     borderRadius: "var(--card-radius)",
                     border: "1px solid var(--border)",
                     padding: "var(--space-3)",
-                    textDecoration: "none",
+                    cursor: "pointer",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ fontSize: "var(--text-micro)", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)" }}>
                       Net
                     </div>
-                    <button
+                    <span
                       onClick={(e) => {
-                        e.preventDefault();
+                        e.stopPropagation();
                         setActiveTooltip(activeTooltip === "net" ? null : "net");
                       }}
-                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", backgroundColor: "transparent", border: "none", cursor: "pointer" }}
+                      style={{ padding: "2px", borderRadius: "var(--radius-sm)", cursor: "pointer" }}
                     >
                       <Lucide.Info className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
-                    </button>
+                    </span>
                   </div>
                   <div
                     style={{
@@ -1047,7 +1074,7 @@ export default function InsightsPage() {
                       <span style={{ color: "var(--text-tertiary)" }}>({deltas.net.percent})</span>
                     </div>
                   )}
-                </Link>
+                </button>
                 <KpiTooltip
                   open={activeTooltip === "net"}
                   onClose={() => setActiveTooltip(null)}
@@ -1064,9 +1091,9 @@ export default function InsightsPage() {
 
               {/* Top Category (Spend) */}
               <div className="relative">
-                <Link
-                  href={computed.topCategory.name !== "None" ? `/activity?category=${encodeURIComponent(computed.topCategory.name)}` : "/activity"}
-                  className="block rounded-xl border p-3 transition-colors hover:opacity-90"
+                <button
+                  onClick={() => computed.topCategory.name !== "None" ? drillDown({ type: "expense", category: computed.topCategory.name }) : drillDown({})}
+                  className="block w-full text-left rounded-xl border p-3 transition-colors hover:opacity-90"
                   style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
                 >
                   <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
@@ -1081,14 +1108,14 @@ export default function InsightsPage() {
                   <div className="text-xs mt-0.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>
                     {centsToDollars(computed.topCategory.amount)}
                   </div>
-                </Link>
+                </button>
               </div>
 
               {/* Largest Expense */}
               <div className="relative">
-                <Link
-                  href="/activity?type=expense"
-                  className="block rounded-xl border p-3 transition-colors hover:opacity-90"
+                <button
+                  onClick={() => drillDown({ type: "expense" })}
+                  className="block w-full text-left rounded-xl border p-3 transition-colors hover:opacity-90"
                   style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
                 >
                   <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
@@ -1105,14 +1132,14 @@ export default function InsightsPage() {
                       {computed.largestExpense.category}
                     </div>
                   )}
-                </Link>
+                </button>
               </div>
 
               {/* Reimbursable Outstanding */}
               <div className="relative">
-                <Link
-                  href="/activity?tag=Reimbursable"
-                  className="block rounded-xl border p-3 transition-colors hover:opacity-90"
+                <button
+                  onClick={() => drillDown({ tag: "Reimbursable" })}
+                  className="block w-full text-left rounded-xl border p-3 transition-colors hover:opacity-90"
                   style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
                 >
                   <div className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
@@ -1127,7 +1154,7 @@ export default function InsightsPage() {
                   <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
                     outstanding
                   </div>
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -1375,10 +1402,10 @@ export default function InsightsPage() {
                       const maxAmt = computed.topCategories[0]?.amount ?? 1;
                       const pct = Math.round((cat.amount / maxAmt) * 100);
                       return (
-                        <Link
+                        <button
                           key={cat.name}
-                          href={`/activity?category=${encodeURIComponent(cat.name)}`}
-                          className="block group"
+                          onClick={() => drillDown({ type: "expense", category: cat.name })}
+                          className="block w-full text-left group"
                         >
                           <div className="flex items-center justify-between text-xs mb-1">
                             <span style={{ color: "var(--text)" }}>{cat.name}</span>
@@ -1395,7 +1422,7 @@ export default function InsightsPage() {
                               style={{ width: `${pct}%`, backgroundColor: cat.color }}
                             />
                           </div>
-                        </Link>
+                        </button>
                       );
                     })}
                   </div>
@@ -1424,6 +1451,12 @@ export default function InsightsPage() {
                           paddingAngle={2}
                           dataKey="amount"
                           nameKey="name"
+                          onClick={(data) => {
+                            if (data?.name) {
+                              drillDown({ type: "expense", category: data.name });
+                            }
+                          }}
+                          style={{ cursor: "pointer" }}
                         >
                           {categoryPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1443,11 +1476,15 @@ export default function InsightsPage() {
                   </div>
                   <div className="flex flex-wrap gap-2 mt-2 justify-center">
                     {categoryPieData.slice(0, 4).map((cat) => (
-                      <div key={cat.name} className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        key={cat.name}
+                        onClick={() => drillDown({ type: "expense", category: cat.name })}
+                        className="flex items-center gap-1.5 text-[10px] hover:opacity-80"
+                      >
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
                         <span style={{ color: "var(--text-secondary)" }}>{cat.name}</span>
                         <span style={{ color: "var(--text-tertiary)" }}>{cat.percent}%</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -1784,20 +1821,21 @@ export default function InsightsPage() {
                       Recent Activity
                     </span>
                   </div>
-                  <Link
-                    href="/activity"
+                  <button
+                    onClick={() => drillDown({})}
                     className="text-xs font-medium hover:underline"
-                    style={{ color: "var(--accent)" }}
+                    style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}
                   >
                     View all
-                  </Link>
+                  </button>
                 </div>
                 <div className="space-y-1">
                   {recentActivity.slice(0, 5).map((entry) => (
-                    <Link
+                    <button
                       key={entry._id}
-                      href={`/activity`}
-                      className="flex items-center justify-between py-2 px-1 rounded-lg transition-colors hover:bg-[var(--surface-subtle)]"
+                      onClick={() => drillDown({})}
+                      className="flex items-center justify-between w-full py-2 px-1 rounded-lg transition-colors hover:bg-[var(--surface-subtle)] text-left"
+                      style={{ background: "none", border: "none", cursor: "pointer" }}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
@@ -1825,7 +1863,7 @@ export default function InsightsPage() {
                       >
                         {entry.type === "income" ? "+" : ""}{centsToDollars(entry.amountCents)}
                       </div>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1865,6 +1903,91 @@ export default function InsightsPage() {
           </>
         )}
       </SignedIn>
+
+      {/* Lens Sheet - Tag Filter */}
+      {lensSheetOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          onClick={() => setLensSheetOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-2xl p-4 pb-8"
+            style={{ backgroundColor: "var(--surface)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Handle */}
+            <div className="flex justify-center mb-3">
+              <div
+                className="w-10 h-1 rounded-full"
+                style={{ backgroundColor: "var(--border)" }}
+              />
+            </div>
+            
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                Filter by Lens
+              </h3>
+              <button
+                onClick={() => setLensSheetOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
+                aria-label="Close"
+              >
+                <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              </button>
+            </div>
+
+            <p className="text-sm mb-4" style={{ color: "var(--text-tertiary)" }}>
+              Select lenses to filter your insights view. Multiple lenses can be combined.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              {CONTEXT_TAGS.map((tag) => {
+                const isSelected = selectedTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    className="flex items-center gap-2 px-4 py-3 rounded-xl text-left text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                      color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                      border: isSelected ? "none" : "1px solid var(--border)",
+                    }}
+                  >
+                    {isSelected && <Lucide.Check className="h-4 w-4" />}
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedTags.length > 0 && (
+              <button
+                onClick={() => { setSelectedTags([]); setLensSheetOpen(false); }}
+                className="w-full mt-4 py-3 rounded-xl text-sm font-medium"
+                style={{
+                  backgroundColor: "var(--surface-subtle)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                Clear all lenses
+              </button>
+            )}
+
+            <button
+              onClick={() => setLensSheetOpen(false)}
+              className="w-full mt-2 py-3 rounded-xl text-sm font-semibold"
+              style={{
+                backgroundColor: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
+            >
+              Apply
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

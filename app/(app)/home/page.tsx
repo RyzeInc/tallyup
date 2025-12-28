@@ -1,7 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
@@ -193,18 +193,17 @@ type Entry = {
 };
 
 export default function HomePage() {
-  const { activeTab, setActiveTab } = useTabs();
+  const { activeTab, setActiveTab, previousTab } = useTabs();
   
   // Home scope always defaults to "this-month" - no persistence
   const [scope, setScope] = useState<HomeScope>("this-month");
   const { startDate, endDate, label } = useMemo(() => getScopeDates(scope), [scope]);
 
-  // Reset scope to "this-month" when tab becomes active (Option C behavior)
-  useEffect(() => {
-    if (activeTab === "overview") {
-      setScope("this-month");
-    }
-  }, [activeTab]);
+  // Reset scope to "this-month" when tab becomes active from another tab
+  const justActivated = activeTab === "overview" && previousTab !== null && previousTab !== "overview";
+  if (justActivated && scope !== "this-month") {
+    setScope("this-month");
+  }
 
   // Edit modal state
   const [editEntry, setEditEntry] = useState<Entry | null>(null);

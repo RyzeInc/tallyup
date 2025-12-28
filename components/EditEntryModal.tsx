@@ -12,6 +12,7 @@ import {
   EXPENSE_SPACES,
   CONTEXT_TAGS,
 } from "@/components/utils";
+import { useToast } from "@/components/ToastProvider";
 
 type ContextTag = (typeof CONTEXT_TAGS)[number];
 
@@ -42,6 +43,7 @@ export default function EditEntryModal({
   onSaved,
   onDeleted,
 }: EditEntryModalProps) {
+  const toast = useToast();
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
@@ -102,11 +104,13 @@ export default function EditEntryModal({
         needsReview,
       });
 
+      toast.success("Entry updated");
       onSaved?.();
       onClose();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to save";
       setError(message);
+      toast.error("Failed to update", { description: message });
     } finally {
       setSaving(false);
     }
@@ -118,11 +122,13 @@ export default function EditEntryModal({
     setDeleting(true);
     try {
       await deleteEntry({ id: entry._id as Id<"entries"> });
+      toast.success("Entry deleted");
       onDeleted?.();
       onClose();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to delete";
       setError(message);
+      toast.error("Failed to delete", { description: message });
     } finally {
       setDeleting(false);
     }

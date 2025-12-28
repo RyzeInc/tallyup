@@ -1,14 +1,12 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import {
-  DEFAULT_BUCKETS,
   EntryType,
   dollarsToCents,
-  centsToDollars,
   todayYYYYMMDD,
   uniqCaseInsensitive,
   yyyymmddToLocalMidnightTs,
@@ -36,18 +34,18 @@ import * as Lucide from "lucide-react";
 export default function LogPage() {
   const { user } = useUser();
 
-  // Check for pre-selected type from quick log
-  useEffect(() => {
+  // State declarations first
+  const [type, setType] = useState<EntryType>(() => {
+    // Initialize from sessionStorage if available
     if (typeof window !== "undefined") {
       const preselectedType = sessionStorage.getItem("tallyup.logType");
       if (preselectedType === "expense" || preselectedType === "income") {
-        setType(preselectedType);
         sessionStorage.removeItem("tallyup.logType");
+        return preselectedType;
       }
     }
-  }, []);
-
-  const [type, setType] = useState<EntryType>("expense");
+    return "expense";
+  });
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayYYYYMMDD());
 

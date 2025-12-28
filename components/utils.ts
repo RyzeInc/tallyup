@@ -66,6 +66,124 @@ export function centsToDollars(cents: number): string {
   return `${sign}$${(abs / 100).toFixed(2)}`;
 }
 
+/**
+ * Format money with options for sign display and negative formatting
+ * @param cents - Amount in cents
+ * @param options - Formatting options
+ * @returns Formatted currency string
+ */
+export type SignMode = "auto" | "always" | "never" | "accounting";
+export interface FormatMoneyOptions {
+  signMode?: SignMode; // 'auto' shows minus for negative, 'always' shows +/-, 'never' hides sign, 'accounting' uses parens
+  compact?: boolean; // Use K/M suffixes for large amounts
+}
+
+export function formatMoney(cents: number, options: FormatMoneyOptions = {}): string {
+  const { signMode = "auto", compact = false } = options;
+  const abs = Math.abs(cents);
+  const isNegative = cents < 0;
+
+  let formatted: string;
+  
+  if (compact && abs >= 100000) { // $1000+
+    if (abs >= 10000000) { // $100K+
+      formatted = `$${(abs / 10000000).toFixed(1)}M`;
+    } else {
+      formatted = `$${(abs / 100000).toFixed(abs >= 1000000 ? 0 : 1)}K`;
+    }
+  } else {
+    formatted = `$${(abs / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  switch (signMode) {
+    case "always":
+      return isNegative ? `-${formatted}` : `+${formatted}`;
+    case "never":
+      return formatted;
+    case "accounting":
+      return isNegative ? `(${formatted})` : formatted;
+    case "auto":
+    default:
+      return isNegative ? `-${formatted}` : formatted;
+  }
+}
+
+/**
+ * Format a timestamp as a relative date label (Today, Yesterday, or formatted date)
+ * @param ms - Timestamp in milliseconds
+ * @param options - Formatting options
+ * @returns Formatted date string
+ */
+export interface FormatDateOptions {
+  includeTime?: boolean;
+  relative?: boolean; // Use "Today", "Yesterday" for recent dates
+  format?: "short" | "medium" | "long"; // Dec 26 vs December 26 vs December 26, 2024
+}
+
+export function formatDateLabel(ms: number, options: FormatDateOptions = {}): string {
+  const { includeTime = false, relative = true, format = "short" } = options;
+  const date = new Date(ms);
+  const now = new Date();
+  
+  // Get midnight timestamps for comparison
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayMidnight = todayMidnight - 86400000;
+  const dateMidnight = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
+  let dateStr: string;
+
+  if (relative && dateMidnight === todayMidnight) {
+    dateStr = "Today";
+  } else if (relative && dateMidnight === yesterdayMidnight) {
+    dateStr = "Yesterday";
+  } else {
+    const formatOptions: Intl.DateTimeFormatOptions = 
+      format === "long" 
+        ? { month: "long", day: "numeric", year: "numeric" }
+        : format === "medium"
+        ? { month: "long", day: "numeric" }
+        : { month: "short", day: "numeric" };
+    
+    // Add year if not current year
+    if (date.getFullYear() !== now.getFullYear() && format !== "long") {
+      formatOptions.year = "numeric";
+    }
+    
+    dateStr = date.toLocaleDateString("en-US", formatOptions);
+  }
+
+  if (includeTime) {
+    const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return `${dateStr} at ${timeStr}`;
+  }
+
+  return dateStr;
+}
+
+/**
+ * Format a date for grouping (Week of Dec 23, December 2024, etc.)
+ */
+export function formatGroupDate(ms: number, groupBy: "day" | "week" | "month" | "year"): string {
+  const date = new Date(ms);
+  
+  switch (groupBy) {
+    case "day":
+      return formatDateLabel(ms);
+    case "week": {
+      const weekStart = new Date(date);
+      const day = weekStart.getDay();
+      weekStart.setDate(weekStart.getDate() - day);
+      return `Week of ${weekStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+    }
+    case "month":
+      return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    case "year":
+      return date.getFullYear().toString();
+    default:
+      return formatDateLabel(ms);
+  }
+}
+
 export function todayYYYYMMDD(): string {
   const d = new Date();
   const yyyy = d.getFullYear();

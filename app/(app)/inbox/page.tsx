@@ -8,9 +8,16 @@ import EntryCard from "@/components/EntryCard";
 import TagChips from "@/components/TagChips";
 import RecurringModal from "@/components/RecurringModal";
 import { DEFAULT_TAGS, cacheKey, uniqCaseInsensitive } from "@/components/utils";
+import { useToast } from "@/components/ToastProvider";
+import EmptyState from "@/components/ui/EmptyState";
+import PageHeader from "@/components/ui/PageHeader";
+import * as Lucide from "lucide-react";
+import { useTabs } from "@/components/PersistentTabs";
 
 export default function InboxPage() {
   const { user } = useUser();
+  const { setActiveTab } = useTabs();
+  const toast = useToast();
   const inbox = useQuery(api.entries.listInbox, { limit: 80 }) as any[] | undefined;
 
   // Use both types for suggestions
@@ -45,36 +52,51 @@ export default function InboxPage() {
 
   return (
     <div>
-      <div className="mb-4">
-        <div className="text-2xl font-semibold tracking-tight">Needs review</div>
-        <div className="mt-1 text-sm text-neutral-400">A few entries need context.</div>
-        <div className="mt-2 text-sm text-neutral-400">
-          Tip: You can save a pattern to recognize similar future entries (auto-apply is off by default and requires
-          confirmation).
-        </div>
+      <PageHeader
+        title="Needs Review"
+        subtitle="A few entries need context"
+      />
+      <div className="mb-4 text-sm" style={{ color: "var(--text-tertiary)" }}>
+        Tip: You can save a pattern to recognize similar future entries (auto-apply is off by default and requires
+        confirmation).
       </div>
 
       <SignedOut>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4">
-          <div className="mb-3 text-sm text-neutral-300">Sign in to view items that need review.</div>
-          <SignInButton mode="modal">
-            <button
-              className="rounded-xl px-4 py-2 text-sm font-semibold"
-              style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
-            >
-              Sign in
-            </button>
-          </SignInButton>
-        </div>
+        <EmptyState
+          icon={<Lucide.LogIn className="h-7 w-7" style={{ color: "var(--text-tertiary)" }} />}
+          title="Sign in required"
+          subtitle="Sign in to view items that need review."
+          action={
+            <SignInButton mode="modal">
+              <button
+                className="px-4 py-2 rounded-xl text-sm font-medium"
+                style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+              >
+                Sign in
+              </button>
+            </SignInButton>
+          }
+        />
       </SignedOut>
 
       <SignedIn>
         {!inbox ? (
-          <div className="text-sm text-neutral-400">Loading…</div>
+          <div className="text-sm" style={{ color: "var(--text-tertiary)" }}>Loading…</div>
         ) : inbox.length === 0 ? (
-          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/30 p-4 text-sm text-neutral-300">
-            Nothing to review 🎉
-          </div>
+          <EmptyState
+            icon={<Lucide.CheckCircle2 className="h-7 w-7" style={{ color: "var(--success)" }} />}
+            title="All caught up!"
+            subtitle="Nothing needs review right now. New entries without categories will appear here."
+            action={
+              <button
+                onClick={() => setActiveTab("activity")}
+                className="px-4 py-2 rounded-xl text-sm font-medium"
+                style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
+              >
+                View Transactions
+              </button>
+            }
+          />
         ) : (
           <div className="space-y-3">
             {inbox.map((e) => (
@@ -106,6 +128,7 @@ function InboxItem({
   catSuggestions: string[];
   onMakeRecurring?: () => void;
 }) {
+  const toast = useToast();
   const [category, setCategory] = useState(entry.category ?? "");
   const [tags, setTags] = useState<string[]>(entry.tags ?? []);
   const [busy, setBusy] = useState(false);
@@ -123,8 +146,12 @@ function InboxItem({
         tags: tags.length ? tags : undefined,
         needsReview: !category.trim(), // stays in inbox if still unlabeled
       });
+      if (category.trim()) {
+        toast.success("Marked as reviewed");
+      }
     } catch (e: any) {
       setErr(e?.message ?? "Failed");
+      toast.error("Failed to update", { description: e?.message });
     } finally {
       setBusy(false);
     }

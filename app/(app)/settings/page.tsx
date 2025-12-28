@@ -1,14 +1,15 @@
 "use client";
 
 import { SignedIn, SignedOut, useUser, SignOutButton, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState, useEffect, useCallback } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import { useTheme, APPEARANCE_OPTIONS } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
+import { useToast } from "@/components/ToastProvider";
 
 type ExpenseSpace = typeof EXPENSE_SPACES[number];
 type IncomeSpace = typeof INCOME_SPACES[number];
@@ -33,12 +34,12 @@ const PINNED_EXPENSE_KEY = "tallyup.pinnedExpenseCategories";
 const PINNED_INCOME_KEY = "tallyup.pinnedIncomeCategories";
 const HIDDEN_TAGS_KEY = "tallyup.hiddenTags";
 const PINNED_TAGS_KEY = "tallyup.pinnedTags";
-const CATEGORY_ORDER_KEY = "tallyup.categoryOrder";
 
 export default function SettingsPage() {
   const { user } = useUser();
   const { startDate, endDate, label } = useTimeRange();
   const { theme, setTheme: changeTheme } = useTheme();
+  const toast = useToast();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
   // Category/tag management state
@@ -92,13 +93,6 @@ export default function SettingsPage() {
     });
   }, []);
 
-  const moveItem = useCallback((list: string[], from: number, to: number) => {
-    const result = [...list];
-    const [removed] = result.splice(from, 1);
-    result.splice(to, 0, removed);
-    return result;
-  }, []);
-
   // Privacy settings
   const [hideAmounts, setHideAmounts] = useState(false);
   const [requireAuth, setRequireAuth] = useState(false);
@@ -146,6 +140,9 @@ export default function SettingsPage() {
       a.download = `tallyup-export-${label.replace(/\s/g, "-")}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success("Export complete", { description: `${entries.length} transactions exported` });
+    } catch (e: any) {
+      toast.error("Export failed", { description: e?.message ?? "Unknown error" });
     } finally {
       setExporting(false);
     }

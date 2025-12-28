@@ -14,7 +14,6 @@ import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { EntryType, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 
 export default function HistoryPage() {
   const searchParams = useSearchParams();
