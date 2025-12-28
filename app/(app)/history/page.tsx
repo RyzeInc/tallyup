@@ -26,6 +26,9 @@ export default function HistoryPage() {
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const reviewOnly = searchParams.get("review") === "1";
   const [filtersOpen, setFiltersOpen] = useState(false);
+  
+  // Selection mode - controlled from here, passed to ActivityTable
+  const [selectMode, setSelectMode] = useState(false);
 
   // Filter state
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
@@ -445,7 +448,28 @@ export default function HistoryPage() {
           </button>
 
           {/* Spacer */}
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, minWidth: 8 }} />
+
+          {/* Select button - inline with Filters */}
+          <button
+            onClick={() => setSelectMode(!selectMode)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              backgroundColor: selectMode ? "var(--accent-subtle)" : "transparent",
+              color: selectMode ? "var(--primary)" : "var(--text)",
+              border: selectMode ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
+          >
+            <Lucide.CheckSquare className="h-4 w-4" />
+            Select
+          </button>
 
           {/* Filters button */}
           <button
@@ -617,6 +641,8 @@ export default function HistoryPage() {
                 setCursorList([undefined]);
                 setSeenIds({});
               }}
+              externalSelectMode={selectMode}
+              onSelectModeChange={setSelectMode}
             />
 
             {nextCursor && (

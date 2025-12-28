@@ -17,16 +17,22 @@ export default function ActivityTable({
   onDelete,
   onSavePattern,
   onBulkComplete,
+  externalSelectMode,
+  onSelectModeChange,
 }: {
   entries?: any[];
   onDelete?: (id: Id<"entries">) => void;
   onSavePattern?: (entry: any) => void;
   onBulkComplete?: () => void;
+  externalSelectMode?: boolean;
+  onSelectModeChange?: (mode: boolean) => void;
 }) {
   const toast = useToast();
   
-  // Selection mode state
-  const [selectMode, setSelectMode] = useState(false);
+  // Selection mode state - use external control if provided
+  const [internalSelectMode, setInternalSelectMode] = useState(false);
+  const selectMode = externalSelectMode ?? internalSelectMode;
+  const setSelectMode = onSelectModeChange ?? setInternalSelectMode;
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
   
@@ -218,20 +224,6 @@ export default function ActivityTable({
               </button>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Select Mode Toggle - Show when not in select mode */}
-      {!selectMode && entries.length > 0 && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => setSelectMode(true)}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            <Lucide.CheckSquare className="h-3.5 w-3.5" />
-            Select
-          </button>
         </div>
       )}
 

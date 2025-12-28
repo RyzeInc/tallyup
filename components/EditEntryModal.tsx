@@ -141,31 +141,30 @@ export default function EditEntryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-black/50"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Modal - Sheet style on mobile, centered on desktop */}
+      {/* Modal Dialog */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Edit transaction"
-        className="relative w-full sm:max-w-sm animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-150"
-        style={{ maxHeight: "85vh" }}
+        className="relative w-full max-w-md animate-in fade-in zoom-in-95 duration-200"
       >
         <div
-          className="rounded-t-2xl sm:rounded-2xl border-t sm:border shadow-lg overflow-hidden flex flex-col"
+          className="rounded-2xl shadow-xl overflow-hidden flex flex-col"
           style={{
             backgroundColor: "var(--surface)",
-            borderColor: "var(--border)",
-            maxHeight: "85vh",
+            border: "1px solid var(--border)",
+            maxHeight: "min(600px, 85vh)",
           }}
         >
-          {/* Header - Fixed */}
+          {/* Header */}
           <div 
             className="flex items-center justify-between px-5 py-4 border-b shrink-0"
             style={{ borderColor: "var(--border)" }}
@@ -182,7 +181,7 @@ export default function EditEntryModal({
           </div>
 
           {/* Scrollable content */}
-          <div className="overflow-y-auto px-5 py-4 flex-1" style={{ maxHeight: "calc(85vh - 140px)" }}>
+          <div className="overflow-y-auto px-5 py-4 flex-1">
 
           {/* Error message */}
           {error && (

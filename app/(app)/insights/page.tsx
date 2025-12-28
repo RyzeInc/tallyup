@@ -823,47 +823,6 @@ export default function InsightsPage() {
                     </button>
                   );
                 })}
-
-                {/* Lens filter - inline with type filter */}
-                <button
-                  onClick={() => setLensSheetOpen(true)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    padding: "10px 14px",
-                    borderRadius: "calc(var(--input-radius) - 4px)",
-                    fontSize: "var(--text-meta)",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    transition: "all 150ms ease",
-                    backgroundColor: selectedTags.length > 0 ? "var(--primary)" : "transparent",
-                    color: selectedTags.length > 0 ? "var(--primary-foreground)" : "var(--text)",
-                    border: "none",
-                  }}
-                >
-                  <Lucide.SlidersHorizontal className="h-4 w-4" />
-                  {selectedTags.length > 0 ? `Lens (${selectedTags.length})` : "Lens"}
-                </button>
-                {selectedTags.length > 0 && (
-                  <button
-                    onClick={() => setSelectedTags([])}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "6px",
-                      borderRadius: "var(--radius-full)",
-                      cursor: "pointer",
-                      backgroundColor: "transparent",
-                      border: "none",
-                      color: "var(--text-tertiary)",
-                    }}
-                    aria-label="Clear lens filters"
-                  >
-                    <Lucide.X className="h-4 w-4" />
-                  </button>
-                )}
               </div>
             </div>
 
@@ -1901,91 +1860,6 @@ export default function InsightsPage() {
           </>
         )}
       </SignedIn>
-
-      {/* Lens Sheet - Tag Filter */}
-      {lensSheetOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-          onClick={() => setLensSheetOpen(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-t-2xl p-4 pb-8"
-            style={{ backgroundColor: "var(--surface)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Handle */}
-            <div className="flex justify-center mb-3">
-              <div
-                className="w-10 h-1 rounded-full"
-                style={{ backgroundColor: "var(--border)" }}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-                Filter by Lens
-              </h3>
-              <button
-                onClick={() => setLensSheetOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]"
-                aria-label="Close"
-              >
-                <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
-              </button>
-            </div>
-
-            <p className="text-sm mb-4" style={{ color: "var(--text-tertiary)" }}>
-              Select lenses to filter your insights view. Multiple lenses can be combined.
-            </p>
-
-            <div className="grid grid-cols-2 gap-2">
-              {CONTEXT_TAGS.map((tag) => {
-                const isSelected = selectedTags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl text-left text-sm font-medium transition-colors"
-                    style={{
-                      backgroundColor: isSelected ? "var(--primary)" : "transparent",
-                      color: isSelected ? "var(--primary-foreground)" : "var(--text)",
-                      border: isSelected ? "none" : "1px solid var(--border)",
-                    }}
-                  >
-                    {isSelected && <Lucide.Check className="h-4 w-4" />}
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
-
-            {selectedTags.length > 0 && (
-              <button
-                onClick={() => { setSelectedTags([]); setLensSheetOpen(false); }}
-                className="w-full mt-4 py-3 rounded-xl text-sm font-medium"
-                style={{
-                  backgroundColor: "var(--surface-subtle)",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                Clear all lenses
-              </button>
-            )}
-
-            <button
-              onClick={() => setLensSheetOpen(false)}
-              className="w-full mt-2 py-3 rounded-xl text-sm font-semibold"
-              style={{
-                backgroundColor: "var(--primary)",
-                color: "var(--primary-foreground)",
-              }}
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

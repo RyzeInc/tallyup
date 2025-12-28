@@ -1,7 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, useUser, SignOutButton, SignInButton } from "@clerk/nextjs";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
@@ -113,8 +113,21 @@ export default function SettingsPage() {
     try { localStorage.setItem("tallyup.requireAuth", next ? "1" : "0"); } catch {}
   }
 
-  // Export data
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 5000 }) as any[] | undefined;
+  // Export data - use local date range state for flexibility
+  const [exportStartDate, setExportStartDate] = useState(() => {
+    // Default to last 90 days
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return d.getTime();
+  });
+  const [exportEndDate, setExportEndDate] = useState(() => Date.now());
+  const exportLabel = useMemo(() => {
+    const start = new Date(exportStartDate);
+    const end = new Date(exportEndDate);
+    return `${start.toLocaleDateString()} – ${end.toLocaleDateString()}`;
+  }, [exportStartDate, exportEndDate]);
+  
+  const entries = useQuery(api.entries.listEntries, { startDate: exportStartDate, endDate: exportEndDate, limit: 5000 }) as any[] | undefined;
   const [exporting, setExporting] = useState(false);
   async function exportCSV() {
     if (!entries) return;
@@ -137,7 +150,7 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `tallyup-export-${label.replace(/\s/g, "-")}.csv`;
+      a.download = `tallyup-export-${exportLabel.replace(/\s/g, "-")}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Export complete", { description: `${entries.length} transactions exported` });
@@ -378,18 +391,92 @@ export default function SettingsPage() {
               className="rounded-xl p-4"
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--accent-subtle)" }}>
-                  <Lucide.Calendar className="h-5 w-5" style={{ color: "var(--accent)" }} />
-                </div>
-                <div>
-                  <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Time Range</div>
-                  <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{label}</div>
+              {/* Time Range Selection */}
+              <div className="mb-4">
+                <label className="text-xs font-medium mb-2 block" style={{ color: "var(--text-tertiary)" }}>
+                  Time Range
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>From</label>
+                    <input
+                      type="date"
+                      value={new Date(exportStartDate).toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value);
+                        if (!isNaN(d.getTime())) setExportStartDate(d.getTime());
+                      }}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm"
+                      style={{
+                        backgroundColor: "var(--input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>To</label>
+                    <input
+                      type="date"
+                      value={new Date(exportEndDate).toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value);
+                        if (!isNaN(d.getTime())) setExportEndDate(d.getTime());
+                      }}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm"
+                      style={{
+                        backgroundColor: "var(--input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                {entries ? `${entries.length} transactions will be exported` : "Loading..."}
+              {/* Quick presets */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {[
+                  { label: "Last 30 days", days: 30 },
+                  { label: "Last 90 days", days: 90 },
+                  { label: "This year", days: -1 },
+                  { label: "All time", days: -2 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      const now = new Date();
+                      let start: Date;
+                      if (preset.days === -1) {
+                        // This year
+                        start = new Date(now.getFullYear(), 0, 1);
+                      } else if (preset.days === -2) {
+                        // All time - go back 10 years
+                        start = new Date(now.getFullYear() - 10, 0, 1);
+                      } else {
+                        start = new Date();
+                        start.setDate(start.getDate() - preset.days);
+                      }
+                      setExportStartDate(start.getTime());
+                      setExportEndDate(now.getTime());
+                    }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: "var(--surface-2)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
+                <Lucide.FileText className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+                <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  {entries ? `${entries.length} transactions will be exported` : "Loading..."}
+                </div>
               </div>
 
               <button

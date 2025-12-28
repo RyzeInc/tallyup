@@ -127,7 +127,7 @@ function TimeRangeSelector({
   const current = SCOPE_OPTIONS.find(o => o.key === scope)!;
 
   return (
-    <div className="relative">
+    <div style={{ position: "relative", zIndex: 50 }}>
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
@@ -145,12 +145,24 @@ function TimeRangeSelector({
       {open && (
         <>
           <div 
-            className="fixed inset-0 z-10" 
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 40,
+            }}
             onClick={() => setOpen(false)}
           />
           <div
-            className="absolute right-0 top-full mt-1 z-20 py-1 min-w-[140px] rounded-xl shadow-lg"
             style={{
+              position: "absolute",
+              right: 0,
+              top: "100%",
+              marginTop: 4,
+              zIndex: 50,
+              padding: "4px 0",
+              minWidth: 140,
+              borderRadius: 12,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
               backgroundColor: "var(--surface)",
               border: "1px solid var(--border)",
             }}
