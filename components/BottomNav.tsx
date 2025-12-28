@@ -78,12 +78,16 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
                 return (
                   <button
                     key={t.id}
-                    onClick={() => setActiveTab("log")}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      setActiveTab("log");
+                    }}
                     className="flex flex-col items-center justify-center py-2 px-3 transition-colors"
                     style={{ 
                       minHeight: 64,
                       minWidth: 64,
                       color: isActive ? "var(--primary)" : "var(--text-tertiary)",
+                      touchAction: "manipulation",
                     }}
                     aria-label="Log new transaction"
                   >
@@ -134,11 +138,15 @@ export default function BottomNav({ currentPath }: { currentPath?: string }) {
               return (
                 <button
                   key={t.id}
-                  onClick={() => t.tabId && setActiveTab(t.tabId)}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    if (t.tabId) setActiveTab(t.tabId);
+                  }}
                   className="flex flex-col items-center justify-center py-2 px-3 transition-colors"
                   style={{ 
                     minHeight: 64,
                     color: isActive ? "var(--primary)" : "var(--text-tertiary)",
+                    touchAction: "manipulation",
                   }}
                   aria-current={isActive ? "page" : undefined}
                 >
