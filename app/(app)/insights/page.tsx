@@ -1245,7 +1245,6 @@ export default function InsightsPage() {
                               strokeWidth={2}
                               dot={false}
                               activeDot={{ r: 4 }}
-                              animationDuration={300}
                             />
                             <Line
                               type="monotone"
@@ -1254,7 +1253,6 @@ export default function InsightsPage() {
                               strokeWidth={2}
                               dot={false}
                               activeDot={{ r: 4 }}
-                              animationDuration={300}
                             />
                           </>
                         )}
@@ -1265,7 +1263,6 @@ export default function InsightsPage() {
                           strokeWidth={showNetOnly ? 3 : 2}
                           dot={false}
                           activeDot={{ r: 4 }}
-                          animationDuration={300}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -1427,7 +1424,6 @@ export default function InsightsPage() {
                           paddingAngle={2}
                           dataKey="amount"
                           nameKey="name"
-                          animationDuration={300}
                         >
                           {categoryPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -1552,7 +1548,7 @@ export default function InsightsPage() {
                         }}
                         formatter={(value: number) => [centsToDollars(value), "Spent"]}
                       />
-                      <Bar dataKey="amount" radius={[0, 4, 4, 0]} animationDuration={300}>
+                      <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
                         {computed.topPaymentMethods.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
@@ -1598,7 +1594,7 @@ export default function InsightsPage() {
                           }}
                           formatter={(value: number) => [centsToDollars(value), "Spent"]}
                         />
-                        <Bar dataKey="amount" fill="var(--accent)" radius={[4, 4, 0, 0]} animationDuration={300} />
+                        <Bar dataKey="amount" fill="var(--accent)" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1636,7 +1632,7 @@ export default function InsightsPage() {
                           formatter={(value: number) => [centsToDollars(value), "Spent"]}
                           labelFormatter={(label: number) => `Day ${label}`}
                         />
-                        <Bar dataKey="amount" fill="var(--chart-2)" radius={[2, 2, 0, 0]} animationDuration={300} />
+                        <Bar dataKey="amount" fill="var(--chart-2)" radius={[2, 2, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1755,7 +1751,6 @@ export default function InsightsPage() {
                               dataKey="val"
                               fill={pattern.type === "income" ? "var(--success)" : "var(--accent)"}
                               radius={[1, 1, 0, 0]}
-                              animationDuration={300}
                             />
                           </BarChart>
                         </ResponsiveContainer>

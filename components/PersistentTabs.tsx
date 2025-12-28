@@ -1,6 +1,7 @@
 "use client";
 
-import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect, startTransition } from "react";
+import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 
 type TabId = "overview" | "activity" | "insights" | "log";
 
@@ -49,9 +50,9 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     
     setPreviousTab(activeTab);
     
-    // Use startTransition so tab switch is non-blocking
-    // This allows the user to switch tabs even if a tab is still rendering
-    startTransition(() => {
+    // Use flushSync to make tab switch HIGH priority
+    // This forces immediate synchronous rendering, bypassing any pending work
+    flushSync(() => {
       setActiveTab(tab);
     });
     
