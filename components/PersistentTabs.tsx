@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
+import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect, startTransition } from "react";
 
 type TabId = "overview" | "activity" | "insights" | "log";
 
@@ -48,7 +48,12 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     }
     
     setPreviousTab(activeTab);
-    setActiveTab(tab);
+    
+    // Use startTransition so tab switch is non-blocking
+    // This allows the user to switch tabs even if a tab is still rendering
+    startTransition(() => {
+      setActiveTab(tab);
+    });
     
     // Keep URL at root domain without showing routes
     if (typeof window !== "undefined" && window.location.pathname !== "/") {
