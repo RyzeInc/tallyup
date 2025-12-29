@@ -212,7 +212,7 @@ export default function HomePage() {
   const { startDate, endDate, label } = useMemo(() => getScopeDates(scope), [scope]);
 
   // Reset scope to "this-month" when tab becomes active from another tab
-  const justActivated = activeTab === "overview" && previousTab !== null && previousTab !== "overview";
+  const justActivated = activeTab === "dashboard" && previousTab !== null && previousTab !== "dashboard";
   if (justActivated && scope !== "this-month") {
     setScope("this-month");
   }
