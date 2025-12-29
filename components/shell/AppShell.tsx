@@ -2,27 +2,27 @@
 
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
-import BottomNav from "@/components/BottomNav";
+import TopNav from "@/components/TopNav";
 import { TabContainer, TabPanel } from "@/components/PersistentTabs";
 import dynamic from "next/dynamic";
 
 // Dynamically import tab content to avoid circular dependencies
-const OverviewPage = dynamic(() => import("@/app/(app)/overview/page"), { ssr: false });
+const DashboardPage = dynamic(() => import("@/app/(app)/dashboard/page"), { ssr: false });
 const ActivityPage = dynamic(() => import("@/app/(app)/activity/page"), { ssr: false });
-const InsightsPage = dynamic(() => import("@/app/(app)/insights/page"), { ssr: false });
-const LogPage = dynamic(() => import("@/app/(app)/log/page"), { ssr: false });
-const MorePage = dynamic(() => import("@/app/(app)/more/page"), { ssr: false });
+const BudgetingPage = dynamic(() => import("@/app/(app)/budgeting/page"), { ssr: false });
+const RecurringPage = dynamic(() => import("@/app/(app)/recurring/page"), { ssr: false });
+const GoalsPage = dynamic(() => import("@/app/(app)/goals/page"), { ssr: false });
+const HelpPage = dynamic(() => import("@/app/(app)/help/page"), { ssr: false });
 
 /**
  * AppShell - Unified shell with:
  * - Consistent background gradient
  * - Safe-area padding
- * - TopBar behavior
- * - Bottom navigation
+ * - Top navigation (scrollable tabs)
  * 
  * Design principles:
  * - 16px page horizontal padding
- * - No thick teal band at top
+ * - Top navigation for discoverability
  * - Background gradient never clashes with readable content
  */
 
@@ -63,47 +63,54 @@ export { TopBar };
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
-  // Check if we're on a main tab route (overview, activity, insights, log, more) or root
+  // Check if we're on a main tab route or root
   const isMainTab = pathname === "/" || 
-                    pathname === "/overview" || pathname === "/activity" || pathname === "/insights" || pathname === "/log" || pathname === "/more" ||
-                    pathname?.startsWith("/overview/") || pathname?.startsWith("/activity/") || 
-                    pathname?.startsWith("/insights/") || pathname?.startsWith("/log/") || pathname?.startsWith("/more/");
+                    pathname === "/dashboard" || pathname === "/activity" || 
+                    pathname === "/budgeting" || pathname === "/recurring" || 
+                    pathname === "/goals" || pathname === "/help" ||
+                    pathname?.startsWith("/dashboard/") || pathname?.startsWith("/activity/") || 
+                    pathname?.startsWith("/budgeting/") || pathname?.startsWith("/recurring/") || 
+                    pathname?.startsWith("/goals/") || pathname?.startsWith("/help/");
 
   return (
     <div 
-      className="min-h-screen safe-area-inset-top" 
+      className="min-h-screen" 
       style={{ 
         background: "var(--bg-full)",
         color: "var(--text)",
       }}
     >
+      <TopNav />
       <div
         className="mx-auto"
         style={{
           maxWidth: "var(--content-max-width)",
           paddingLeft: "var(--page-padding)",
           paddingRight: "var(--page-padding)",
-          paddingBottom: "calc(var(--bottomnav-height) + env(safe-area-inset-bottom, 0px) + 24px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
           minHeight: "100vh",
         }}
       >
         <main className="pt-4">
           {isMainTab ? (
             <TabContainer>
-              <TabPanel tabId="overview">
-                <OverviewPage />
+              <TabPanel tabId="dashboard">
+                <DashboardPage />
               </TabPanel>
               <TabPanel tabId="activity">
                 <ActivityPage />
               </TabPanel>
-              <TabPanel tabId="insights">
-                <InsightsPage />
+              <TabPanel tabId="budgeting">
+                <BudgetingPage />
               </TabPanel>
-              <TabPanel tabId="log">
-                <LogPage />
+              <TabPanel tabId="recurring">
+                <RecurringPage />
               </TabPanel>
-              <TabPanel tabId="more">
-                <MorePage />
+              <TabPanel tabId="goals">
+                <GoalsPage />
+              </TabPanel>
+              <TabPanel tabId="help">
+                <HelpPage />
               </TabPanel>
             </TabContainer>
           ) : (
@@ -111,7 +118,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </main>
       </div>
-      <BottomNav currentPath={pathname ?? "/"} />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { flushSync } from "react-dom";
 
-type TabId = "overview" | "activity" | "insights" | "log" | "more";
+export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "help";
 
 interface TabsContextValue {
   activeTab: TabId;
@@ -15,11 +15,12 @@ const TabsContext = createContext<TabsContextValue | null>(null);
 
 // Store scroll positions per tab (persists across re-renders)
 const scrollPositions: Record<TabId, number> = {
-  overview: 0,
+  dashboard: 0,
   activity: 0,
-  insights: 0,
-  log: 0,
-  more: 0,
+  budgeting: 0,
+  recurring: 0,
+  goals: 0,
+  help: 0,
 };
 
 export function useTabs() {
@@ -29,15 +30,17 @@ export function useTabs() {
 }
 
 export function PersistentTabsProvider({ children }: { children: ReactNode }) {
-  // Initialize tab based on current pathname, default to log
+  // Initialize tab based on current pathname, default to dashboard
   const [activeTab, setActiveTab] = useState<TabId>(() => {
-    if (typeof window === "undefined") return "log";
+    if (typeof window === "undefined") return "dashboard";
     const path = window.location.pathname;
-    if (path.startsWith("/overview")) return "overview";
-    if (path.startsWith("/activity")) return "activity";
-    if (path.startsWith("/insights")) return "insights";
-    if (path.startsWith("/log")) return "log";
-    return "log"; // default to log
+    if (path.startsWith("/dashboard") || path === "/") return "dashboard";
+    if (path.startsWith("/activity") || path.startsWith("/history")) return "activity";
+    if (path.startsWith("/budgeting")) return "budgeting";
+    if (path.startsWith("/recurring")) return "recurring";
+    if (path.startsWith("/goals")) return "goals";
+    if (path.startsWith("/help") || path.startsWith("/learn")) return "help";
+    return "dashboard"; // default to dashboard
   });
   
   const [previousTab, setPreviousTab] = useState<TabId | null>(null);

@@ -37,6 +37,14 @@ export default defineSchema({
     // optional: a link to a detected or user-created recurring series/rule (typed id)
     recurringRuleId: v.optional(v.id("recurringRules")),
 
+    // Gig worker fields - for hourly rate calculations
+    hoursWorked: v.optional(v.number()), // decimal hours (e.g., 3.5)
+    platformType: v.optional(v.string()), // e.g., "rideshare", "delivery", "freelance"
+    gigGroup: v.optional(v.string()), // grouping for similar gigs (Uber+Lyft → "rideshare")
+
+    // Optional link to budget category for tracking
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+
     needsReview: v.boolean(),
 
     createdAt: v.number(),
@@ -89,4 +97,199 @@ export default defineSchema({
   })
     .index("by_user_active", ["userId", "active"])
     .index("by_user_confidence", ["userId", "confidence"]),
+
+  // ============================================
+  // BUDGETS - Planning separated from logging
+  // ============================================
+  budgetCategories: defineTable({
+    userId: v.string(),
+    
+    // Display name (e.g., "Groceries", "Entertainment")
+    name: v.string(),
+    // Optional icon identifier for custom icons
+    icon: v.optional(v.string()),
+    // Color for visualization
+    color: v.optional(v.string()),
+    
+    // Budget period type
+    periodType: v.union(
+      v.literal("monthly"),
+      v.literal("weekly"),
+      v.literal("biweekly"),
+      v.literal("quarterly"),
+      v.literal("yearly"),
+      v.literal("custom")
+    ),
+    // For custom periods, specify days
+    periodDays: v.optional(v.number()),
+    
+    // Budget amount in cents
+    budgetAmountCents: v.number(),
+    
+    // Rollover settings
+    rolloverEnabled: v.optional(v.boolean()),
+    rolloverCapCents: v.optional(v.number()), // max rollover amount
+    
+    // Categories/merchants that match this budget
+    matchCategories: v.optional(v.array(v.string())),
+    matchMerchants: v.optional(v.array(v.string())),
+    matchTags: v.optional(v.array(v.string())),
+    
+    // Soft/hard limit
+    isHardLimit: v.optional(v.boolean()),
+    
+    // Archive instead of delete
+    archived: v.optional(v.boolean()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_archived", ["userId", "archived"]),
+
+  // ============================================
+  // GOALS - Intentional, time-bounded savings
+  // ============================================
+  goals: defineTable({
+    userId: v.string(),
+    
+    // Display name (e.g., "Emergency Fund", "New Car")
+    name: v.string(),
+    // Optional description
+    description: v.optional(v.string()),
+    // Icon identifier
+    icon: v.optional(v.string()),
+    // Color for visualization
+    color: v.optional(v.string()),
+    
+    // Goal type
+    goalType: v.union(
+      v.literal("savings"),     // Save toward a target
+      v.literal("paydown"),     // Pay down debt
+      v.literal("sinkingFund")  // Recurring expense preparation
+    ),
+    
+    // Target amount in cents
+    targetAmountCents: v.number(),
+    // Current saved/paid amount in cents (updated via transactions)
+    currentAmountCents: v.number(),
+    
+    // Timeline
+    startDate: v.number(),
+    targetDate: v.optional(v.number()),
+    
+    // For sinking funds - expected expense date/recurrence
+    expectedExpenseDate: v.optional(v.number()),
+    
+    // Suggested monthly contribution (computed or user-set)
+    suggestedMonthlyCents: v.optional(v.number()),
+    
+    // Funding source - link to account or method
+    fundingSource: v.optional(v.string()),
+    
+    // Priority for ordering
+    priority: v.optional(v.number()),
+    
+    // Status
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("completed"),
+      v.literal("abandoned")
+    ),
+    completedAt: v.optional(v.number()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_type", ["userId", "goalType"]),
+
+  // Goal contributions - track actual money moved toward goals
+  goalContributions: defineTable({
+    userId: v.string(),
+    goalId: v.id("goals"),
+    
+    // Amount contributed in cents
+    amountCents: v.number(),
+    
+    // Date of contribution
+    date: v.number(),
+    
+    // Optional link to entry (for auto-tracking)
+    entryId: v.optional(v.id("entries")),
+    
+    // Note
+    note: v.optional(v.string()),
+    
+    createdAt: v.number(),
+  })
+    .index("by_goal", ["goalId"])
+    .index("by_user_date", ["userId", "date"]),
+
+  // ============================================
+  // GIG PROFILES - Context-aware intelligence
+  // ============================================
+  gigProfiles: defineTable({
+    userId: v.string(),
+    
+    // Profile type
+    profileType: v.union(
+      v.literal("rideshare"),
+      v.literal("delivery"),
+      v.literal("freelance"),
+      v.literal("rental"),
+      v.literal("custom")
+    ),
+    
+    // Display name (e.g., "Uber Driving", "Freelance Design")
+    name: v.string(),
+    
+    // Platforms in this profile (e.g., ["Uber", "Lyft"])
+    platforms: v.array(v.string()),
+    
+    // Expense categories to surface (e.g., ["Fuel", "Maintenance"])
+    relevantExpenseCategories: v.optional(v.array(v.string())),
+    
+    // Default hourly rate for estimation
+    defaultHourlyRateCents: v.optional(v.number()),
+    
+    // Mileage rate for deduction calculations (cents per mile)
+    mileageRateCents: v.optional(v.number()),
+    
+    // Active toggle
+    active: v.boolean(),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "active"]),
+
+  // ============================================
+  // USER PREFERENCES - Settings and notifications
+  // ============================================
+  userPreferences: defineTable({
+    userId: v.string(),
+    
+    // Review reminder settings
+    reviewReminderEnabled: v.optional(v.boolean()),
+    reviewReminderDay: v.optional(v.string()), // e.g., "sunday", "monday"
+    reviewReminderTime: v.optional(v.string()), // e.g., "09:00"
+    reviewReminderFrequency: v.optional(v.union(
+      v.literal("daily"),
+      v.literal("weekly"),
+      v.literal("biweekly"),
+      v.literal("monthly")
+    )),
+    
+    // UI preferences
+    defaultTab: v.optional(v.string()),
+    compactMode: v.optional(v.boolean()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
 });
