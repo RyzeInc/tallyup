@@ -12,15 +12,13 @@ import { useTimeRange } from "@/components/TimeRangeProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTabs } from "@/components/PersistentTabs";
+import { DonutChart, type DonutSlice } from "@/components/ui/DonutChart";
 import {
   ResponsiveContainer,
   LineChart,
   Line,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   Tooltip as RechartsTooltip,
@@ -630,14 +628,14 @@ export default function InsightsPage() {
   }, [entries]);
 
   // ─────────────────────────────────────────────────────────────
-  // Category pie chart data
+  // Category donut chart data
   // ─────────────────────────────────────────────────────────────
-  const categoryPieData = useMemo(() => {
+  const categoryDonutData = useMemo((): DonutSlice[] => {
     if (computed.topCategories.length === 0) return [];
-    const total = computed.topCategories.reduce((sum, c) => sum + c.amount, 0);
     return computed.topCategories.map((c) => ({
-      ...c,
-      percent: total > 0 ? Math.round((c.amount / total) * 100) : 0,
+      name: c.name,
+      value: c.amount,
+      color: c.color,
     }));
   }, [computed.topCategories]);
 
@@ -1396,54 +1394,18 @@ export default function InsightsPage() {
                       Spend Share
                     </span>
                   </div>
-                  <div style={{ width: "100%", height: 180 }}>
-                    <ResponsiveContainer>
-                      <PieChart>
-                        <Pie
-                          data={categoryPieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={40}
-                          outerRadius={70}
-                          paddingAngle={2}
-                          dataKey="amount"
-                          nameKey="name"
-                          onClick={(data: { name?: string }) => {
-                            if (data?.name) {
-                              drillDown({ type: "expense", category: data.name });
-                            }
-                          }}
-                          style={{ cursor: "pointer" }}
-                        >
-                          {categoryPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <RechartsTooltip
-                          contentStyle={{
-                            backgroundColor: "var(--surface)",
-                            borderColor: "var(--border)",
-                            borderRadius: 8,
-                            fontSize: 12,
-                          }}
-                          formatter={(value: number, name: string) => [centsToDollars(value), name]}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2 justify-center">
-                    {categoryPieData.slice(0, 4).map((cat) => (
-                      <button
-                        key={cat.name}
-                        onClick={() => drillDown({ type: "expense", category: cat.name })}
-                        className="flex items-center gap-1.5 text-[10px] hover:opacity-80"
-                      >
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
-                        <span style={{ color: "var(--text-secondary)" }}>{cat.name}</span>
-                        <span style={{ color: "var(--text-tertiary)" }}>{cat.percent}%</span>
-                      </button>
-                    ))}
-                  </div>
+                  <DonutChart
+                    data={categoryDonutData}
+                    centerLabel="Total Spend"
+                    height={180}
+                    onSliceSelect={(slice) => {
+                      if (slice?.name) {
+                        drillDown({ type: "expense", category: slice.name });
+                      }
+                    }}
+                    showLegend={true}
+                    showPercentages={true}
+                  />
                 </div>
               </div>
             )}

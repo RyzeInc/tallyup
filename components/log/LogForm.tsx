@@ -16,6 +16,23 @@ import Textarea from "@/components/ui/Textarea";
 import Combobox from "@/components/ui/Combobox";
 import { useQuickLog } from "./QuickLogProvider";
 
+// Gig platform types for income tracking
+const GIG_PLATFORMS = [
+  "Uber",
+  "Lyft",
+  "DoorDash",
+  "Instacart",
+  "Grubhub",
+  "Amazon Flex",
+  "Shipt",
+  "TaskRabbit",
+  "Fiverr",
+  "Upwork",
+  "Freelance",
+  "Contract",
+  "Other",
+] as const;
+
 export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) => void }) {
   const router = useRouter();
   const quickLog = useQuickLog();
@@ -27,6 +44,10 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [methodOrAccount, setMethodOrAccount] = useState("");
   const [tags, setTags] = useState<ContextTag[]>([]);
   const [touched, setTouched] = useState({ amount: false, date: false, bucket: false, tags: false });
+  
+  // Gig worker fields (income only)
+  const [hoursWorked, setHoursWorked] = useState<number | null>(null);
+  const [platformType, setPlatformType] = useState("");
   
   const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg?: string; undoId?: string }>({ kind: "idle" });
 
@@ -51,6 +72,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         }
         // restore last used method/account
         if (parsed?.methodOrAccount) setMethodOrAccount(parsed.methodOrAccount);
+        // restore last used platform (gig workers)
+        if (parsed?.platformType) setPlatformType(parsed.platformType);
       }
     } catch {}
   }, []);
@@ -74,9 +97,14 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       if (note?.trim()) payload.note = note.trim();
       if (methodOrAccount?.trim()) payload.methodOrAccount = methodOrAccount.trim();
       if (tags.length > 0) payload.tags = tags;
+      // Gig worker fields (income only)
+      if (type === "income") {
+        if (hoursWorked && hoursWorked > 0) payload.hoursWorked = hoursWorked;
+        if (platformType?.trim()) payload.platformType = platformType.trim();
+      }
       const res = await addEntry(payload);
 
-      // persist smart defaults (include tags and methodOrAccount)
+      // persist smart defaults (include tags, methodOrAccount, and gig fields)
       try {
         localStorage.setItem(
           "tallyup.lastEntry",
@@ -85,6 +113,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             bucket,
             tags: tags.length ? tags : undefined,
             methodOrAccount: methodOrAccount?.trim() || undefined,
+            platformType: type === "income" && platformType?.trim() ? platformType.trim() : undefined,
           })
         );
       } catch {}
@@ -286,6 +315,48 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         </label>
         <Input value={methodOrAccount} onChange={(e) => setMethodOrAccount(e.target.value)} placeholder={"e.g., Checking, Debit, Cash"} />
       </div>
+
+      {/* Gig Worker Fields - Income only */}
+      {type === "income" && (
+        <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-subtle)" }}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+              Gig / Freelance Details (optional)
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                Hours Worked
+              </label>
+              <Input
+                type="number"
+                step="0.25"
+                min="0"
+                value={hoursWorked ?? ""}
+                onChange={(e) => setHoursWorked(e.target.value ? parseFloat(e.target.value) : null)}
+                placeholder="e.g., 4.5"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                Platform
+              </label>
+              <Combobox
+                value={platformType}
+                onChange={(v) => setPlatformType(v)}
+                options={[...GIG_PLATFORMS]}
+                placeholder="Choose..."
+              />
+            </div>
+          </div>
+          {hoursWorked && hoursWorked > 0 && amountCents && amountCents > 0 && (
+            <div className="mt-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
+              Hourly rate: ${((amountCents / 100) / hoursWorked).toFixed(2)}/hr
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 flex items-center gap-3">
         <button
