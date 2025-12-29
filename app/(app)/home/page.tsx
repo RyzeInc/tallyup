@@ -9,6 +9,7 @@ import * as Lucide from "lucide-react";
 import Link from "next/link";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
+import { useQuickLog } from "@/components/log/QuickLogProvider";
 import PageHeader from "@/components/ui/PageHeader";
 
 /**
@@ -206,6 +207,7 @@ type Entry = {
 
 export default function HomePage() {
   const { activeTab, setActiveTab, previousTab } = useTabs();
+  const quickLog = useQuickLog();
   
   // Home scope always defaults to "this-month" - no persistence
   const [scope, setScope] = useState<HomeScope>("this-month");
@@ -660,7 +662,7 @@ export default function HomePage() {
                   Add your first transaction to get started
                 </p>
                 <button
-                  onClick={() => setActiveTab("log")}
+                  onClick={() => quickLog.open()}
                   className="btn-primary"
                   style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-2)" }}
                 >
