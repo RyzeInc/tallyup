@@ -893,10 +893,12 @@ export default function InsightsPage() {
                   onClose={() => setActiveTooltip(null)}
                   title="Income"
                 >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div>Sum of all income transactions in period</div>
-                    <div style={{ fontWeight: 500, color: "var(--text)" }}>
-                      {prevLabel}: {centsToDollars(prevComputed.income)}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ fontWeight: 500, color: "var(--text)" }}>Money coming in</div>
+                    <div>All the money you receive—from work, side gigs, investments, or any other source. Understanding your income patterns helps you plan realistically.</div>
+                    <div style={{ marginTop: "4px", paddingTop: "4px", borderTop: "1px solid var(--border)" }}>
+                      <span style={{ color: "var(--text-tertiary)" }}>{prevLabel}:</span>{" "}
+                      <span style={{ fontWeight: 500, color: "var(--text)" }}>{centsToDollars(prevComputed.income)}</span>
                     </div>
                   </div>
                 </KpiTooltip>
@@ -965,10 +967,12 @@ export default function InsightsPage() {
                   onClose={() => setActiveTooltip(null)}
                   title="Expenses"
                 >
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <div>Sum of all expense transactions in period</div>
-                    <div style={{ fontWeight: 500, color: "var(--text)" }}>
-                      {prevLabel}: {centsToDollars(prevComputed.expense)}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ fontWeight: 500, color: "var(--text)" }}>Money going out</div>
+                    <div>Everything you spend—bills, groceries, subscriptions, and discretionary purchases. Tracking expenses reveals where your money actually goes versus where you think it goes.</div>
+                    <div style={{ marginTop: "4px", paddingTop: "4px", borderTop: "1px solid var(--border)" }}>
+                      <span style={{ color: "var(--text-tertiary)" }}>{prevLabel}:</span>{" "}
+                      <span style={{ fontWeight: 500, color: "var(--text)" }}>{centsToDollars(prevComputed.expense)}</span>
                     </div>
                   </div>
                 </KpiTooltip>
@@ -1037,10 +1041,12 @@ export default function InsightsPage() {
                   onClose={() => setActiveTooltip(null)}
                   title="Net"
                 >
-                  <div className="space-y-1">
-                    <div>Income − Expenses</div>
-                    <div className="font-medium" style={{ color: "var(--text)" }}>
-                      {prevLabel}: {prevComputed.net >= 0 ? "+" : ""}{centsToDollars(prevComputed.net)}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ fontWeight: 500, color: "var(--text)" }}>Your bottom line</div>
+                    <div>The difference between what you earned and what you spent. A positive net means you're saving; a negative net means you're spending more than you make. This is the number that matters most for building wealth.</div>
+                    <div style={{ marginTop: "4px", paddingTop: "4px", borderTop: "1px solid var(--border)" }}>
+                      <span style={{ color: "var(--text-tertiary)" }}>{prevLabel}:</span>{" "}
+                      <span style={{ fontWeight: 500, color: "var(--text)" }}>{prevComputed.net >= 0 ? "+" : ""}{centsToDollars(prevComputed.net)}</span>
                     </div>
                   </div>
                 </KpiTooltip>

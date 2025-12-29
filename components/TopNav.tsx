@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import { useTabs } from "./PersistentTabs";
+import { useQuickLog } from "./log/QuickLogProvider";
 
 /**
  * TopNav - Horizontally scrollable top navigation
@@ -41,6 +42,7 @@ const iconMap = {
 
 export default function TopNav() {
   const { activeTab, setActiveTab } = useTabs();
+  const { open: openQuickLog } = useQuickLog();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
   const [showRightFade, setShowRightFade] = useState(true);
@@ -113,7 +115,7 @@ export default function TopNav() {
         
         {/* Quick Log Button */}
         <button
-          onClick={() => setActiveTab("activity")} // Will handle log modal separately
+          onClick={openQuickLog}
           className="flex items-center justify-center rounded-full transition-colors"
           style={{
             width: 40,

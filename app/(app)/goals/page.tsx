@@ -2,11 +2,8 @@
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useState, useMemo } from "react";
-import { useQuery } from "convex/react";
-import { api } from "convex/_generated/api";
 import { formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
-import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 
 /**
@@ -318,16 +315,16 @@ export default function GoalsPage() {
       {/* Create Goal Modal */}
       {showCreate && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
           onClick={resetCreate}
         >
           <div
-            className="w-full max-w-lg rounded-t-2xl p-5 pb-8 safe-area-inset-bottom max-h-[85vh] overflow-y-auto"
+            className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-5 pb-8 safe-area-inset-bottom max-h-[85vh] flex flex-col"
             style={{ backgroundColor: "var(--surface)" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 shrink-0">
               <div className="flex items-center gap-2">
                 {createStep === "details" && (
                   <button onClick={() => setCreateStep("type")}>
@@ -344,7 +341,7 @@ export default function GoalsPage() {
             </div>
 
             {createStep === "type" ? (
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto flex-1">
                 {/* Goal Type Selection */}
                 <div className="space-y-2">
                   {GOAL_TYPES.map((goalType) => {
@@ -404,7 +401,7 @@ export default function GoalsPage() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto flex-1">
                 <div>
                   <label className="text-meta font-medium block mb-1" style={{ color: "var(--text-secondary)" }}>
                     Goal Name
@@ -462,26 +459,59 @@ export default function GoalsPage() {
                   const target = parseFloat(createAmount.replace(/[^0-9.]/g, "")) * 100;
                   const targetDate = new Date(createTargetDate);
                   const today = new Date();
-                  const monthsUntil = Math.max(1, Math.ceil((targetDate.getTime() - today.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+                  today.setHours(0, 0, 0, 0);
+                  targetDate.setHours(0, 0, 0, 0);
+                  
+                  // Calculate days between dates
+                  const daysUntil = Math.max(1, Math.ceil((targetDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)));
+                  
+                  // Calculate months more accurately using actual calendar months
+                  // Use days / 30.44 (average days per month) for more accurate calculation
+                  const monthsUntil = Math.max(0.5, daysUntil / 30.44);
                   const monthlyAmount = Math.ceil(target / monthsUntil);
+                  
+                  // Also show weekly if helpful
+                  const weeksUntil = Math.max(1, daysUntil / 7);
+                  const weeklyAmount = Math.ceil(target / weeksUntil);
 
                   return (
                     <div
-                      className="p-3 rounded-xl"
+                      className="p-3 rounded-xl space-y-2"
                       style={{ backgroundColor: "var(--accent-subtle)" }}
                     >
                       <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-                        To reach your goal, save about
+                        To reach your goal in {daysUntil} days:
                       </div>
-                      <div className="text-body font-semibold" style={{ color: "var(--primary)" }}>
-                        {formatMoney(monthlyAmount)} per month
+                      <div className="flex items-center justify-between">
+                        <span className="text-meta" style={{ color: "var(--text-secondary)" }}>Per month:</span>
+                        <span className="text-body font-semibold" style={{ color: "var(--primary)" }}>
+                          {formatMoney(monthlyAmount)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-meta" style={{ color: "var(--text-secondary)" }}>Per week:</span>
+                        <span className="text-body font-semibold" style={{ color: "var(--primary)" }}>
+                          {formatMoney(weeklyAmount)}
+                        </span>
                       </div>
                     </div>
                   );
                 })()}
 
                 <button
-                  className="w-full py-3 rounded-xl font-medium"
+                  onClick={() => {
+                    if (createName && createAmount) {
+                      // TODO: Save goal when API is ready
+                      console.log("Creating goal:", {
+                        name: createName,
+                        type: selectedType,
+                        targetAmount: parseFloat(createAmount.replace(/[^0-9.]/g, "")) * 100,
+                        targetDate: createTargetDate ? new Date(createTargetDate).getTime() : undefined,
+                      });
+                      resetCreate();
+                    }
+                  }}
+                  className="w-full py-3 rounded-xl font-medium transition-colors"
                   style={{
                     backgroundColor: createName && createAmount ? "var(--primary)" : "var(--surface-2)",
                     color: createName && createAmount ? "#fff" : "var(--text-tertiary)",

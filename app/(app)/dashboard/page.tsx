@@ -4,14 +4,10 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { centsToDollars, formatMoney } from "@/components/utils";
+import { centsToDollars, formatMoney, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
 import * as Lucide from "lucide-react";
-import Link from "next/link";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
-import PageHeader from "@/components/ui/PageHeader";
-import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
-import { useTimeRange } from "@/components/TimeRangeProvider";
 
 /**
  * Dashboard - Financial overview at a glance
@@ -35,37 +31,19 @@ type Entry = {
   needsReview?: boolean;
 };
 
-// Group entries by date label (Today, Yesterday, Dec 24, etc.)
-function groupEntriesByDate(entries: Entry[]): Map<string, Entry[]> {
-  const groups = new Map<string, Entry[]>();
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-
-  for (const entry of entries) {
-    let label: string;
-    if (entry.date >= todayStart) {
-      label = "Today";
-    } else if (entry.date >= yesterdayStart) {
-      label = "Yesterday";
-    } else {
-      const d = new Date(entry.date);
-      label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    }
-
-    if (!groups.has(label)) {
-      groups.set(label, []);
-    }
-    groups.get(label)!.push(entry);
-  }
-
-  return groups;
-}
-
 export default function DashboardPage() {
   const { setActiveTab } = useTabs();
-  const { startDate, endDate, label } = useTimeRange();
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  
+  // Dashboard has its own independent time range (not linked to global)
+  // Default to "This Month" for a snapshot of current financial situation
+  const [dashboardPreset, setDashboardPreset] = useState<DateRangePreset>("month");
+  const [showPresetPicker, setShowPresetPicker] = useState(false);
+  
+  // Compute date range from dashboard's own preset
+  const { startDate, endDate, label } = useMemo(() => {
+    return getDateRangeFromPreset(dashboardPreset);
+  }, [dashboardPreset]);
 
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
@@ -103,7 +81,63 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Dashboard</h1>
           </div>
-          <GlobalDateRangePicker />
+          {/* Dashboard-specific time range picker (independent from global) */}
+          <div className="relative">
+            <button
+              onClick={() => setShowPresetPicker(!showPresetPicker)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+              }}
+            >
+              <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
+              <span>{label}</span>
+              <Lucide.ChevronDown className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
+            </button>
+            
+            {showPresetPicker && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowPresetPicker(false)} 
+                />
+                <div
+                  className="absolute right-0 top-full mt-2 z-50 rounded-xl p-2 shadow-lg min-w-[160px]"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {(
+                    [
+                      { value: "today", label: "Today" },
+                      { value: "week", label: "This Week" },
+                      { value: "month", label: "This Month" },
+                      { value: "year", label: "This Year" },
+                    ] as { value: DateRangePreset; label: string }[]
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setDashboardPreset(option.value);
+                        setShowPresetPicker(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
+                      style={{
+                        backgroundColor: dashboardPreset === option.value ? "var(--accent-subtle)" : "transparent",
+                        color: dashboardPreset === option.value ? "var(--primary)" : "var(--text)",
+                        fontWeight: dashboardPreset === option.value ? 600 : 400,
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <SignedOut>
