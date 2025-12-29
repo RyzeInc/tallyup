@@ -12,7 +12,9 @@ const ActivityPage = dynamic(() => import("@/app/(app)/activity/page"), { ssr: f
 const BudgetingPage = dynamic(() => import("@/app/(app)/budgeting/page"), { ssr: false });
 const RecurringPage = dynamic(() => import("@/app/(app)/recurring/page"), { ssr: false });
 const GoalsPage = dynamic(() => import("@/app/(app)/goals/page"), { ssr: false });
+const InsightsPage = dynamic(() => import("@/app/(app)/insights/page"), { ssr: false });
 const HelpPage = dynamic(() => import("@/app/(app)/help/page"), { ssr: false });
+const MorePage = dynamic(() => import("@/app/(app)/more/page"), { ssr: false });
 
 /**
  * AppShell - Unified shell with:
@@ -67,10 +69,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isMainTab = pathname === "/" || 
                     pathname === "/dashboard" || pathname === "/activity" || 
                     pathname === "/budgeting" || pathname === "/recurring" || 
-                    pathname === "/goals" || pathname === "/help" ||
+                    pathname === "/goals" || pathname === "/insights" || 
+                    pathname === "/help" || pathname === "/more" ||
                     pathname?.startsWith("/dashboard/") || pathname?.startsWith("/activity/") || 
                     pathname?.startsWith("/budgeting/") || pathname?.startsWith("/recurring/") || 
-                    pathname?.startsWith("/goals/") || pathname?.startsWith("/help/");
+                    pathname?.startsWith("/goals/") || pathname?.startsWith("/insights/") ||
+                    pathname?.startsWith("/help/") || pathname?.startsWith("/more/");
 
   return (
     <div 
@@ -109,8 +113,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <TabPanel tabId="goals">
                 <GoalsPage />
               </TabPanel>
+              <TabPanel tabId="insights">
+                <InsightsPage />
+              </TabPanel>
               <TabPanel tabId="help">
                 <HelpPage />
+              </TabPanel>
+              <TabPanel tabId="more">
+                <MorePage />
               </TabPanel>
             </TabContainer>
           ) : (

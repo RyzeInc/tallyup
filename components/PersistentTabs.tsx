@@ -3,7 +3,7 @@
 import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { flushSync } from "react-dom";
 
-export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "help";
+export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more";
 
 interface TabsContextValue {
   activeTab: TabId;
@@ -20,7 +20,9 @@ const scrollPositions: Record<TabId, number> = {
   budgeting: 0,
   recurring: 0,
   goals: 0,
+  insights: 0,
   help: 0,
+  more: 0,
 };
 
 export function useTabs() {
@@ -39,7 +41,9 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     if (path.startsWith("/budgeting")) return "budgeting";
     if (path.startsWith("/recurring")) return "recurring";
     if (path.startsWith("/goals")) return "goals";
+    if (path.startsWith("/insights")) return "insights";
     if (path.startsWith("/help") || path.startsWith("/learn")) return "help";
+    if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) return "more";
     return "dashboard"; // default to dashboard
   });
   

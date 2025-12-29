@@ -25,7 +25,7 @@ interface NavTab {
   badge?: number;
 }
 
-type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "help";
+type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more";
 
 const iconMap = {
   LayoutDashboard: Lucide.LayoutDashboard,
@@ -33,7 +33,9 @@ const iconMap = {
   Wallet: Lucide.Wallet,
   RefreshCw: Lucide.RefreshCw,
   Target: Lucide.Target,
+  TrendingUp: Lucide.TrendingUp,
   HelpCircle: Lucide.HelpCircle,
+  Menu: Lucide.Menu,
   Plus: Lucide.Plus,
 };
 
@@ -53,7 +55,9 @@ export default function TopNav() {
     { id: "budgeting", label: "Budgeting", iconName: "Wallet", tabId: "budgeting" },
     { id: "recurring", label: "Recurring", iconName: "RefreshCw", tabId: "recurring" },
     { id: "goals", label: "Goals", iconName: "Target", tabId: "goals" },
+    { id: "insights", label: "Insights", iconName: "TrendingUp", tabId: "insights" },
     { id: "help", label: "Learn", iconName: "HelpCircle", tabId: "help" },
+    { id: "more", label: "Menu", iconName: "Menu", tabId: "more" },
   ];
 
   // Handle scroll fade indicators
@@ -98,12 +102,14 @@ export default function TopNav() {
         className="flex items-center justify-between px-4"
         style={{ height: "var(--topbar-height)" }}
       >
-        <span 
-          className="text-lg font-semibold" 
-          style={{ color: "var(--text)", letterSpacing: "-0.01em" }}
+        <button
+          onClick={() => setActiveTab("more")}
+          className="text-lg font-semibold hover:opacity-80 transition-opacity"
+          style={{ color: "var(--text)", letterSpacing: "-0.01em", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          aria-label="Open menu"
         >
           TallyUp
-        </span>
+        </button>
         
         {/* Quick Log Button */}
         <button
