@@ -27,13 +27,14 @@ function isContextTag(x: string): x is ContextTag {
   return (CONTEXT_TAGS as readonly string[]).includes(x);
 }
 
-type SettingsSection = "main" | "categories" | "export" | "privacy" | "help" | "theme";
+type SettingsSection = "main" | "categories" | "export" | "privacy" | "help" | "theme" | "notifications";
 
 // Keys for localStorage
 const PINNED_EXPENSE_KEY = "tallyup.pinnedExpenseCategories";
 const PINNED_INCOME_KEY = "tallyup.pinnedIncomeCategories";
 const HIDDEN_TAGS_KEY = "tallyup.hiddenTags";
 const PINNED_TAGS_KEY = "tallyup.pinnedTags";
+const REVIEW_REMINDER_KEY = "tallyup.reviewReminder";
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -675,6 +676,11 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* Notifications */}
+        {activeSection === "notifications" && (
+          <NotificationsSection toast={toast} />
+        )}
       </div>
     );
   }
@@ -812,6 +818,7 @@ export default function SettingsPage() {
           <button
             onClick={() => setActiveSection("theme")}
             className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-[var(--surface-subtle)]"
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
               <Lucide.Palette className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
@@ -821,6 +828,21 @@ export default function SettingsPage() {
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
                 {theme === "light" ? "Light" : "Dim (Beta)"}
               </div>
+            </div>
+            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+          </button>
+
+          {/* Notifications */}
+          <button
+            onClick={() => setActiveSection("notifications")}
+            className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-[var(--surface-subtle)]"
+          >
+            <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
+              <Lucide.Bell className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Review Reminders</div>
+              <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Weekly review notifications</div>
             </div>
             <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
@@ -844,6 +866,207 @@ export default function SettingsPage() {
           </div>
         </Link>
       </SignedIn>
+    </div>
+  );
+}
+
+/**
+ * Notifications Settings Section
+ */
+function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> }) {
+  const [enabled, setEnabled] = useState(false);
+  const [day, setDay] = useState("Sunday");
+  const [time, setTime] = useState("18:00");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+
+  // Load saved settings
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REVIEW_REMINDER_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setEnabled(parsed.enabled ?? false);
+        setDay(parsed.day ?? "Sunday");
+        setTime(parsed.time ?? "18:00");
+      }
+      // Check notification permission
+      if ("Notification" in window) {
+        setNotificationPermission(Notification.permission);
+      } else {
+        setNotificationPermission("unsupported");
+      }
+    } catch {}
+  }, []);
+
+  async function requestPermission() {
+    if (!("Notification" in window)) {
+      toast.error("Notifications not supported", { description: "Your browser doesn't support notifications" });
+      return;
+    }
+    
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    
+    if (permission === "granted") {
+      toast.success("Notifications enabled!");
+      // Show a test notification
+      new Notification("TallyUp", {
+        body: "You'll now receive weekly review reminders",
+        icon: "/icons/icon-192.png",
+      });
+    } else {
+      toast.error("Permission denied", { description: "You can enable notifications in your browser settings" });
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem(REVIEW_REMINDER_KEY, JSON.stringify({ enabled, day, time }));
+      toast.success("Reminder settings saved");
+      
+      // Schedule notification (in a real app, this would register with a service worker)
+      if (enabled && notificationPermission === "granted" && "serviceWorker" in navigator) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.active?.postMessage({
+            type: "SCHEDULE_REVIEW_REMINDER",
+            payload: { day, time },
+          });
+        });
+      }
+    } catch (e) {
+      toast.error("Failed to save settings");
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div
+        className="rounded-2xl p-5"
+        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <h2 className="text-lg font-semibold mb-1" style={{ color: "var(--text)" }}>Review Reminders</h2>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          Get a gentle nudge to review and clean up your money log
+        </p>
+      </div>
+
+      {/* Permission status */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
+              Notification Permission
+            </div>
+            <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              {notificationPermission === "granted" && "Enabled ✓"}
+              {notificationPermission === "denied" && "Blocked (check browser settings)"}
+              {notificationPermission === "default" && "Not yet requested"}
+              {notificationPermission === "unsupported" && "Not supported by your browser"}
+            </div>
+          </div>
+          {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+            <button
+              onClick={requestPermission}
+              className="text-sm font-medium px-4 py-2 rounded-lg"
+              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              Enable
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Reminder settings */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
+              Weekly Review Reminder
+            </div>
+            <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              2 minutes to review flagged items and uncategorized entries
+            </div>
+          </div>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className="relative w-12 h-7 rounded-full transition-colors"
+            style={{
+              backgroundColor: enabled ? "var(--accent)" : "var(--border)",
+            }}
+          >
+            <span
+              className="absolute top-1 w-5 h-5 rounded-full transition-transform"
+              style={{
+                backgroundColor: "white",
+                left: enabled ? "24px" : "4px",
+              }}
+            />
+          </button>
+        </div>
+
+        {enabled && (
+          <div className="space-y-3 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                  Day
+                </label>
+                <select
+                  value={day}
+                  onChange={(e) => setDay(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)", color: "var(--text)" }}
+                >
+                  {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                  Time
+                </label>
+                <input
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)", color: "var(--text)" }}
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={saveSettings}
+              className="w-full text-sm font-medium py-2.5 rounded-lg"
+              style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+            >
+              Save Reminder
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Reflective copy */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: "var(--surface-subtle)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex gap-3">
+          <Lucide.Lightbulb className="h-5 w-5 flex-shrink-0" style={{ color: "var(--warning)" }} />
+          <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
+            <strong style={{ color: "var(--text)" }}>Why weekly?</strong> Financial awareness is a habit. 
+            A brief weekly review helps you stay in control without becoming obsessive. 
+            Just 2 minutes: check flagged items, categorize recent entries, notice any surprises.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

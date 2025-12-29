@@ -133,7 +133,7 @@ export default function ReviewWizardPage() {
             </p>
           </div>
           <Link
-            href="/overview"
+            href="/dashboard"
             className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-subtle)]"
           >
             <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
@@ -201,7 +201,7 @@ export default function ReviewWizardPage() {
             </p>
             <div className="flex gap-3 justify-center">
               <Link
-                href="/overview"
+                href="/dashboard"
                 className="rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors"
                 style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
               >
@@ -224,7 +224,7 @@ export default function ReviewWizardPage() {
             subtitle="All your entries are categorized"
             action={
               <Link
-                href="/overview"
+                href="/dashboard"
                 className="inline-block rounded-lg px-5 py-2.5 text-sm font-semibold"
                 style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
               >

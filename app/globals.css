@@ -141,6 +141,26 @@
   --chart-5: #B87E9A;
   --chart-6: #C87A5A;
   
+  /* -------- Tri-State Chip Colors (Filter System) -------- */
+  --chip-bg: var(--surface);
+  --chip-border: var(--border);
+  --chip-text: var(--text);
+  
+  /* Neutral state - default appearance */
+  --chip-neutral-bg: var(--chip-bg);
+  --chip-neutral-border: var(--chip-border);
+  --chip-neutral-text: var(--chip-text);
+  
+  /* Include state - accent tinted */
+  --chip-include-bg: rgba(47, 111, 133, 0.12);
+  --chip-include-border: rgba(47, 111, 133, 0.45);
+  --chip-include-text: var(--text);
+  
+  /* Exclude state - danger tinted */
+  --chip-exclude-bg: rgba(196, 92, 92, 0.10);
+  --chip-exclude-border: rgba(196, 92, 92, 0.50);
+  --chip-exclude-text: var(--text);
+  
   /* -------- shadcn/ui Compatibility -------- */
   --background: var(--canvas);
   --foreground: var(--text);

@@ -52,29 +52,29 @@ export function TapCycleFilterChip({
     onStateChange(next);
   }, [state, onStateChange]);
 
-  // State-based styling
+  // State-based styling using design tokens
   const getStyles = () => {
     switch (state) {
       case "include":
         return {
-          backgroundColor: "var(--accent-subtle)",
-          borderColor: "var(--primary)",
-          color: "var(--primary)",
+          backgroundColor: "var(--chip-include-bg)",
+          borderColor: "var(--chip-include-border)",
+          color: "var(--chip-include-text)",
           iconColor: "var(--primary)",
         };
       case "exclude":
         return {
-          backgroundColor: "var(--danger-subtle)",
-          borderColor: "var(--danger)",
-          color: "var(--danger)",
+          backgroundColor: "var(--chip-exclude-bg)",
+          borderColor: "var(--chip-exclude-border)",
+          color: "var(--chip-exclude-text)",
           iconColor: "var(--danger)",
         };
       case "neutral":
       default:
         return {
-          backgroundColor: "var(--surface)",
-          borderColor: "var(--border)",
-          color: "var(--text-secondary)",
+          backgroundColor: "var(--chip-neutral-bg)",
+          borderColor: "var(--chip-neutral-border)",
+          color: "var(--chip-neutral-text)",
           iconColor: "var(--text-tertiary)",
         };
     }

@@ -7,7 +7,7 @@ import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 
 const pages = [
-  { href: "/overview", label: "Overview", icon: Lucide.LayoutGrid, keywords: ["home", "dashboard"] },
+  { href: "/dashboard", label: "Dashboard", icon: Lucide.LayoutGrid, keywords: ["home", "overview"] },
   { href: "/log", label: "Add Entry", icon: Lucide.Plus, keywords: ["new", "create", "add", "log"] },
   { href: "/activity", label: "Transactions", icon: Lucide.History, keywords: ["history", "activity", "list"] },
   { href: "/review", label: "Review Queue", icon: Lucide.Inbox, keywords: ["inbox", "needs review", "uncategorized"] },

@@ -18,9 +18,12 @@ const STATIC_ASSETS = [
   '/review',
   '/rules',
   '/settings',
-  '/overview',
+  '/dashboard',
   '/profile',
   '/home',
+  '/budgeting',
+  '/goals',
+  '/help',
   '/manifest.webmanifest',
   '/globals.css'
 ];
