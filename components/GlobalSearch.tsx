@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
+import { useQuickLog } from "./log/QuickLogProvider";
 
 const pages = [
   { href: "/dashboard", label: "Dashboard", icon: Lucide.LayoutGrid, keywords: ["home", "overview"] },
-  { href: "/log", label: "Add Entry", icon: Lucide.Plus, keywords: ["new", "create", "add", "log"] },
+  { action: "quicklog", label: "Add Entry", icon: Lucide.Plus, keywords: ["new", "create", "add", "log"] },
   { href: "/activity", label: "Transactions", icon: Lucide.History, keywords: ["history", "activity", "list"] },
   { href: "/review", label: "Review Queue", icon: Lucide.Inbox, keywords: ["inbox", "needs review", "uncategorized"] },
   { href: "/rules", label: "Rules", icon: Lucide.Layers, keywords: ["patterns", "recurring"] },
@@ -24,6 +25,7 @@ interface GlobalSearchProps {
 
 export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const router = useRouter();
+  const { open: openQuickLog } = useQuickLog();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -102,7 +104,11 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
         const selected = results[selectedIndex];
         if (selected) {
           if (selected.type === "page") {
-            router.push(selected.href);
+            if ("action" in selected && selected.action === "quicklog") {
+              openQuickLog();
+            } else if ("href" in selected) {
+              router.push(selected.href);
+            }
           } else {
             // Navigate to entry in activity with the entry ID
             router.push(`/activity?q=${encodeURIComponent(selected.entry.category || selected.entry.bucket || "")}`);
@@ -115,13 +121,17 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, results, selectedIndex, router, onClose]);
+  }, [open, results, selectedIndex, router, onClose, openQuickLog]);
 
   if (!open) return null;
 
   function handleSelect(result: typeof results[0]) {
     if (result.type === "page") {
-      router.push(result.href);
+      if ("action" in result && result.action === "quicklog") {
+        openQuickLog();
+      } else if ("href" in result) {
+        router.push(result.href);
+      }
     } else {
       router.push(`/activity?q=${encodeURIComponent(result.entry.category || result.entry.bucket || "")}`);
     }
@@ -175,9 +185,10 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                         if (result.type !== "page") return null;
                         const Icon = result.icon;
                         const globalIdx = results.indexOf(result);
+                        const key = "href" in result ? result.href : "action" in result ? result.action : idx;
                         return (
                           <button
-                            key={result.href}
+                            key={key}
                             onClick={() => handleSelect(result)}
                             className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${
                               globalIdx === selectedIndex

@@ -600,7 +600,7 @@ export default function InsightsPage() {
         severity: "danger",
         title: "No income recorded",
         description: `No income logged in ${label}`,
-        link: "/log",
+        link: "/activity",
       });
     }
 

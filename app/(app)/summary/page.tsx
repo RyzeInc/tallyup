@@ -7,6 +7,7 @@ import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { useQuickLog } from "@/components/log/QuickLogProvider";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,6 +17,7 @@ const COLORS = ["#2F6F85", "#10B981", "#F59E0B", "#6F9EA8", "#EC4899", "#C87A5A"
 export default function SummaryPage() {
   const { user } = useUser();
   const router = useRouter();
+  const { open: openQuickLog } = useQuickLog();
   const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
@@ -91,11 +93,11 @@ export default function SummaryPage() {
   const reviewCount = inbox?.length ?? 0;
 
   function openLogSpent() {
-    router.push("/log");
+    openQuickLog();
   }
 
   function openLogReceived() {
-    router.push("/log");
+    openQuickLog();
   }
 
   return (

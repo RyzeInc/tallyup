@@ -1,18 +1,18 @@
 "use client";
 
 import * as Lucide from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useQuickLog } from "./log/QuickLogProvider";
 
 interface FABProps {
   className?: string;
 }
 
 export default function FAB({ className = "" }: FABProps) {
-  const router = useRouter();
+  const { open } = useQuickLog();
 
   return (
     <button
-      onClick={() => router.push('/log')}
+      onClick={open}
       className={`fixed z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-transform hover:scale-105 active:scale-95 ${className}`}
       style={{
         backgroundColor: "var(--accent)",
