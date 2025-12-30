@@ -214,6 +214,10 @@ export default defineSchema({
       v.literal("completed"),
       v.literal("abandoned")
     ),
+
+    // Archive flag
+    archived: v.optional(v.boolean()),
+
     completedAt: v.optional(v.number()),
     
     createdAt: v.number(),
@@ -221,6 +225,7 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_status", ["userId", "status"])
+    .index("by_user_archived", ["userId", "archived"])
     .index("by_user_type", ["userId", "goalType"]),
 
   // Goal contributions - track actual money moved toward goals
