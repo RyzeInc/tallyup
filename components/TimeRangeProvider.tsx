@@ -35,8 +35,9 @@ const TimeRangeContext = createContext<TimeRangeContextValue | null>(null);
 const STORAGE_KEY = "tallyup.timeRange";
 const DEFAULT_TIMEZONE = "America/New_York";
 
-// Pages where time range should NOT sync to URL (independent time range)
-const INDEPENDENT_TIME_PAGES = ["/dashboard", "/home"];
+// Pages where time range should NOT sync to URL (uses localStorage only)
+// Most pages use localStorage to avoid conflicts with tab switching
+const INDEPENDENT_TIME_PAGES = ["/dashboard", "/home", "/budgeting", "/insights", "/recurring", "/goals", "/more", "/help"];
 
 export function useTimeRange() {
   const ctx = useContext(TimeRangeContext);

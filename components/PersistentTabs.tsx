@@ -64,11 +64,12 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
       setActiveTab(tab);
     });
     
-    // Update URL to reflect the active tab
+    // Update URL to reflect the active tab, preserving search params
     if (typeof window !== "undefined") {
       const tabPath = `/${tab}`;
       if (window.location.pathname !== tabPath) {
-        window.history.replaceState(null, "", tabPath);
+        const newUrl = tabPath + window.location.search;
+        window.history.replaceState(null, "", newUrl);
       }
     }
   }, [activeTab]);
