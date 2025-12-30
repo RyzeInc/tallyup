@@ -49,7 +49,7 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
   
   const [previousTab, setPreviousTab] = useState<TabId | null>(null);
 
-  // Update URL without navigation when tab changes, but keep domain clean
+  // Update URL without navigation when tab changes
   const setActiveTabWithHistory = useCallback((tab: TabId) => {
     // Save current scroll position before switching
     if (typeof window !== "undefined") {
@@ -64,9 +64,12 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
       setActiveTab(tab);
     });
     
-    // Keep URL at root domain without showing routes
-    if (typeof window !== "undefined" && window.location.pathname !== "/") {
-      window.history.replaceState(null, "", "/");
+    // Update URL to reflect the active tab
+    if (typeof window !== "undefined") {
+      const tabPath = `/${tab}`;
+      if (window.location.pathname !== tabPath) {
+        window.history.replaceState(null, "", tabPath);
+      }
     }
   }, [activeTab]);
 

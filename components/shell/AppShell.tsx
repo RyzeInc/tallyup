@@ -65,8 +65,9 @@ export { TopBar };
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   
-  // Check if we're on a main tab route
-  const isMainTab = pathname === "/dashboard" || pathname === "/activity" || 
+  // Check if we're on a main tab route (root "/" defaults to dashboard tab)
+  const isMainTab = pathname === "/" ||
+                    pathname === "/dashboard" || pathname === "/activity" || 
                     pathname === "/budgeting" || pathname === "/recurring" || 
                     pathname === "/goals" || pathname === "/insights" || 
                     pathname === "/help" || pathname === "/more" ||
