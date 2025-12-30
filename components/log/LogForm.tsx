@@ -4,167 +4,181 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { todayYYYYMMDD, cacheKey, uniqCaseInsensitive, INCOME_SPACES, EXPENSE_SPACES, CONTEXT_TAGS } from "@/components/utils";
-
-type ContextTag = typeof CONTEXT_TAGS[number];
-function isContextTag(x: string): x is ContextTag {
-  return (CONTEXT_TAGS as readonly string[]).includes(x);
-}
+import {
+  EntryType,
+  todayYYYYMMDD,
+  uniqCaseInsensitive,
+  yyyymmddToLocalMidnightTs,
+  INCOME_SPACES,
+  EXPENSE_SPACES,
+  CONTEXT_TAGS,
+} from "@/components/utils";
 import CurrencyInput from "@/components/ui/CurrencyInput";
-import Input from "@/components/ui/Input";
-import Textarea from "@/components/ui/Textarea";
 import Combobox from "@/components/ui/Combobox";
 import { useQuickLog } from "./QuickLogProvider";
+import * as Lucide from "lucide-react";
 
-// Gig platform types for income tracking
-const GIG_PLATFORMS = [
-  "Uber",
-  "Lyft",
-  "DoorDash",
-  "Instacart",
-  "Grubhub",
-  "Amazon Flex",
-  "Shipt",
-  "TaskRabbit",
-  "Fiverr",
-  "Upwork",
-  "Freelance",
-  "Contract",
-  "Other",
-] as const;
+/**
+ * LogForm - Matches the /log page design
+ * 
+ * Structure:
+ * 1. Type toggle (segmented control)
+ * 2. Amount input as the star
+ * 3. Core fields (date, category)
+ * 4. Progressive disclosure chips for optional fields (tags, method, note)
+ * 5. Save button with undo
+ */
 
 export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) => void }) {
   const router = useRouter();
   const quickLog = useQuickLog();
-  const [type, setType] = useState<"expense" | "income">("expense");
+
+  // Core state
+  const [type, setType] = useState<EntryType>(() => {
+    if (typeof window !== "undefined") {
+      const preselectedType = sessionStorage.getItem("tallyup.logType");
+      if (preselectedType === "expense" || preselectedType === "income") {
+        sessionStorage.removeItem("tallyup.logType");
+        return preselectedType;
+      }
+    }
+    return "expense";
+  });
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayYYYYMMDD());
-  const [bucket, setBucket] = useState("");
+  const [category, setCategory] = useState<string>("");
+  const [customCategory, setCustomCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [tags, setTags] = useState<ContextTag[]>([]);
-  const [touched, setTouched] = useState({ amount: false, date: false, bucket: false, tags: false });
-  
-  // Gig worker fields (income only)
-  const [hoursWorked, setHoursWorked] = useState<number | null>(null);
-  const [platformType, setPlatformType] = useState("");
-  
-  const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg?: string; undoId?: string }>({ kind: "idle" });
+  const [tags, setTags] = useState<string[]>([]);
+
+  // Progressive disclosure state
+  const [showTags, setShowTags] = useState(false);
+  const [showPayMode, setShowPayMode] = useState(false);
+  const [showNote, setShowNote] = useState(false);
+
+  // Refs for focus management
+  const payModeInputRef = useRef<HTMLInputElement>(null);
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const [status, setStatus] = useState<
+    { kind: "idle" } |
+    { kind: "saving" } |
+    { kind: "ok"; msg: string; undoId?: string } |
+    { kind: "err"; msg: string }
+  >({ kind: "idle" });
 
   const addEntry = useMutation(api.entries.addEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
   const updateEntry = useMutation(api.entries.updateEntry);
 
-  // smart defaults: last entry (type, bucket, tags, and methodOrAccount)
+  const serverBuckets = useQuery(api.entries.listBuckets, { type });
+
+  const categoryOptions = useMemo(() => {
+    const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
+    const merged = uniqCaseInsensitive([...base, ...((serverBuckets as string[]) ?? [])]);
+    if (!merged.includes("Other")) merged.push("Other");
+    return merged;
+  }, [type, serverBuckets]);
+
+  const effectiveCategory = category === "Other" ? (customCategory.trim() || "Other") : category;
+
+  // Form validation - only amount is required
+  const isValidAmount = amountCents !== null && amountCents > 0;
+  const canSave = isValidAmount;
+
+  // Load smart defaults on mount
   useEffect(() => {
-    // Always reset date to today when form mounts (fresh open)
     setDate(todayYYYYMMDD());
-    
     try {
       const raw = localStorage.getItem("tallyup.lastEntry");
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed?.type) setType(parsed.type);
-        if (parsed?.bucket) setBucket(parsed.bucket);
-        // pre-select last used tags
-        if (parsed?.tags && Array.isArray(parsed.tags)) {
-          setTags((parsed.tags as string[]).filter(isContextTag));
-        }
-        // restore last used method/account
-        if (parsed?.methodOrAccount) setMethodOrAccount(parsed.methodOrAccount);
-        // restore last used platform (gig workers)
-        if (parsed?.platformType) setPlatformType(parsed.platformType);
+        if (parsed?.bucket) setCategory(parsed.bucket);
       }
     } catch {}
   }, []);
 
-  async function onSave(e?: React.FormEvent) {
-    e?.preventDefault();
-    // mark touched so UI shows validation
-    setTouched({ amount: true, date: true, bucket: true, tags: true });
+  async function onSave() {
+    if (!canSave) return;
 
-    // basic required validation
-    let hasError = false;
-    if (!amountCents || amountCents <= 0) hasError = true;
-    if (!date) hasError = true;
-    if (!bucket) hasError = true;
-    if (tags.length === 0) hasError = true;
-    if (hasError) return setStatus({ kind: "err", msg: "Please fill required fields." });
+    setStatus({ kind: "saving" });
+
+    const ts = yyyymmddToLocalMidnightTs(date);
 
     try {
-      const payload: any = { type, amountCents, date: (() => { const [y,m,d] = date.split("-"); return new Date(Number(y), Number(m)-1, Number(d)).getTime(); })() };
-      if (bucket) payload.category = bucket;
-      if (note?.trim()) payload.note = note.trim();
-      if (methodOrAccount?.trim()) payload.methodOrAccount = methodOrAccount.trim();
-      if (tags.length > 0) payload.tags = tags;
-      // Gig worker fields (income only)
-      if (type === "income") {
-        if (hoursWorked && hoursWorked > 0) payload.hoursWorked = hoursWorked;
-        if (platformType?.trim()) payload.platformType = platformType.trim();
-      }
-      const res = await addEntry(payload);
+      const res = await addEntry({
+        type,
+        category: effectiveCategory || undefined,
+        note: note.trim() || undefined,
+        methodOrAccount: methodOrAccount.trim() || undefined,
+        amountCents: amountCents!,
+        date: ts,
+        tags: tags.length > 0 ? tags : undefined,
+      });
 
-      // persist smart defaults (include tags, methodOrAccount, and gig fields)
+      // Persist smart defaults
       try {
         localStorage.setItem(
           "tallyup.lastEntry",
           JSON.stringify({
             type,
-            bucket,
-            tags: tags.length ? tags : undefined,
-            methodOrAccount: methodOrAccount?.trim() || undefined,
-            platformType: type === "income" && platformType?.trim() ? platformType.trim() : undefined,
+            bucket: effectiveCategory || undefined,
           })
         );
       } catch {}
 
-      const id = (res as any)?.id as string | undefined;
-      setStatus({ kind: "ok", msg: "Saved.", undoId: id });
-
-      // Reset form for next entry
+      // Reset form - keep date and type, clear amount and optional fields
       setAmountCents(null);
       setNote("");
-      // Keep type, bucket, tags for smart defaults
+      setMethodOrAccount("");
+      setTags([]);
+      setShowTags(false);
+      setShowPayMode(false);
+      setShowNote(false);
 
-      // show rich toast with actions
-      if (id) {
-        quickLog.showRichToast("Entry saved", [
+      const undoId = (res as any)?.id as string | undefined;
+
+      // Determine message based on whether category was provided
+      const message = effectiveCategory
+        ? "Saved"
+        : "Saved to Review (no category)";
+
+      setStatus({ kind: "ok", msg: message, undoId });
+
+      // Show toast with actions
+      if (undoId) {
+        quickLog.showRichToast(message, [
           {
             label: "Edit",
             onClick: () => {
-              // Navigate to entry detail/edit view
-              router.push(`/activity?entry=${id}`);
+              router.push(`/activity?entry=${undoId}`);
+              quickLog.close();
             },
           },
           {
             label: "Flag for review",
             onClick: async () => {
               try {
-                await updateEntry({ id: id as any, needsReview: true });
+                await updateEntry({ id: undoId as any, needsReview: true });
                 quickLog.showToast("Flagged for review");
               } catch (e: any) {
                 quickLog.showToast(e?.message ?? "Failed to flag");
               }
             },
           },
-          {
-            label: "Log another",
-            onClick: () => {
-              // Focus the amount input for quick next entry
-              setAmountCents(null);
-              setStatus({ kind: "idle" });
-            },
-          },
         ]);
-      } else {
-        quickLog.showToast("Saved");
       }
 
-      setTimeout(() => setStatus({ kind: "idle" }), 2000);
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        setStatus((s) => s.kind === "ok" ? { kind: "idle" } : s);
+      }, 5000);
 
-      onDone?.({ id });
-    } catch (err: any) {
-      setStatus({ kind: "err", msg: err?.message ?? "Failed to save." });
+      onDone?.({ id: undoId });
+    } catch (e: any) {
+      setStatus({ kind: "err", msg: e?.message ?? "Failed to save" });
     }
   }
 
@@ -172,27 +186,39 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
     if (status.kind !== "ok" || !status.undoId) return;
     try {
       await deleteEntry({ id: status.undoId as any });
-      setStatus({ kind: "ok", msg: "Undone." });
-      setTimeout(() => setStatus({ kind: "idle" }), 1200);
+      setStatus({ kind: "ok", msg: "Undone", undoId: undefined });
+      setTimeout(() => setStatus({ kind: "idle" }), 1500);
     } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo." });
+      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo" });
     }
   }
 
   return (
-    <form onSubmit={onSave}>
-      <div className="mb-4 grid grid-cols-2 gap-2">
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+      {/* Type Toggle - Segmented Control */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "4px",
+          backgroundColor: "var(--surface-2)",
+          borderRadius: "var(--input-radius)",
+          padding: "4px",
+        }}
+      >
         <button
           type="button"
           onClick={() => setType("expense")}
-          className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-            type === "expense"
-              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-              : "border hover:bg-[var(--surface-subtle)]"
-          }`}
           style={{
-            borderColor: type === "expense" ? undefined : "var(--border)",
-            color: type === "expense" ? undefined : "var(--text)",
+            borderRadius: "calc(var(--input-radius) - 4px)",
+            padding: "var(--space-3)",
+            fontWeight: 600,
+            fontSize: "var(--text-body)",
+            border: "none",
+            cursor: "pointer",
+            transition: "all 150ms ease",
+            backgroundColor: type === "expense" ? "var(--primary)" : "transparent",
+            color: type === "expense" ? "var(--primary-foreground)" : "var(--text-secondary)",
           }}
         >
           Spent
@@ -200,188 +226,442 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         <button
           type="button"
           onClick={() => setType("income")}
-          className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-            type === "income"
-              ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-              : "border hover:bg-[var(--surface-subtle)]"
-          }`}
           style={{
-            borderColor: type === "income" ? undefined : "var(--border)",
-            color: type === "income" ? undefined : "var(--text)",
+            borderRadius: "calc(var(--input-radius) - 4px)",
+            padding: "var(--space-3)",
+            fontWeight: 600,
+            fontSize: "var(--text-body)",
+            border: "none",
+            cursor: "pointer",
+            transition: "all 150ms ease",
+            backgroundColor: type === "income" ? "var(--success)" : "transparent",
+            color: type === "income" ? "#fff" : "var(--text-secondary)",
           }}
         >
           Received
         </button>
       </div>
 
-      <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-        Amount
-      </label>
-      <CurrencyInput
-        valueCents={amountCents ?? undefined}
-        onChange={(c) => setAmountCents(c)}
-        invalid={touched.amount && (!amountCents || amountCents <= 0)}
-        onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
-      />
-
-      {/* Context Tags - placed ABOVE category for faster entry */}
-      <div className="mt-4">
-        <label className="block text-xs font-medium mb-2" style={{ color: "var(--text-secondary)" }}>
-          Context Tags
-        </label>
-        <div
-          className="rounded-lg p-2"
-          style={{ border: touched.tags && tags.length === 0 ? "1px solid var(--danger)" : "1px solid transparent" }}
+      {/* Amount Input - The Star */}
+      <div>
+        <label
+          style={{
+            display: "block",
+            fontSize: "var(--text-micro)",
+            fontWeight: 500,
+            color: "var(--text-tertiary)",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+            marginBottom: "var(--space-2)",
+          }}
         >
-          <div className="flex flex-wrap gap-2">
-            {CONTEXT_TAGS.map((tag) => {
-              const isSelected = tags.includes(tag);
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => {
-                    setTouched((t) => ({ ...t, tags: true }));
-                    setTags((prev) =>
-                      isSelected ? prev.filter((t) => t !== tag) : [...prev, tag]
-                    );
-                  }}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                    isSelected
-                      ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                      : "border hover:bg-[var(--surface-subtle)]"
-                  }`}
-                  style={{
-                    borderColor: isSelected ? undefined : "var(--border)",
-                    color: isSelected ? undefined : "var(--text)",
-                  }}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          Amount
+        </label>
+        <CurrencyInput
+          id="amount"
+          ariaLabel="Amount"
+          valueCents={amountCents ?? undefined}
+          onChange={(c) => setAmountCents(c)}
+          invalid={false}
+          autoFocus
+        />
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      {/* Core Fields - Date + Category */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+        {/* Date */}
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: "var(--text-micro)",
+              fontWeight: 500,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              marginBottom: "var(--space-2)",
+            }}
+          >
             Date
           </label>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            onBlur={() => setTouched((t) => ({ ...t, date: true }))}
-            className="w-full rounded-lg border px-3 py-2.5 text-sm"
             style={{
-              borderColor: touched.date && !date ? "var(--danger)" : "var(--border)",
-              backgroundColor: "var(--input)",
+              width: "100%",
+              backgroundColor: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              padding: "10px 12px",
+              fontSize: "var(--text-body)",
               color: "var(--text)",
+              outline: "none",
             }}
           />
         </div>
+
+        {/* Category */}
         <div>
-          <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-            Category
+          <label
+            style={{
+              display: "block",
+              fontSize: "var(--text-micro)",
+              fontWeight: 500,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            {type === "income" ? "Source" : "Category"}
           </label>
           <Combobox
-            value={bucket}
-            onChange={(v) => setBucket(v)}
-            options={useMemo(() => {
-              const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
-              const merged = uniqCaseInsensitive([...base]);
-              if (!merged.includes("Other")) merged.push("Other");
-              return merged;
-            }, [type])}
-            placeholder="Choose category..."
-            onBlur={() => setTouched((t) => ({ ...t, bucket: true }))}
+            value={category}
+            onChange={(v) => setCategory(v)}
+            options={categoryOptions}
+            placeholder="Optional..."
           />
         </div>
       </div>
 
-    
-      <div className="mt-4">
-        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-          Note (optional)
-        </label>
-        <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Quick context" />
-      </div>
-
-      <div className="mt-4">
-        <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-          Method / Account (optional)
-        </label>
-        <Input value={methodOrAccount} onChange={(e) => setMethodOrAccount(e.target.value)} placeholder={"e.g., Checking, Debit, Cash"} />
-      </div>
-
-      {/* Gig Worker Fields - Income only */}
-      {type === "income" && (
-        <div className="mt-4 rounded-lg border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-subtle)" }}>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-              Gig / Freelance Details (optional)
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-                Hours Worked
-              </label>
-              <Input
-                type="number"
-                step="0.25"
-                min="0"
-                value={hoursWorked ?? ""}
-                onChange={(e) => setHoursWorked(e.target.value ? parseFloat(e.target.value) : null)}
-                placeholder="e.g., 4.5"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
-                Platform
-              </label>
-              <Combobox
-                value={platformType}
-                onChange={(v) => setPlatformType(v)}
-                options={[...GIG_PLATFORMS]}
-                placeholder="Choose..."
-              />
-            </div>
-          </div>
-          {hoursWorked && hoursWorked > 0 && amountCents && amountCents > 0 && (
-            <div className="mt-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
-              Hourly rate: ${((amountCents / 100) / hoursWorked).toFixed(2)}/hr
-            </div>
-          )}
+      {/* Custom Category (when "Other" selected) */}
+      {category === "Other" && (
+        <div>
+          <label
+            style={{
+              display: "block",
+              fontSize: "var(--text-micro)",
+              fontWeight: 500,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            Custom {type === "income" ? "source" : "category"}
+          </label>
+          <input
+            value={customCategory}
+            onChange={(e) => setCustomCategory(e.target.value)}
+            placeholder="e.g., Baby, School, Rental"
+            style={{
+              width: "100%",
+              backgroundColor: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              padding: "10px 12px",
+              fontSize: "var(--text-body)",
+              color: "var(--text)",
+              outline: "none",
+            }}
+          />
         </div>
       )}
 
-      <div className="mt-5 flex items-center gap-3">
-        <button
-          type="submit"
-          className="flex-1 rounded-lg py-2.5 text-sm font-semibold transition-colors"
+      {/* Progressive Disclosure Chips */}
+      <div
+        style={{
+          backgroundColor: "var(--surface-2)",
+          borderRadius: "var(--radius-md)",
+          padding: "var(--space-3)",
+        }}
+      >
+        <div style={{ display: "flex", gap: "var(--space-2)", justifyContent: "center", flexWrap: "wrap" }}>
+          {/* Add Tags Chip */}
+          <button
+            type="button"
+            onClick={() => setShowTags(!showTags)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              padding: "6px 12px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              backgroundColor: showTags || tags.length > 0 ? "var(--accent-subtle)" : "transparent",
+              color: showTags || tags.length > 0 ? "var(--primary)" : "var(--text-secondary)",
+              border: showTags || tags.length > 0 ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
+          >
+            {tags.length > 0 ? (
+              <>Tags ({tags.length})</>
+            ) : (
+              <>
+                <Lucide.Plus className="h-3 w-3" />
+                Tags
+              </>
+            )}
+          </button>
+
+          {/* Add Method/Account Chip */}
+          <button
+            type="button"
+            onClick={() => {
+              const willShow = !showPayMode;
+              setShowPayMode(willShow);
+              if (willShow) setTimeout(() => payModeInputRef.current?.focus(), 50);
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              padding: "6px 12px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              backgroundColor: showPayMode || methodOrAccount.trim() ? "var(--accent-subtle)" : "transparent",
+              color: showPayMode || methodOrAccount.trim() ? "var(--primary)" : "var(--text-secondary)",
+              border: showPayMode || methodOrAccount.trim() ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
+          >
+            {methodOrAccount.trim() ? (
+              <>{type === "expense" ? "Method" : "Account"} ✓</>
+            ) : (
+              <>
+                <Lucide.Plus className="h-3 w-3" />
+                {type === "expense" ? "Method" : "Account"}
+              </>
+            )}
+          </button>
+
+          {/* Add Note Chip */}
+          <button
+            type="button"
+            onClick={() => {
+              const willShow = !showNote;
+              setShowNote(willShow);
+              if (willShow) setTimeout(() => noteInputRef.current?.focus(), 50);
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+              padding: "6px 12px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              backgroundColor: showNote || note.trim() ? "var(--accent-subtle)" : "transparent",
+              color: showNote || note.trim() ? "var(--primary)" : "var(--text-secondary)",
+              border: showNote || note.trim() ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
+          >
+            {note.trim() ? (
+              <>Note ✓</>
+            ) : (
+              <>
+                <Lucide.Plus className="h-3 w-3" />
+                Note
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Expanded Tags Section */}
+        {showTags && (
+          <div style={{ marginTop: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)" }}>
+              <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Context Tags
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowTags(false)}
+                style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+              >
+                Done
+              </button>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+              {CONTEXT_TAGS.map((tag) => {
+                const isSelected = tags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setTags((prev) => isSelected ? prev.filter((t) => t !== tag) : [...prev, tag])}
+                    style={{
+                      padding: "5px 10px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-meta)",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                      color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
+                      border: isSelected ? "none" : "1px solid var(--border)",
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Expanded Pay Mode Section */}
+        {showPayMode && (
+          <div style={{ marginTop: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)" }}>
+              <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                {type === "expense" ? "Payment Method" : "Account"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPayMode(false)}
+                style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+              >
+                Done
+              </button>
+            </div>
+            <input
+              ref={payModeInputRef}
+              value={methodOrAccount}
+              onChange={(e) => setMethodOrAccount(e.target.value)}
+              placeholder={type === "expense" ? "e.g., Debit, Discover" : "e.g., Checking, Cash"}
+              style={{
+                width: "100%",
+                backgroundColor: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                padding: "10px 12px",
+                fontSize: "var(--text-body)",
+                color: "var(--text)",
+                outline: "none",
+              }}
+            />
+          </div>
+        )}
+
+        {/* Expanded Note Section */}
+        {showNote && (
+          <div style={{ marginTop: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-2)" }}>
+              <span style={{ fontSize: "var(--text-micro)", fontWeight: 500, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Note
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowNote(false)}
+                style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer" }}
+              >
+                Done
+              </button>
+            </div>
+            <textarea
+              ref={noteInputRef}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="Quick context..."
+              style={{
+                width: "100%",
+                resize: "none",
+                backgroundColor: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                padding: "10px 12px",
+                fontSize: "var(--text-body)",
+                color: "var(--text)",
+                outline: "none",
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Save Button */}
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={!canSave || status.kind === "saving"}
+        style={{
+          width: "100%",
+          backgroundColor: canSave ? "var(--primary)" : "var(--surface-2)",
+          color: canSave ? "var(--primary-foreground)" : "var(--text-tertiary)",
+          border: canSave ? "none" : "1px solid var(--border)",
+          borderRadius: "var(--input-radius)",
+          padding: "var(--space-3)",
+          minHeight: "44px",
+          fontWeight: 600,
+          fontSize: "var(--text-body)",
+          cursor: canSave ? "pointer" : "not-allowed",
+          opacity: status.kind === "saving" ? 0.7 : 1,
+          transition: "all 150ms ease",
+        }}
+      >
+        {status.kind === "saving" ? "Saving..." : "Save entry"}
+      </button>
+
+      {/* Undo Snackbar */}
+      {status.kind === "ok" && (
+        <div
           style={{
-            backgroundColor: "var(--accent)",
-            color: "var(--accent-foreground)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            backgroundColor: "var(--success-subtle)",
+            border: "1px solid var(--success)",
+            borderRadius: "var(--input-radius)",
+            padding: "var(--space-3)",
           }}
         >
-          Save
-        </button>
-      </div>
-
-      {/* Status feedback */}
-      {status.kind !== "idle" && (
-        <div className="mt-3 text-center text-sm">
-          {status.kind === "ok" && (
-            <span style={{ color: "var(--success)" }}>{status.msg}</span>
-          )}
-          {status.kind === "err" && (
-            <span style={{ color: "var(--danger)" }}>{status.msg}</span>
+          <Lucide.CheckCircle className="h-4 w-4 shrink-0" style={{ color: "var(--success)" }} />
+          <span style={{ flex: 1, fontWeight: 500, fontSize: "var(--text-meta)", color: "var(--success)" }}>
+            {status.msg}
+          </span>
+          {status.undoId && (
+            <button
+              type="button"
+              onClick={onUndo}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: "var(--text-meta)",
+                fontWeight: 600,
+                cursor: "pointer",
+                backgroundColor: "transparent",
+                color: "var(--success)",
+                border: "1px solid var(--success)",
+              }}
+            >
+              Undo
+            </button>
           )}
         </div>
       )}
-    </form>
+
+      {/* Error message */}
+      {status.kind === "err" && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            backgroundColor: "var(--danger-subtle)",
+            border: "1px solid var(--danger)",
+            borderRadius: "var(--input-radius)",
+            padding: "var(--space-3)",
+          }}
+        >
+          <Lucide.AlertCircle className="h-4 w-4 shrink-0" style={{ color: "var(--danger)" }} />
+          <span style={{ flex: 1, fontWeight: 500, fontSize: "var(--text-meta)", color: "var(--danger)" }}>
+            {status.msg}
+          </span>
+        </div>
+      )}
+
+      {/* Hint */}
+      <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", textAlign: "center", margin: 0 }}>
+        Skip category? It goes to Review for later.
+      </p>
+    </div>
   );
 }
