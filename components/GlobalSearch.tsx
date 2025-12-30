@@ -106,7 +106,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
           if (selected.type === "page") {
             if ("action" in selected && selected.action === "quicklog") {
               openQuickLog();
-            } else if ("href" in selected) {
+            } else if ("href" in selected && selected.href) {
               router.push(selected.href);
             }
           } else {
@@ -129,7 +129,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     if (result.type === "page") {
       if ("action" in result && result.action === "quicklog") {
         openQuickLog();
-      } else if ("href" in result) {
+      } else if ("href" in result && result.href) {
         router.push(result.href);
       }
     } else {
