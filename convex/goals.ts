@@ -89,8 +89,8 @@ export const createGoal = mutation({
       currentAmountCents: 0,
       startDate: args.startDate ?? now,
       targetDate: args.targetDate,
-      status: "active",
       priority: 0,
+      status: "active",
       createdAt: now,
       updatedAt: now,
     });
