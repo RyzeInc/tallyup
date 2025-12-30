@@ -8,13 +8,18 @@
  * @module
  */
 
+import type * as accounts from "../accounts.js";
 import type * as budgets from "../budgets.js";
+import type * as categories from "../categories.js";
 import type * as detector from "../detector.js";
 import type * as entries from "../entries.js";
 import type * as gigs from "../gigs.js";
 import type * as goals from "../goals.js";
+import type * as investments from "../investments.js";
 import type * as migrations from "../migrations.js";
 import type * as recurring from "../recurring.js";
+import type * as rules from "../rules.js";
+import type * as transfers from "../transfers.js";
 
 import type {
   ApiFromModules,
@@ -23,13 +28,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accounts: typeof accounts;
   budgets: typeof budgets;
+  categories: typeof categories;
   detector: typeof detector;
   entries: typeof entries;
   gigs: typeof gigs;
   goals: typeof goals;
+  investments: typeof investments;
   migrations: typeof migrations;
   recurring: typeof recurring;
+  rules: typeof rules;
+  transfers: typeof transfers;
 }>;
 
 /**

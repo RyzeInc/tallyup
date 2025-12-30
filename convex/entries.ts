@@ -34,17 +34,21 @@ function getEffectiveCategory(entry: any): string | undefined {
 
 export const addEntry = mutation({
   args: {
-    type: v.union(v.literal("expense"), v.literal("income")),
+    type: v.union(v.literal("expense"), v.literal("income"), v.literal("transfer")),
     category: v.optional(v.string()),
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
+    accountId: v.optional(v.id("accounts")),
     amountCents: v.number(),
     date: v.number(),
     // Optional Phase 1+ controls.
     needsReview: v.optional(v.boolean()),
     excludeFromTotals: v.optional(v.boolean()),
+    // Transfer linkage
+    transferId: v.optional(v.id("transfers")),
+    isTransferSource: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -78,10 +82,13 @@ export const addEntry = mutation({
       tags,
       note,
       methodOrAccount,
+      accountId: args.accountId,
       amountCents,
       date: args.date,
       needsReview,
       excludeFromTotals,
+      transferId: args.transferId,
+      isTransferSource: args.isTransferSource,
       occurredAt: args.date,
       enteredAt: now,
       createdAt: now,
