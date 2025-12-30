@@ -8,9 +8,11 @@
  * @module
  */
 
+import type * as budgets from "../budgets.js";
 import type * as detector from "../detector.js";
 import type * as entries from "../entries.js";
 import type * as gigs from "../gigs.js";
+import type * as goals from "../goals.js";
 import type * as migrations from "../migrations.js";
 import type * as recurring from "../recurring.js";
 
@@ -21,9 +23,11 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  budgets: typeof budgets;
   detector: typeof detector;
   entries: typeof entries;
   gigs: typeof gigs;
+  goals: typeof goals;
   migrations: typeof migrations;
   recurring: typeof recurring;
 }>;

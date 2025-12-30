@@ -162,6 +162,12 @@ export const updateEntry = mutation({
     date: v.optional(v.number()),
     needsReview: v.optional(v.boolean()),
     excludeFromTotals: v.optional(v.boolean()),
+    // Phase 1: New fields for goals, budgets, context, and intent
+    goalId: v.optional(v.union(v.id("goals"), v.null())),
+    budgetCategoryId: v.optional(v.union(v.id("budgetCategories"), v.null())),
+    contextTags: v.optional(v.array(v.string())),
+    intentTag: v.optional(v.union(v.string(), v.null())),
+    recurringRuleId: v.optional(v.union(v.id("recurringRules"), v.null())),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -199,6 +205,23 @@ export const updateEntry = mutation({
     else if (args.category !== undefined) patch.needsReview = !cleanStr(args.category);
 
     if (args.excludeFromTotals !== undefined) patch.excludeFromTotals = args.excludeFromTotals;
+
+    // Phase 1: Handle goal, budget, context, intent, recurring links
+    if (args.goalId !== undefined) {
+      patch.goalId = args.goalId === null ? undefined : args.goalId;
+    }
+    if (args.budgetCategoryId !== undefined) {
+      patch.budgetCategoryId = args.budgetCategoryId === null ? undefined : args.budgetCategoryId;
+    }
+    if (args.contextTags !== undefined) {
+      patch.contextTags = args.contextTags.length > 0 ? args.contextTags : undefined;
+    }
+    if (args.intentTag !== undefined) {
+      patch.intentTag = args.intentTag === null || args.intentTag === "" ? undefined : args.intentTag;
+    }
+    if (args.recurringRuleId !== undefined) {
+      patch.recurringRuleId = args.recurringRuleId === null ? undefined : args.recurringRuleId;
+    }
 
     await ctx.db.patch(args.id, patch);
     return { ok: true };

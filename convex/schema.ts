@@ -37,6 +37,9 @@ export default defineSchema({
     // optional: a link to a detected or user-created recurring series/rule (typed id)
     recurringRuleId: v.optional(v.id("recurringRules")),
 
+    // Goal tracking - link entry to a goal for contribution tracking
+    goalId: v.optional(v.id("goals")),
+
     // Gig worker fields - for hourly rate calculations
     hoursWorked: v.optional(v.number()), // decimal hours (e.g., 3.5)
     platformType: v.optional(v.string()), // e.g., "rideshare", "delivery", "freelance"
@@ -44,6 +47,18 @@ export default defineSchema({
 
     // Optional link to budget category for tracking
     budgetCategoryId: v.optional(v.id("budgetCategories")),
+
+    // Context tags (composable, multi-select): Personal, Business, Shared, etc.
+    contextTags: v.optional(v.array(v.string())),
+    // Intent tag (single-select): Essential, Discretionary, Planned, Unexpected, etc.
+    intentTag: v.optional(v.string()),
+
+    // Merchant info - raw and normalized
+    merchantRaw: v.optional(v.string()), // original merchant string
+    merchantNormalized: v.optional(v.string()), // cleaned/mapped merchant name
+
+    // Review reason - why this entry is in the inbox
+    reviewReason: v.optional(v.string()), // "missing_category", "mixed_context", "unknown_merchant", etc.
 
     needsReview: v.boolean(),
 
@@ -53,7 +68,9 @@ export default defineSchema({
     .index("by_user_date", ["userId", "date"])
     .index("by_user_type_date", ["userId", "type", "date"])
     .index("by_user_needsReview_date", ["userId", "needsReview", "date"])
-    .index("by_user_recurring", ["userId", "recurringRuleId"]),
+    .index("by_user_recurring", ["userId", "recurringRuleId"])
+    .index("by_user_goal", ["userId", "goalId"])
+    .index("by_user_budget", ["userId", "budgetCategoryId"]),
 
   recurringRules: defineTable({
     userId: v.string(),

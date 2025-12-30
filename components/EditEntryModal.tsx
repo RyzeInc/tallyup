@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { useMutation } from "convex/react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
@@ -10,11 +10,14 @@ import {
   dollarsToCents,
   INCOME_SPACES,
   EXPENSE_SPACES,
-  CONTEXT_TAGS,
 } from "@/components/utils";
+import { 
+  CONTEXT_TAGS, 
+  INTENT_TAGS, 
+  type ContextTag, 
+  type IntentTag 
+} from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
-
-type ContextTag = (typeof CONTEXT_TAGS)[number];
 
 interface Entry {
   _id: string;
@@ -28,6 +31,12 @@ interface Entry {
   tags?: string[];
   methodOrAccount?: string;
   needsReview?: boolean;
+  // Phase 1: New fields
+  goalId?: Id<"goals">;
+  budgetCategoryId?: Id<"budgetCategories">;
+  recurringRuleId?: Id<"recurringRules">;
+  contextTags?: string[];
+  intentTag?: string;
 }
 
 interface EditEntryModalProps {
@@ -47,6 +56,11 @@ export default function EditEntryModal({
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
+  // Fetch goals and budgets for linking
+  const goals = useQuery(api.goals.listGoals, {});
+  const budgetCategories = useQuery(api.budgets.listBudgetCategories, {});
+  const recurringRules = useQuery(api.recurring.listRecurringRules, {});
+
   // Form state
   const [type, setType] = useState<"expense" | "income">(entry.type);
   const [amountStr, setAmountStr] = useState(() =>
@@ -62,6 +76,17 @@ export default function EditEntryModal({
   const [tags, setTags] = useState<string[]>(entry.tags ?? []);
   const [needsReview, setNeedsReview] = useState(entry.needsReview ?? false);
 
+  // Phase 1: New form fields
+  const [contextTags, setContextTags] = useState<string[]>(entry.contextTags ?? []);
+  const [intentTag, setIntentTag] = useState<string | null>(entry.intentTag ?? null);
+  const [goalId, setGoalId] = useState<Id<"goals"> | null>(entry.goalId ?? null);
+  const [budgetCategoryId, setBudgetCategoryId] = useState<Id<"budgetCategories"> | null>(
+    entry.budgetCategoryId ?? null
+  );
+  const [recurringRuleId, setRecurringRuleId] = useState<Id<"recurringRules"> | null>(
+    entry.recurringRuleId ?? null
+  );
+
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,14 +96,75 @@ export default function EditEntryModal({
     return type === "income" ? [...INCOME_SPACES] : [...EXPENSE_SPACES];
   }, [type]);
 
+  // Compute original values for dirty detection
+  const originalValues = useMemo(() => {
+    const d = new Date(entry.date);
+    return {
+      type: entry.type,
+      amountStr: (Math.abs(entry.amountCents) / 100).toFixed(2),
+      date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      category: entry.category ?? entry.bucket ?? "",
+      note: entry.note ?? "",
+      methodOrAccount: entry.methodOrAccount ?? "",
+      tags: entry.tags ?? [],
+      needsReview: entry.needsReview ?? false,
+      contextTags: entry.contextTags ?? [],
+      intentTag: entry.intentTag ?? null,
+      goalId: entry.goalId ?? null,
+      budgetCategoryId: entry.budgetCategoryId ?? null,
+      recurringRuleId: entry.recurringRuleId ?? null,
+    };
+  }, [entry]);
+
+  // Dirty detection
+  const isDirty = useMemo(() => {
+    if (type !== originalValues.type) return true;
+    if (amountStr !== originalValues.amountStr) return true;
+    if (date !== originalValues.date) return true;
+    if (category !== originalValues.category) return true;
+    if (note !== originalValues.note) return true;
+    if (methodOrAccount !== originalValues.methodOrAccount) return true;
+    if (needsReview !== originalValues.needsReview) return true;
+    if (intentTag !== originalValues.intentTag) return true;
+    if (goalId !== originalValues.goalId) return true;
+    if (budgetCategoryId !== originalValues.budgetCategoryId) return true;
+    if (recurringRuleId !== originalValues.recurringRuleId) return true;
+    // Array comparison for tags
+    if (JSON.stringify(tags.sort()) !== JSON.stringify([...originalValues.tags].sort())) return true;
+    if (JSON.stringify(contextTags.sort()) !== JSON.stringify([...originalValues.contextTags].sort())) return true;
+    return false;
+  }, [
+    type, amountStr, date, category, note, methodOrAccount, tags, needsReview,
+    contextTags, intentTag, goalId, budgetCategoryId, recurringRuleId, originalValues
+  ]);
+
+  // Validation
+  const isValid = useMemo(() => {
+    const cents = dollarsToCents(amountStr);
+    if (!cents || cents <= 0) return false;
+    if (!date) return false;
+    return true;
+  }, [amountStr, date]);
+
+  // Handle close with dirty check
+  const handleCloseAttempt = useCallback(() => {
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Discard them?")) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }, [isDirty, onClose]);
+
   // Handle escape key
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleCloseAttempt();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [handleCloseAttempt]);
 
   async function handleSave() {
     setError(null);
@@ -102,6 +188,12 @@ export default function EditEntryModal({
         methodOrAccount: methodOrAccount.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
         needsReview,
+        // Phase 1: New fields
+        contextTags: contextTags.length > 0 ? contextTags : [],
+        intentTag: intentTag || null,
+        goalId: goalId || null,
+        budgetCategoryId: budgetCategoryId || null,
+        recurringRuleId: recurringRuleId || null,
       });
 
       toast.success("Entry updated");
@@ -110,7 +202,7 @@ export default function EditEntryModal({
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to save";
       setError(message);
-      toast.error("Failed to update", { description: message });
+      // Keep modal open on error - don't show toast, error is inline
     } finally {
       setSaving(false);
     }
@@ -140,12 +232,22 @@ export default function EditEntryModal({
     );
   }
 
+  function toggleContextTag(tag: ContextTag) {
+    setContextTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  }
+
+  function cycleIntentTag(tag: IntentTag) {
+    setIntentTag((prev) => (prev === tag ? null : tag));
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50"
-        onClick={onClose}
+        onClick={handleCloseAttempt}
         aria-hidden="true"
       />
 
@@ -161,7 +263,7 @@ export default function EditEntryModal({
           style={{
             backgroundColor: "var(--surface)",
             border: "1px solid var(--border)",
-            maxHeight: "min(600px, 85vh)",
+            maxHeight: "min(700px, 90vh)",
           }}
         >
           {/* Header */}
@@ -172,12 +274,25 @@ export default function EditEntryModal({
             <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
               Edit Transaction
             </h2>
-            <button
-              onClick={onClose}
-              className="rounded-full p-1.5 transition-colors hover:bg-[var(--surface-subtle)]"
-            >
-              <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
-            </button>
+            <div className="flex items-center gap-2">
+              {isDirty && (
+                <span 
+                  className="text-xs px-2 py-0.5 rounded-full" 
+                  style={{ 
+                    backgroundColor: "var(--warning-subtle)", 
+                    color: "var(--warning)" 
+                  }}
+                >
+                  Unsaved
+                </span>
+              )}
+              <button
+                onClick={handleCloseAttempt}
+                className="rounded-full p-1.5 transition-colors hover:bg-[var(--surface-subtle)]"
+              >
+                <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+              </button>
+            </div>
           </div>
 
           {/* Scrollable content */}
@@ -305,7 +420,158 @@ export default function EditEntryModal({
             </select>
           </div>
 
-          {/* Tags */}
+          {/* Context Tags (multi-select) */}
+          <div className="mb-4">
+            <label
+              className="block text-xs font-medium mb-2"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Context (who/what)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {CONTEXT_TAGS.map((tag) => {
+                const selected = contextTags.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleContextTag(tag as ContextTag)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      selected
+                        ? "bg-[var(--success-subtle)] text-[var(--success)]"
+                        : "hover:bg-[var(--surface-subtle)]"
+                    }`}
+                    style={{
+                      border: `1px solid ${selected ? "var(--success)" : "var(--border)"}`,
+                      color: selected ? undefined : "var(--text)",
+                    }}
+                  >
+                    {selected && <span className="mr-1">✓</span>}
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Intent Tag (single-select) */}
+          <div className="mb-4">
+            <label
+              className="block text-xs font-medium mb-2"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Intent (why)
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {INTENT_TAGS.map((tag) => {
+                const selected = intentTag === tag;
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => cycleIntentTag(tag as IntentTag)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      selected
+                        ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
+                        : "hover:bg-[var(--surface-subtle)]"
+                    }`}
+                    style={{
+                      border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                      color: selected ? undefined : "var(--text)",
+                    }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Associations section */}
+          <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
+            <label
+              className="block text-xs font-medium mb-3"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              Link to...
+            </label>
+
+            {/* Goal */}
+            <div className="mb-3">
+              <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>
+                Goal
+              </label>
+              <select
+                value={goalId ?? ""}
+                onChange={(e) => setGoalId(e.target.value ? e.target.value as Id<"goals"> : null)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  borderColor: "var(--border)",
+                  backgroundColor: "var(--input)",
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">None</option>
+                {goals?.map((goal) => (
+                  <option key={goal._id} value={goal._id}>
+                    {goal.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Budget */}
+            {type === "expense" && (
+              <div className="mb-3">
+                <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>
+                  Budget Category
+                </label>
+                <select
+                  value={budgetCategoryId ?? ""}
+                  onChange={(e) => setBudgetCategoryId(e.target.value ? e.target.value as Id<"budgetCategories"> : null)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    backgroundColor: "var(--input)",
+                    color: "var(--text)",
+                  }}
+                >
+                  <option value="">None</option>
+                  {budgetCategories?.map((bc) => (
+                    <option key={bc._id} value={bc._id}>
+                      {bc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Recurring */}
+            <div>
+              <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>
+                Recurring Series
+              </label>
+              <select
+                value={recurringRuleId ?? ""}
+                onChange={(e) => setRecurringRuleId(e.target.value ? e.target.value as Id<"recurringRules"> : null)}
+                className="w-full rounded-lg border px-3 py-2 text-sm"
+                style={{
+                  borderColor: "var(--border)",
+                  backgroundColor: "var(--input)",
+                  color: "var(--text)",
+                }}
+              >
+                <option value="">None</option>
+                {recurringRules?.filter(r => r.type === type).map((rule) => (
+                  <option key={rule._id} value={rule._id}>
+                    {rule.displayName || rule.name || rule.category || "Unnamed"}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Legacy Tags */}
           <div className="mb-4">
             <label
               className="block text-xs font-medium mb-2"
@@ -314,7 +580,7 @@ export default function EditEntryModal({
               Tags
             </label>
             <div className="flex flex-wrap gap-2">
-              {CONTEXT_TAGS.map((tag) => {
+              {["Essential", "Planned", "Unexpected", "Splurge"].map((tag) => {
                 const selected = tags.includes(tag);
                 return (
                   <button
@@ -418,7 +684,7 @@ export default function EditEntryModal({
             </button>
             <div className="flex-1" />
             <button
-              onClick={onClose}
+              onClick={handleCloseAttempt}
               disabled={saving || deleting}
               className="rounded-lg px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
               style={{
@@ -430,7 +696,7 @@ export default function EditEntryModal({
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || deleting}
+              disabled={saving || deleting || !isDirty || !isValid}
               className="rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors disabled:opacity-50"
               style={{
                 backgroundColor: "var(--accent)",
