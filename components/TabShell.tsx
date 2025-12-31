@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import LogPage from "@/app/(app)/log/page";
 import InboxPage from "@/app/(app)/inbox/page";
 import HistoryPage from "@/app/(app)/history/page";
@@ -37,41 +37,40 @@ export function useTabs() {
 
 export default function TabShell() {
   const pathname = usePathname();
+  const router = useRouter();
   const initial = (hrefToKey[pathname ?? "/log"] as TabKey) ?? "log";
   const [current, setCurrent] = useState<TabKey>(initial);
-  const [prev, setPrev] = useState<TabKey | null>(null);
   const animatingRef = useRef(false);
 
   // scroll positions per tab
   const scrollMap = useRef<Record<TabKey, number>>({ log: 0, inbox: 0, history: 0, summary: 0, profile: 0 });
-  const containerRefs: Record<TabKey, React.RefObject<HTMLDivElement | null>> = {
-    log: useRef<HTMLDivElement | null>(null),
-    inbox: useRef<HTMLDivElement | null>(null),
-    history: useRef<HTMLDivElement | null>(null),
-    summary: useRef<HTMLDivElement | null>(null),
-    profile: useRef<HTMLDivElement | null>(null),
-  };
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const inboxRef = useRef<HTMLDivElement | null>(null);
+  const historyRef = useRef<HTMLDivElement | null>(null);
+  const summaryRef = useRef<HTMLDivElement | null>(null);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+  const containerRefs = useMemo<Record<TabKey, React.RefObject<HTMLDivElement | null>>>(() => ({
+    log: logRef,
+    inbox: inboxRef,
+    history: historyRef,
+    summary: summaryRef,
+    profile: profileRef,
+  }), []);
 
   // prefetch other routes off the main thread to make tab taps feel instant
   // NOTE: avoid aggressive fetch() of full routes (can trigger SSR of pages like /history)
   useEffect(() => {
     try {
-      const idle = (window as any).requestIdleCallback ?? ((fn: any) => setTimeout(fn, 200));
+      const idle = window.requestIdleCallback ?? ((fn: () => void) => window.setTimeout(fn, 200));
       idle(() => {
-        try {
-          const { prefetch } = require("next/navigation");
-          // If available, prefetch only the small route bundle for the Add page to keep taps instant
-          if (typeof prefetch === "function") {
-            try {
-              prefetch("/log");
-            } catch {}
-          }
-        } catch (e) {
-          // don't warm network via fetch() — it's been too aggressive in dev
-        }
+        router.prefetch("/log");
+        router.prefetch("/inbox");
+        router.prefetch("/history");
+        router.prefetch("/summary");
+        router.prefetch("/profile");
       });
-    } catch (e) {}
-  }, []);
+    } catch {}
+  }, [router]);
 
   useEffect(() => {
     // if pathname changes (deep link), sync current tab
@@ -85,7 +84,7 @@ export default function TabShell() {
     // restore scroll for visible container
     const r = containerRefs[current].current;
     if (r) r.scrollTop = scrollMap.current[current] ?? 0;
-  }, [current]);
+  }, [current, containerRefs]);
 
   function navigate(k: TabKey) {
     if (k === current) return;
@@ -93,13 +92,12 @@ export default function TabShell() {
     const curEl = containerRefs[current].current;
     if (curEl) scrollMap.current[current] = curEl.scrollTop;
 
-    setPrev(current);
     setCurrent(k);
 
     // push URL without triggering full route change
     try {
       window.history.pushState({}, "", keyToHref[k]);
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -138,7 +136,7 @@ const TabPanel = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivEl
     // preserve DOM mount, hide via transform/opacity
     return (
       <div
-        ref={ref as any}
+        ref={ref}
         id={id}
         {...rest}
         className={`tab-panel ${active ? "active" : "inactive"}`}

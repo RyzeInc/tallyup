@@ -5,6 +5,7 @@ import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 
 interface MenuItem {
   href: string;
@@ -16,7 +17,7 @@ interface MenuItem {
 }
 
 export default function MorePage() {
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
   const menuItems: MenuItem[] = [

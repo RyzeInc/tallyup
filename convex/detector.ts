@@ -1,5 +1,5 @@
 export type Entry = {
-  _id?: any; // optional convex id
+  _id?: string | null; // optional convex id
   date: number; // ms
   amountCents: number;
   type: "expense" | "income";
@@ -22,7 +22,7 @@ export type Candidate = {
   medianIntervalDays: number;
   stddevIntervalDays: number;
   confidence: number; // 0-100
-  exampleEntryIds: any[]; // sample entry ids
+  exampleEntryIds: Array<string | null>; // sample entry ids
 };
 
 function daysBetween(a: number, b: number) {

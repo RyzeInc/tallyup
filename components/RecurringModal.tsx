@@ -3,26 +3,30 @@
 import { useState, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import { centsToDollars, dollarsToCents } from "./utils";
 import { useToast } from "./ToastProvider";
 import { useOptimisticLinks } from "./OptimisticLinksProvider";
+
+type EntryDoc = Doc<"entries">;
+type EditableEntry = EntryDoc & { type: "expense" | "income" };
 
 export default function RecurringModal({
   entry,
   onClose,
   onCreated,
 }: {
-  entry: any;
+  entry: EditableEntry;
   onClose: () => void;
-  onCreated?: (ruleId: any) => void;
+  onCreated?: (ruleId: Id<"recurringRules">) => void;
 }) {
   const [displayName, setDisplayName] = useState(entry.bucket ? `${entry.bucket} ${entry.category ?? ""}`.trim() : entry.note ?? "");
   const [autolink, setAutolink] = useState(false);
   const [autolinkConfirm, setAutolinkConfirm] = useState(false);
   const [applyToExisting, setApplyToExisting] = useState(false);
   const [amount, setAmount] = useState(centsToDollars(entry.amountCents));
-  const create = useMutation((api as any).recurring.createRecurringRule as any);
-  const link = useMutation((api as any).recurring.linkEntriesToRule as any);
+  const create = useMutation(api.recurring.createRecurringRule);
+  const link = useMutation(api.recurring.linkEntriesToRule);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
@@ -60,7 +64,7 @@ export default function RecurringModal({
         active: true,
       });
 
-      const id = (res as any)?.id;
+      const id = res?.id as Id<"recurringRules"> | undefined;
       if (id) {
         // optimistic local UI update
         add(entry._id);
@@ -75,18 +79,18 @@ export default function RecurringModal({
           try {
             await link({ ruleId: id, entryIds: [entry._id] });
             toast.success("Applied to existing", { description: "Applied to matching entries" });
-          } catch (e) {
+          } catch {
             // ignore errors here
           }
         }
 
-        onCreated && onCreated(id);
+        if (onCreated) onCreated(id);
       }
 
       onClose();
-    } catch (e: any) {
-      setErr(e?.message ?? "Failed to create");
-      toast.error("Failed to save pattern", { description: e?.message ?? "Unknown error" });
+    } catch (e: unknown) {
+      setErr(errorMessage(e) ?? "Failed to create");
+      toast.error("Failed to save pattern", { description: errorMessage(e) ?? "Unknown error" });
     } finally {
       setBusy(false);
     }
@@ -192,7 +196,7 @@ export default function RecurringModal({
               >
                 <div className="font-medium text-sm" style={{ color: "var(--warning)" }}>Auto-apply confirmation</div>
                 <div className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                  Auto-apply will automatically fill this pattern on future entries. It's best for stable, regular payments (e.g., rent, salary). Please confirm:
+                  Auto-apply will automatically fill this pattern on future entries. It&apos;s best for stable, regular payments (e.g., rent, salary). Please confirm:
                 </div>
                 <label className="mt-3 flex items-center gap-2.5">
                   <input 
@@ -239,3 +243,8 @@ export default function RecurringModal({
     </div>
   );
 }
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }

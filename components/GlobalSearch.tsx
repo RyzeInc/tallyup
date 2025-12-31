@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { useQuickLog } from "./log/QuickLogProvider";
 
@@ -31,7 +32,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   // Fetch recent entries for search
-  const recentEntries = useQuery(api.entries.listEntries, { limit: 50 }) as any[] | undefined;
+  const recentEntries = useQuery(api.entries.listEntries, { limit: 50 }) as Doc<"entries">[] | undefined;
 
   // Filter results
   const results = useMemo(() => {
@@ -47,7 +48,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     }).map((p) => ({ type: "page" as const, ...p }));
 
     // Entries that match (if query is at least 2 chars)
-    let entryResults: Array<{ type: "entry"; entry: any }> = [];
+    let entryResults: Array<{ type: "entry"; entry: Doc<"entries"> }> = [];
     if (q.length >= 2 && recentEntries) {
       entryResults = recentEntries
         .filter((e) => {
@@ -66,18 +67,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
     return [...pageResults, ...entryResults];
   }, [query, recentEntries]);
 
-  // Reset selection when results change
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [results.length]);
-
-  // Focus input when opened
-  useEffect(() => {
-    if (open) {
-      setQuery("");
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [open]);
+  const activeIndex = results.length ? Math.min(selectedIndex, results.length - 1) : 0;
 
   // Keyboard navigation
   useEffect(() => {
@@ -101,7 +91,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        const selected = results[selectedIndex];
+        const selected = results[activeIndex];
         if (selected) {
           if (selected.type === "page") {
             if ("action" in selected && selected.action === "quicklog") {
@@ -121,7 +111,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, results, selectedIndex, router, onClose, openQuickLog]);
+  }, [open, results, activeIndex, router, onClose, openQuickLog]);
 
   if (!open) return null;
 
@@ -158,6 +148,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search pages, transactions..."
+              autoFocus
               className="flex-1 bg-transparent py-4 text-[var(--text)] placeholder-[var(--text-placeholder)] outline-none text-sm"
             />
             <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-xs font-medium text-[var(--text-tertiary)] bg-[var(--surface-subtle)] rounded border" style={{ borderColor: "var(--border)" }}>
@@ -191,7 +182,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                             key={key}
                             onClick={() => handleSelect(result)}
                             className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${
-                              globalIdx === selectedIndex
+                              globalIdx === activeIndex
                                 ? "bg-[var(--accent-subtle)] text-[var(--accent)]"
                                 : "text-[var(--text)] hover:bg-[var(--surface-subtle)]"
                             }`}
@@ -222,7 +213,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
                             key={e._id}
                             onClick={() => handleSelect(result)}
                             className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors ${
-                              globalIdx === selectedIndex
+                              globalIdx === activeIndex
                                 ? "bg-[var(--accent-subtle)] text-[var(--accent)]"
                                 : "text-[var(--text)] hover:bg-[var(--surface-subtle)]"
                             }`}

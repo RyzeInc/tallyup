@@ -5,24 +5,30 @@ import { useSearchParams, useRouter } from "next/navigation";
 import * as Lucide from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 
-export default function FilterBar({ buckets = [] as string[] }: { buckets?: string[] }) {
+type FilterType = "all" | "expense" | "income";
+
+export default function FilterBar() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
-  const [type, setType] = useState(() => (searchParams.get("type") as any) ?? "all");
+  const [type, setType] = useState<FilterType>(() => {
+    const raw = searchParams.get("type");
+    return raw === "expense" || raw === "income" ? raw : "all";
+  });
   const [needsReview, setNeedsReview] = useState(() => searchParams.get("review") === "1");
   const [category, setCategory] = useState(() => searchParams.get("category") ?? "");
   const [tag, setTag] = useState(() => searchParams.get("tag") ?? "");
 
   // Get review count for badge
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
   // fetch categories (type is optional on the server)
   const categories = useQuery(api.entries.listCategories, {
-    type: type === "all" ? undefined : (type as any),
+    type: type === "all" ? undefined : type,
     bucket: undefined,
   }) as string[] | undefined;
 
@@ -45,7 +51,7 @@ export default function FilterBar({ buckets = [] as string[] }: { buckets?: stri
     p.delete("category");
     const qs = p.toString();
     router.replace(qs ? `/activity?${qs}` : `/activity`);
-    setType(t as any);
+    setType(t as FilterType);
     setCategory("");
   }
 

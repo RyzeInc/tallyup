@@ -13,7 +13,6 @@ import {
 } from "recharts";
 
 import Card, { CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
-import { centsToDollars } from "@/components/utils";
 
 // Sample data: timeline (date) with INCOME amounts per category (stacked)
 const chartData = [

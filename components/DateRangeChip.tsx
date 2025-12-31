@@ -43,10 +43,11 @@ export default function DateRangeChip({
     }
   }, [open]);
 
-  useEffect(() => {
-    if (customFrom) setTempFrom(customFrom);
-    if (customTo) setTempTo(customTo);
-  }, [customFrom, customTo]);
+  function openSheet() {
+    setTempFrom(customFrom ?? todayYYYYMMDD());
+    setTempTo(customTo ?? todayYYYYMMDD());
+    setOpen(true);
+  }
 
   function selectMode(m: DateRangeMode) {
     if (m === "custom") {
@@ -71,7 +72,7 @@ export default function DateRangeChip({
     <>
       {/* Chip trigger */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={openSheet}
         className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
         style={{
           borderColor: "var(--border)",

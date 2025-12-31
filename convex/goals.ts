@@ -150,7 +150,7 @@ export const updateGoal = mutation({
       throw new Error("Goal not found");
     }
 
-    const { id, ...updates } = args;
+    const { id: _id, ...updates } = args;
     // Filter out undefined values
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (updates.name !== undefined) patch.name = updates.name;

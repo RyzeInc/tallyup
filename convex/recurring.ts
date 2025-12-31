@@ -1,8 +1,13 @@
 import { mutation, query, action } from "./_generated/server";
 import { v } from "convex/values";
-import { listRecentEntries, listEntriesForUser } from "./entries";
+import { api, internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { Entry as DetectorEntry } from "./detector";
 
-async function requireUserId(ctx: any): Promise<string> {
+type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
+type RecurringRuleDoc = Doc<"recurringRules">;
+
+async function requireUserId(ctx: AuthCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
   return identity.subject;
@@ -103,7 +108,7 @@ export const updateRecurringRule = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
 
-    const patch: any = { updatedAt: Date.now() };
+    const patch: Partial<RecurringRuleDoc> & { updatedAt: number } = { updatedAt: Date.now() };
     if (args.displayName !== undefined) patch.displayName = cleanStr(args.displayName);
     if (args.name !== undefined) patch.name = cleanStr(args.name);
     if (args.bucket !== undefined) patch.bucket = cleanStr(args.bucket);
@@ -172,7 +177,7 @@ export const detectRecurringCandidates = query({
       .order("asc")
       .take(2000);
 
-    const candidates = detectRecurringCandidatesFromEntries(rows as any[], { lookbackDays, minOccurrences: 3 });
+    const candidates = detectRecurringCandidatesFromEntries(rows as DetectorEntry[], { lookbackDays, minOccurrences: 3 });
     return candidates.filter(c => c.confidence >= minConfidence).slice(0, 50);
   },
 });
@@ -206,24 +211,23 @@ export const backfillRecurringRules = action({
     const dryRun = !!args.dryRun;
 
     // collect a sample of recent entries to discover users (use a query via ctx.runQuery)
-    const recent = await ctx.runQuery(listRecentEntries as any, { limit: 5000 });
+    const recent = await ctx.runQuery(api.entries.listRecentEntries, { limit: 5000 });
     const userSet = new Set<string>();
     for (const r of recent) userSet.add(r.userId);
 
-    const summary: any = { users: 0, candidates: 0, created: 0, linked: 0 };
+    const summary: { users: number; candidates: number; created: number; linked: number } = { users: 0, candidates: 0, created: 0, linked: 0 };
 
     for (const userId of userSet) {
       summary.users++;
-      const rows = await ctx.runQuery(listEntriesForUser as any, { userId, startDate: 0, endDate: Date.now(), limit: 2000 });
+      const rows = await ctx.runQuery(internal.entries.listEntriesForUser, { userId, startDate: 0, endDate: Date.now(), limit: 2000 });
 
-      const candidates = detectRecurringCandidatesFromEntries(rows as any[]);
+      const candidates = detectRecurringCandidatesFromEntries(rows as DetectorEntry[]);
       for (const c of candidates) {
         summary.candidates++;
         if (c.confidence < minConfidence) continue;
 
         if (!dryRun) {
-          const now = Date.now();
-          const res = await ctx.runMutation(createRecurringRule as any, {
+          const res = await ctx.runMutation(api.recurring.createRecurringRule, {
             type: c.type,
             displayName: `${c.bucket ?? ""} ${c.category ?? ""}`.trim() || undefined,
             name: `${c.bucket ?? ""} ${c.category ?? ""}`.trim() || undefined,
@@ -244,7 +248,7 @@ export const backfillRecurringRules = action({
           summary.created++;
 
           // link matching entries
-          const toLink: any[] = [];
+          const toLink: Id<"entries">[] = [];
           for (const e of rows) {
             const bucketMatch = ((e.bucket ?? "").trim().toLowerCase() || "") === (c.bucket ?? "").trim().toLowerCase();
             const categoryMatch = ((e.category ?? "").trim().toLowerCase() || "") === (c.category ?? "").trim().toLowerCase();
@@ -260,7 +264,7 @@ export const backfillRecurringRules = action({
           }
 
           if (toLink.length) {
-            await ctx.runMutation(linkEntriesToRule as any, { ruleId: createdId, entryIds: toLink });
+            await ctx.runMutation(api.recurring.linkEntriesToRule, { ruleId: createdId, entryIds: toLink });
             summary.linked += toLink.length;
           }
         }
@@ -270,4 +274,3 @@ export const backfillRecurringRules = action({
     return { ok: true, summary };
   },
 });
-

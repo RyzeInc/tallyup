@@ -185,9 +185,9 @@ export default function RulesPage() {
                             )}
                           </div>
                           <div className="text-xs space-y-1" style={{ color: "var(--text-secondary)" }}>
-                            {rule.matchMerchantContains && <div>If merchant contains "{rule.matchMerchantContains}"</div>}
-                            {rule.matchMerchantExact && <div>If merchant is "{rule.matchMerchantExact}"</div>}
-                            {rule.matchNoteContains && <div>If note contains "{rule.matchNoteContains}"</div>}
+                            {rule.matchMerchantContains && <div>If merchant contains &quot;{rule.matchMerchantContains}&quot;</div>}
+                            {rule.matchMerchantExact && <div>If merchant is &quot;{rule.matchMerchantExact}&quot;</div>}
+                            {rule.matchNoteContains && <div>If note contains &quot;{rule.matchNoteContains}&quot;</div>}
                             {(rule.matchAmountMinCents || rule.matchAmountMaxCents) && (
                               <div>
                                 Amount: {rule.matchAmountMinCents ? `≥${formatMoney(rule.matchAmountMinCents)}` : ""} 
@@ -275,7 +275,7 @@ export default function RulesPage() {
                               {rule.matchType}
                             </span>
                             <span className="text-sm truncate" style={{ color: "var(--text-secondary)" }}>
-                              "{rule.matchPattern}"
+                              &quot;{rule.matchPattern}&quot;
                             </span>
                           </div>
                           <div className="flex items-center gap-2">

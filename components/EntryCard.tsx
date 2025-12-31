@@ -2,13 +2,14 @@
 
 import { centsToDollars } from "./utils";
 import { useOptimisticLinks } from "./OptimisticLinksProvider";
+import type { Doc } from "convex/_generated/dataModel";
 
 export default function EntryCard({
   entry,
   rightSlot,
   children,
 }: {
-  entry: any;
+  entry: Doc<"entries">;
   rightSlot?: React.ReactNode;
   children?: React.ReactNode;
 }) {

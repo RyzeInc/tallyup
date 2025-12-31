@@ -25,6 +25,27 @@ export default defineSchema({
 
     // Money is stored as *integer cents* (validated in mutations).
     amountCents: v.number(),
+    // Transaction status and classification
+    status: v.optional(v.union(v.literal("pending"), v.literal("posted"))),
+    entryType: v.optional(v.union(
+      v.literal("purchase"),
+      v.literal("refund"),
+      v.literal("transfer"),
+      v.literal("payment"),
+      v.literal("income"),
+      v.literal("fee")
+    )),
+    // Stable identity for pending -> posted dedupe
+    stableId: v.optional(v.string()),
+    // Link refunds/chargebacks to original entry
+    originalEntryId: v.optional(v.id("entries")),
+    // Optional split parts for multi-category entries
+    splitParts: v.optional(v.array(v.object({
+      budgetCategoryId: v.optional(v.id("budgetCategories")),
+      amountCents: v.number(),
+    }))),
+    // Currency (default USD if unset)
+    currency: v.optional(v.string()),
 
     // Local-midnight timestamp of when the money event occurred (used for indexes/filtering).
     // Kept as "date" for backwards compatibility with existing UI.
@@ -91,6 +112,7 @@ export default defineSchema({
     .index("by_user_recurring", ["userId", "recurringRuleId"])
     .index("by_user_goal", ["userId", "goalId"])
     .index("by_user_budget", ["userId", "budgetCategoryId"])
+    .index("by_user_budget_date", ["userId", "budgetCategoryId", "date"])
     .index("by_user_account", ["userId", "accountId"])
     .index("by_transfer", ["transferId"]),
 
@@ -194,6 +216,221 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_archived", ["userId", "archived"]),
+
+  // ============================================
+  // BUDGET ENGINE - Canonical plans + policies
+  // ============================================
+  budgetGroups: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    displayOrder: v.optional(v.number()),
+    archived: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_archived", ["userId", "archived"]),
+
+  budgetGroupMembers: defineTable({
+    userId: v.string(),
+    budgetGroupId: v.id("budgetGroups"),
+    budgetCategoryId: v.id("budgetCategories"),
+    createdAt: v.number(),
+  })
+    .index("by_group", ["budgetGroupId"])
+    .index("by_category", ["budgetCategoryId"])
+    .index("by_user", ["userId"]),
+
+  rolloverPolicies: defineTable({
+    userId: v.string(),
+    allowNegative: v.boolean(),
+    resetAtBoundary: v.union(
+      v.literal("monthly"),
+      v.literal("quarterly"),
+      v.literal("yearly"),
+      v.literal("never")
+    ),
+    capPositiveCents: v.optional(v.number()),
+    capNegativeCents: v.optional(v.number()),
+    reimbursementsRestoreAvailability: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
+  budgetPlans: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    planType: v.union(v.literal("category"), v.literal("group")),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+    budgetGroupId: v.optional(v.id("budgetGroups")),
+    frequency: v.union(
+      v.literal("monthly"),
+      v.literal("weekly"),
+      v.literal("annual"),
+      v.literal("custom")
+    ),
+    periodDays: v.optional(v.number()),
+    amountCents: v.number(),
+    effectiveFrom: v.number(),
+    effectiveTo: v.optional(v.number()),
+    rolloverPolicyId: v.optional(v.id("rolloverPolicies")),
+    capPolicyId: v.optional(v.string()),
+    overridesByMonth: v.optional(v.array(v.object({
+      month: v.string(), // YYYY-MM
+      amountCents: v.number(),
+    }))),
+    version: v.number(),
+    archived: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_archived", ["userId", "archived"])
+    .index("by_user_category", ["userId", "budgetCategoryId"])
+    .index("by_user_group", ["userId", "budgetGroupId"]),
+
+  budgetPlanVersions: defineTable({
+    userId: v.string(),
+    planId: v.id("budgetPlans"),
+    version: v.number(),
+    frequency: v.union(
+      v.literal("monthly"),
+      v.literal("weekly"),
+      v.literal("annual"),
+      v.literal("custom")
+    ),
+    periodDays: v.optional(v.number()),
+    amountCents: v.number(),
+    effectiveFrom: v.number(),
+    effectiveTo: v.optional(v.number()),
+    rolloverPolicyId: v.optional(v.id("rolloverPolicies")),
+    capPolicyId: v.optional(v.string()),
+    overridesByMonth: v.optional(v.array(v.object({
+      month: v.string(),
+      amountCents: v.number(),
+    }))),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_plan_version", ["planId", "version"])
+    .index("by_plan_effective", ["planId", "effectiveFrom"]),
+
+  budgetPeriods: defineTable({
+    userId: v.string(),
+    planId: v.id("budgetPlans"),
+    planVersion: v.number(),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+    budgetGroupId: v.optional(v.id("budgetGroups")),
+    periodStart: v.number(),
+    periodEnd: v.number(),
+    budgetedCents: v.number(),
+    spentCents: v.number(),
+    carryInCents: v.number(),
+    carryOutCents: v.number(),
+    availableCents: v.number(),
+    materializedAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_period", ["userId", "periodStart", "periodEnd"])
+    .index("by_user_plan_period", ["userId", "planId", "periodStart"]),
+
+  budgetEntryImpacts: defineTable({
+    userId: v.string(),
+    entryId: v.id("entries"),
+    periodId: v.id("budgetPeriods"),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+    budgetGroupId: v.optional(v.id("budgetGroups")),
+    amountCents: v.number(),
+    appliedAt: v.number(),
+  })
+    .index("by_entry", ["entryId"])
+    .index("by_period", ["periodId"])
+    .index("by_user", ["userId"]),
+
+  budgetDirtyQueue: defineTable({
+    userId: v.string(),
+    planId: v.optional(v.id("budgetPlans")),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+    dirtyDate: v.number(),
+    periodStart: v.optional(v.number()),
+    periodEnd: v.optional(v.number()),
+    reason: v.string(),
+    status: v.union(v.literal("pending"), v.literal("processing"), v.literal("done")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_period", ["userId", "periodStart", "periodEnd"])
+    .index("by_user_date", ["userId", "dirtyDate"])
+    .index("by_status_created", ["status", "createdAt"]),
+
+  budgetInsights: defineTable({
+    userId: v.string(),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+    budgetGroupId: v.optional(v.id("budgetGroups")),
+    insightType: v.string(),
+    lastPromptedAt: v.optional(v.number()),
+    suppressed: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_type", ["userId", "insightType"]),
+
+  userBudgetPrefs: defineTable({
+    userId: v.string(),
+    timezone: v.optional(v.string()),
+    promptCadence: v.optional(v.union(
+      v.literal("monthly"),
+      v.literal("quarterly"),
+      v.literal("yearly")
+    )),
+    suppressedBudgetCategoryIds: v.optional(v.array(v.id("budgetCategories"))),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
+  incomeSchedules: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    amountCents: v.number(),
+    cadenceType: v.union(
+      v.literal("weekly"),
+      v.literal("biweekly"),
+      v.literal("semiMonthly"),
+      v.literal("monthly"),
+      v.literal("quarterly"),
+      v.literal("yearly"),
+      v.literal("custom")
+    ),
+    cadenceAnchor: v.optional(v.string()),
+    intervalDays: v.optional(v.number()),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "active"]),
+
+  plannedOneOffs: defineTable({
+    userId: v.string(),
+    name: v.string(),
+    amountCents: v.number(),
+    date: v.number(),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
+    budgetGroupId: v.optional(v.id("budgetGroups")),
+    type: v.union(v.literal("expense"), v.literal("income")),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_date", ["userId", "date"]),
 
   // ============================================
   // GOALS - Intentional, time-bounded savings

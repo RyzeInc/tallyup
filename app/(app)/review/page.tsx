@@ -4,6 +4,7 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useState, useMemo, useCallback } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES } from "@/components/utils";
 import Link from "next/link";
@@ -14,7 +15,7 @@ type Step = "confirm" | "category" | "tags" | "done";
 
 export default function ReviewWizardPage() {
   const toast = useToast();
-  const inbox = useQuery(api.entries.listInbox, { limit: 80 }) as any[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 80 }) as Doc<"entries">[] | undefined;
   const updateEntry = useMutation(api.entries.updateEntry);
 
   const [currentIndex, setCurrentIndex] = useState(0);

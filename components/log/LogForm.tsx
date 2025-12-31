@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import {
   todayYYYYMMDD,
   uniqCaseInsensitive,
@@ -70,7 +70,12 @@ interface CategorySuggestion {
   confidence: Confidence;
 }
 
-export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) => void }) {
+type AccountDoc = Doc<"accounts">;
+type GoalDoc = Doc<"goals">;
+type BudgetCategoryDoc = Doc<"budgetCategories">;
+type EntryDoc = Doc<"entries">;
+
+export default function LogForm({ onDone }: { onDone?: (res: { id?: Id<"entries"> }) => void }) {
   const router = useRouter();
   const quickLog = useQuickLog();
 
@@ -83,16 +88,40 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         return preselectedType;
       }
     }
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("tallyup.lastEntry") : null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as { type?: TransactionType };
+        if (parsed?.type && parsed.type !== "transfer") return parsed.type;
+      }
+    } catch {}
     return "expense";
   });
   const [amountCents, setAmountCents] = useState<number | null>(null);
   const [date, setDate] = useState(todayYYYYMMDD());
-  const [category, setCategory] = useState<string>("");
+  const [category, setCategory] = useState<string>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("tallyup.lastEntry") : null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as { bucket?: string };
+        return parsed.bucket ?? "";
+      }
+    } catch {}
+    return "";
+  });
   const [customCategory, setCustomCategory] = useState("");
   const [note, setNote] = useState("");
   const [merchant, setMerchant] = useState("");
-  const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [accountId, setAccountId] = useState<Id<"accounts"> | "">("");
+  const [methodOrAccount, setMethodOrAccount] = useState(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem("tallyup.lastEntry") : null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as { methodOrAccount?: string };
+        return parsed.methodOrAccount ?? "";
+      }
+    } catch {}
+    return "";
+  });
 
   // Gig worker fields
   const [hoursWorked, setHoursWorked] = useState("");
@@ -103,8 +132,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [linkedBudgetId, setLinkedBudgetId] = useState("");
 
   // Transfer-specific state
-  const [fromAccount, setFromAccount] = useState<Id<"accounts"> | "">("");
-  const [toAccount, setToAccount] = useState<Id<"accounts"> | "">("");
+  const [fromAccount, setFromAccount] = useState("");
+  const [toAccount, setToAccount] = useState("");
 
   // Tags - split into context and intent
   const [contextTags, setContextTags] = useState<string[]>([]);
@@ -121,23 +150,29 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [status, setStatus] = useState<
     { kind: "idle" } |
     { kind: "saving" } |
-    { kind: "ok"; msg: string; undoId?: string } |
+    { kind: "ok"; msg: string; undoId?: Id<"entries"> } |
     { kind: "err"; msg: string }
   >({ kind: "idle" });
+
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }
 
   const addEntry = useMutation(api.entries.addEntry);
   const createTransfer = useMutation(api.transfers.createTransfer);
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   // Fetch accounts for dropdowns
-  const accounts = useQuery(api.accounts.listAccounts, { includeArchived: false }) as any[] | undefined;
+  const accounts = useQuery(api.accounts.listAccounts, {}) as AccountDoc[] | undefined;
 
   // Fetch goals and budget categories for linking
-  const goals = useQuery(api.goals.listGoals, {}) as any[] | undefined;
-  const budgets = useQuery(api.budgets.listBudgetCategories, {}) as any[] | undefined;
+  const goals = useQuery(api.goals.listGoals, {}) as GoalDoc[] | undefined;
+  const budgets = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategoryDoc[] | undefined;
 
   // Fetch recent entries for suggestions
-  const recentEntries = useQuery(api.entries.listEntries, { limit: 50 }) as any[] | undefined;
+  const recentEntries = useQuery(api.entries.listEntries, { limit: 50 }) as EntryDoc[] | undefined;
 
   const serverBuckets = useQuery(api.entries.listBuckets, { type: type === "transfer" ? "expense" : type });
 
@@ -195,7 +230,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         !seenCategories.has(e.category) &&
         Math.abs(e.amountCents - amountCents) <= tolerance
       );
-      if (sameAmount) {
+      if (sameAmount?.category) {
         suggestions.push({
           category: sameAmount.category,
           reason: "Same amount",
@@ -212,7 +247,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
   // Form validation
   const isValidAmount = amountCents !== null && amountCents > 0;
-  const canSave = isValidAmount && (type !== "transfer" || (fromAccount && toAccount && fromAccount !== toAccount));
+  const canSave = isValidAmount && (type !== "transfer" || (fromAccount && toAccount));
 
   // Meaning preview text
   const meaningPreview = useMemo(() => {
@@ -229,32 +264,14 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
     return null;
   }, [type, amountCents]);
 
-  // Load smart defaults on mount
-  useEffect(() => {
-    setDate(todayYYYYMMDD());
-    try {
-      const raw = localStorage.getItem("tallyup.lastEntry");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed?.type && parsed.type !== "transfer") setType(parsed.type);
-        if (parsed?.bucket) setCategory(parsed.bucket);
-        if (parsed?.methodOrAccount) setMethodOrAccount(parsed.methodOrAccount);
-      }
-    } catch {}
-  }, []);
+  // Defaults are loaded via state initializers to avoid effect-driven state updates.
 
-  const selectorAccounts = useMemo(() => {
-    if (!accounts) return [];
-    return accounts.filter((acc) => acc.showInTransactionSelector !== false);
+  // Get account options for selectors
+  const accountOptions = useMemo(() => {
+    if (!accounts) return ["Cash", "Checking", "Savings", "Credit Card"];
+    const names = accounts.map(a => a.name);
+    return names.length > 0 ? names : ["Cash", "Checking", "Savings", "Credit Card"];
   }, [accounts]);
-
-  const fallbackMethods = ["Cash", "Checking", "Savings", "Credit Card"];
-
-  const getAccountName = (id?: Id<"accounts"> | "") => {
-    if (!id) return "Account";
-    const match = accounts?.find((acc) => acc._id === id);
-    return match?.name ?? "Account";
-  };
 
   async function onSave() {
     if (!canSave) return;
@@ -264,40 +281,38 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
     const ts = yyyymmddToLocalMidnightTs(date);
 
     try {
-      let undoId: string | undefined;
+      let undoId: Id<"entries"> | undefined;
 
       if (type === "transfer") {
         // Create transfer
-        const res = await createTransfer({
+        await createTransfer({
           amountCents: amountCents!,
           date: ts,
           transferType: "internal",
           note: note.trim() || undefined,
-          fromAccountId: fromAccount ? (fromAccount as Id<"accounts">) : undefined,
-          toAccountId: toAccount ? (toAccount as Id<"accounts">) : undefined,
         });
-        undoId = res as unknown as string;
       } else {
+        // Combine context and intent tags
+        const allTags = [...contextTags, ...intentTags];
+        
         const res = await addEntry({
           type,
           category: effectiveCategory || undefined,
           note: note.trim() || undefined,
           merchant: merchant.trim() || undefined,
           methodOrAccount: methodOrAccount.trim() || undefined,
-          accountId: accountId ? (accountId as Id<"accounts">) : undefined,
           amountCents: amountCents!,
           date: ts,
-          contextTags,
-          intentTags,
+          tags: allTags.length > 0 ? allTags : undefined,
           // Gig worker fields
           hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
           platformType: platformType || undefined,
           // Goal and Budget linking
           goalId: linkedGoalId ? (linkedGoalId as Id<"goals">) : undefined,
           budgetCategoryId: linkedBudgetId ? (linkedBudgetId as Id<"budgetCategories">) : undefined,
-        });
+        }) as { id?: Id<"entries"> };
 
-        undoId = (res as any)?.id as string | undefined;
+        undoId = res?.id;
       }
 
       // Persist smart defaults
@@ -322,7 +337,6 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       setPlatformType("");
       setLinkedGoalId("");
       setLinkedBudgetId("");
-      setAccountId("");
       if (type === "transfer") {
         setFromAccount("");
         setToAccount("");
@@ -335,7 +349,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       if (type === "transfer") {
         recap = `Saved: Transfer ${amountStr}`;
         if (fromAccount && toAccount) {
-          recap += ` • ${getAccountName(fromAccount)} → ${getAccountName(toAccount)}`;
+          recap += ` • ${fromAccount} → ${toAccount}`;
         }
       } else {
         const typeLabel = type === "expense" ? "Spent" : "Received";
@@ -385,19 +399,19 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       }, 5000);
 
       onDone?.({ id: undoId });
-    } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to save" });
+    } catch (e: unknown) {
+      setStatus({ kind: "err", msg: errorMessage(e) ?? "Failed to save" });
     }
   }
 
   async function onUndo() {
     if (status.kind !== "ok" || !status.undoId) return;
     try {
-      await deleteEntry({ id: status.undoId as any });
+      await deleteEntry({ id: status.undoId });
       setStatus({ kind: "ok", msg: "Undone", undoId: undefined });
       setTimeout(() => setStatus({ kind: "idle" }), 1500);
-    } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo" });
+    } catch (e: unknown) {
+      setStatus({ kind: "err", msg: errorMessage(e) ?? "Failed to undo" });
     }
   }
 
@@ -571,69 +585,30 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             Account / Method
           </label>
           <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-            {selectorAccounts.length > 0
-              ? selectorAccounts.slice(0, 4).map((account) => (
-                  <button
-                    key={account._id}
-                    type="button"
-                    onClick={() => {
-                      if (accountId === account._id) {
-                        setAccountId("");
-                        setMethodOrAccount("");
-                      } else {
-                        setAccountId(account._id);
-                        setMethodOrAccount(account.name);
-                      }
-                    }}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: "var(--radius-full)",
-                      fontSize: "var(--text-meta)",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      transition: "all 150ms ease",
-                      backgroundColor: accountId === account._id ? "var(--primary)" : "var(--surface-2)",
-                      color: accountId === account._id ? "var(--primary-foreground)" : "var(--text)",
-                      border: accountId === account._id ? "none" : "1px solid var(--border)",
-                    }}
-                  >
-                    {account.name}
-                  </button>
-                ))
-              : fallbackMethods.map((method) => (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => {
-                      setAccountId("");
-                      setMethodOrAccount(methodOrAccount === method ? "" : method);
-                    }}
-                    style={{
-                      padding: "8px 14px",
-                      borderRadius: "var(--radius-full)",
-                      fontSize: "var(--text-meta)",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      transition: "all 150ms ease",
-                      backgroundColor: methodOrAccount === method ? "var(--primary)" : "var(--surface-2)",
-                      color: methodOrAccount === method ? "var(--primary-foreground)" : "var(--text)",
-                      border: methodOrAccount === method ? "none" : "1px solid var(--border)",
-                    }}
-                  >
-                    {method}
-                  </button>
-                ))}
+            {accountOptions.slice(0, 4).map((account) => (
+              <button
+                key={account}
+                type="button"
+                onClick={() => setMethodOrAccount(methodOrAccount === account ? "" : account)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-meta)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "all 150ms ease",
+                  backgroundColor: methodOrAccount === account ? "var(--primary)" : "var(--surface-2)",
+                  color: methodOrAccount === account ? "var(--primary-foreground)" : "var(--text)",
+                  border: methodOrAccount === account ? "none" : "1px solid var(--border)",
+                }}
+              >
+                {account}
+              </button>
+            ))}
             {/* Custom input trigger */}
             <input
-              value={
-                selectorAccounts.length > 0
-                  ? accountId ? "" : methodOrAccount
-                  : !fallbackMethods.includes(methodOrAccount) ? methodOrAccount : ""
-              }
-              onChange={(e) => {
-                setAccountId("");
-                setMethodOrAccount(e.target.value);
-              }}
+              value={!accountOptions.slice(0, 4).includes(methodOrAccount) ? methodOrAccount : ""}
+              onChange={(e) => setMethodOrAccount(e.target.value)}
               placeholder="Other..."
               style={{
                 flex: 1,
@@ -668,7 +643,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             </label>
             <select
               value={fromAccount}
-              onChange={(e) => setFromAccount(e.target.value as Id<"accounts"> | "")}
+              onChange={(e) => setFromAccount(e.target.value)}
               style={{
                 width: "100%",
                 backgroundColor: "var(--surface-2)",
@@ -681,8 +656,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               }}
             >
               <option value="">Select...</option>
-              {(accounts ?? []).map((account) => (
-                <option key={account._id} value={account._id}>{account.name}</option>
+              {accountOptions.map((account) => (
+                <option key={account} value={account}>{account}</option>
               ))}
             </select>
           </div>
@@ -703,7 +678,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             </label>
             <select
               value={toAccount}
-              onChange={(e) => setToAccount(e.target.value as Id<"accounts"> | "")}
+              onChange={(e) => setToAccount(e.target.value)}
               style={{
                 width: "100%",
                 backgroundColor: "var(--surface-2)",
@@ -716,8 +691,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               }}
             >
               <option value="">Select...</option>
-              {(accounts ?? []).filter((acc) => acc._id !== fromAccount).map((account) => (
-                <option key={account._id} value={account._id}>{account.name}</option>
+              {accountOptions.filter(a => a !== fromAccount).map((account) => (
+                <option key={account} value={account}>{account}</option>
               ))}
             </select>
           </div>
@@ -989,7 +964,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               color: "var(--text-tertiary)",
             }}
           >
-            If you're unsure, save it for Review.
+            If you&apos;re unsure, save it for Review.
           </div>
         </div>
       )}
@@ -1287,7 +1262,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
                 }}
               >
                 <option value="">None</option>
-                {goals?.map((g: any) => (
+                {goals?.map((g) => (
                   <option key={g._id} value={g._id}>
                     {g.name} ({g.status || "active"})
                   </option>
@@ -1313,9 +1288,9 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
                 }}
               >
                 <option value="">None</option>
-                {budgets?.map((b: any) => (
+                {budgets?.map((b) => (
                   <option key={b._id} value={b._id}>
-                    {b.name || b.category} (${(b.amountCents / 100).toFixed(0)})
+                    {b.name} (${(b.budgetAmountCents / 100).toFixed(0)})
                   </option>
                 ))}
               </select>
@@ -1487,7 +1462,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       {/* Hint - Updated copy */}
       {type !== "transfer" && (
         <p style={{ fontSize: "var(--text-meta)", color: "var(--text-tertiary)", textAlign: "center", margin: 0 }}>
-          Not sure yet? Save to Review — you'll see it on your dashboard.
+          Not sure yet? Save to Review — you&apos;ll see it on your dashboard.
         </p>
       )}
     </div>

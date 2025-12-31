@@ -1,37 +1,16 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
 import Link from "next/link";
-import { CategoryIcon } from "@/components/icons/iconMap";
 
 // Swipe threshold in px
 const SWIPE_THRESHOLD = 80;
-
-function getDateGroupLabel(ts: number): string {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-
-  if (ts >= todayStart) return "TODAY";
-  if (ts >= yesterdayStart) return "YESTERDAY";
-
-  return new Date(ts)
-    .toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-    .toUpperCase();
-}
-
-function getReviewReasonFallback(entry: any): "NEEDS_CATEGORY" | "NEEDS_CONTEXT" | "NEEDS_ACCOUNT" | null {
-  if (!entry.category) return "NEEDS_CATEGORY";
-  if (!entry.contextTags || entry.contextTags.length === 0) return "NEEDS_CONTEXT";
-  if (!entry.methodOrAccount) return "NEEDS_ACCOUNT";
-  return null;
-}
 
 export default function ActivityTable({
   entries = [],
@@ -41,9 +20,9 @@ export default function ActivityTable({
   externalSelectMode,
   onSelectModeChange,
 }: {
-  entries?: any[];
+  entries?: Doc<"entries">[];
   onDelete?: (id: Id<"entries">) => void;
-  onSavePattern?: (entry: any) => void;
+  onSavePattern?: (entry: Doc<"entries">) => void;
   onBulkComplete?: () => void;
   externalSelectMode?: boolean;
   onSelectModeChange?: (mode: boolean) => void;
@@ -54,37 +33,15 @@ export default function ActivityTable({
   const [internalSelectMode, setInternalSelectMode] = useState(false);
   const selectMode = externalSelectMode ?? internalSelectMode;
   const setSelectMode = onSelectModeChange ?? setInternalSelectMode;
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const selectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
+  const [selected, setSelected] = useState<Record<Id<"entries">, boolean>>({} as Record<Id<"entries">, boolean>);
+  const selectedIds = useMemo(
+    () => Object.keys(selected).filter((k) => selected[k as Id<"entries">]) as Id<"entries">[],
+    [selected]
+  );
   
   const bulkMarkReviewed = useMutation(api.entries.bulkMarkReviewed);
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
-  const accounts = useQuery(api.accounts.listAccounts, {}) as any[] | undefined;
-
-  const accountNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const acc of accounts ?? []) {
-      if (acc?._id && acc?.name) map.set(acc._id, acc.name);
-    }
-    return map;
-  }, [accounts]);
-
-  const transferAccounts = useMemo(() => {
-    const map = new Map<string, { from?: string; to?: string }>();
-    for (const entry of entries ?? []) {
-      if (!entry?.transferId) continue;
-      const current = map.get(entry.transferId) ?? {};
-      const accountName = entry.accountId ? accountNameById.get(entry.accountId) : undefined;
-      if (entry.isTransferSource) {
-        current.from = accountName ?? current.from;
-      } else {
-        current.to = accountName ?? current.to;
-      }
-      map.set(entry.transferId, current);
-    }
-    return map;
-  }, [entries, accountNameById]);
 
   // Bulk action sheet state
   const [bulkAction, setBulkAction] = useState<"none" | "tag" | "category">("none");
@@ -132,7 +89,7 @@ export default function ActivityTable({
 
   async function handleBulkMarkReviewed() {
     try {
-      await bulkMarkReviewed({ ids: selectedIds as any });
+      await bulkMarkReviewed({ ids: selectedIds });
       toast.success(`${selectedIds.length} items marked as reviewed`);
       exitSelectMode();
       onBulkComplete?.();
@@ -146,7 +103,8 @@ export default function ActivityTable({
     if (!confirm(`Delete ${selectedIds.length} entries? This cannot be undone.`)) return;
     try {
       for (const id of selectedIds) {
-        await deleteEntry({ id: id as any });
+        await deleteEntry({ id });
+        onDelete?.(id);
       }
       toast.success(`${selectedIds.length} entries deleted`);
       exitSelectMode();
@@ -164,7 +122,7 @@ export default function ActivityTable({
         if (!entry) continue;
         const currentTags = entry.tags ?? [];
         if (!currentTags.includes(tag)) {
-          await updateEntry({ id: id as any, tags: [...currentTags, tag] });
+          await updateEntry({ id, tags: [...currentTags, tag] });
         }
       }
       toast.success(`Added "${tag}" to ${selectedIds.length} entries`);
@@ -179,7 +137,7 @@ export default function ActivityTable({
   async function handleBulkChangeCategory(category: string) {
     try {
       for (const id of selectedIds) {
-        await updateEntry({ id: id as any, category });
+        await updateEntry({ id, category });
       }
       toast.success(`Changed category to "${category}"`);
       exitSelectMode();
@@ -205,12 +163,12 @@ export default function ActivityTable({
     setSwipeOffset((o) => ({ ...o, [id]: Math.max(-SWIPE_THRESHOLD, Math.min(SWIPE_THRESHOLD, deltaX)) }));
   }, []);
 
-  const handleTouchEnd = useCallback(async (id: string, entry: any) => {
+  const handleTouchEnd = useCallback(async (id: Id<"entries">) => {
     const offset = swipeOffset[id] ?? 0;
     if (offset >= SWIPE_THRESHOLD) {
       // Swipe right = mark reviewed
       try {
-        await updateEntry({ id: id as any, needsReview: false });
+        await updateEntry({ id, needsReview: false });
         onBulkComplete?.();
       } catch (e) {
         console.error(e);
@@ -231,16 +189,6 @@ export default function ActivityTable({
     if (hasIncome) return [...INCOME_SPACES];
     return [...EXPENSE_SPACES];
   }, [selectedIds, entries]);
-
-  const groupedEntries = useMemo(() => {
-    const groups = new Map<string, any[]>();
-    for (const entry of entries ?? []) {
-      const label = getDateGroupLabel(entry.date);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label)!.push(entry);
-    }
-    return Array.from(groups.entries());
-  }, [entries]);
 
   return (
     <div className="space-y-3">
@@ -288,179 +236,183 @@ export default function ActivityTable({
         className="rounded-xl overflow-hidden"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
-        {groupedEntries.map(([groupLabel, groupEntries], groupIdx) => (
-          <div key={groupLabel}>
+        {entries.map((r, i) => {
+          const isIncome = r.type === "income";
+          const amountColor = isIncome ? "var(--success)" : "var(--text)";
+          const amountPrefix = isIncome ? "+" : "−";
+          
+          // Build secondary line: Category · Tags (as short chips)
+          const categoryLabel = r.category || r.bucket || "Uncategorized";
+          const tagLabels = r.tags?.slice(0, 2) || [];
+          const offset = swipeOffset[r._id] ?? 0;
+          
+          return (
             <div
-              className="sticky z-10 px-4 py-2 text-xs font-semibold tracking-[0.18em]"
-              style={{
-                top: selectMode ? 52 : 0,
-                backgroundColor: "var(--surface)",
-                color: "var(--text-tertiary)",
-                borderTop: groupIdx === 0 ? "none" : "1px solid var(--border)",
-                borderBottom: "1px solid var(--border)",
-              }}
+              key={r._id}
+              className={`relative overflow-hidden ${i > 0 ? "border-t" : ""}`}
+              style={{ borderColor: "var(--border)" }}
             >
-              {groupLabel}
-            </div>
-            {groupEntries.map((r: any, i: number) => {
-              const isIncome = r.type === "income";
-              const isTransfer = r.type === "transfer";
-              const amountColor = isIncome ? "var(--success)" : isTransfer ? "var(--text-secondary)" : "var(--text)";
-              const amountPrefix = isIncome ? "+" : isTransfer ? "" : "−";
-              const categoryLabel = r.category || r.bucket || "Uncategorized";
-              const title = r.merchant || r.note || categoryLabel || "Transaction";
-              const offset = swipeOffset[r._id] ?? 0;
-              const reviewReason = r.reviewReason ?? getReviewReasonFallback(r);
-              const needsReview = Boolean(reviewReason);
-              const isIgnored = Boolean(r.ignoredForBudgets || r.excludeFromBudgets);
-              const isTaxRelevant = (r.contextTags ?? r.tags ?? []).includes("Tax-Deductible");
-              const isRecent = r.createdAt && Date.now() - r.createdAt < 6 * 60 * 60 * 1000;
-
-              let statusLabel = categoryLabel;
-              if (isTransfer) statusLabel = "Transfer";
-              else if (isIgnored) statusLabel = "Ignored for budgets";
-              else if (reviewReason === "NEEDS_CONTEXT") statusLabel = "Needs context";
-              else if (reviewReason === "NEEDS_ACCOUNT") statusLabel = "Needs account";
-              else if (reviewReason === "NEEDS_CATEGORY" || !r.category) statusLabel = "Needs category";
-
-              const dotColor = needsReview
-                ? "var(--warning)"
-                : isTaxRelevant
-                ? "var(--accent)"
-                : isRecent
-                ? "var(--success)"
-                : "var(--border)";
-
-              const transferInfo = r.transferId ? transferAccounts.get(r.transferId) : undefined;
-              const fromName = transferInfo?.from;
-              const toName = transferInfo?.to;
-              const transferLine = fromName || toName ? `${fromName ?? "From"} → ${toName ?? "To"}` : "Transfer";
-
-              const contextLabel = (r.contextTags?.[0] ?? r.tags?.[0]) || "";
-              const secondaryLine = isTransfer
-                ? transferLine
-                : [r.methodOrAccount, contextLabel].filter(Boolean).join(" • ");
-
-              return (
+              {/* Swipe background indicators */}
+              <div className="absolute inset-0 flex">
+                {/* Right swipe = mark reviewed (green) */}
                 <div
-                  key={r._id}
-                  className={`relative overflow-hidden ${i > 0 ? "border-t" : ""}`}
-                  style={{ borderColor: "var(--border)" }}
+                  className="flex items-center justify-start pl-4 w-1/2"
+                  style={{ backgroundColor: offset > 20 ? "var(--success)" : "transparent" }}
                 >
-                  {/* Swipe background indicators */}
-                  <div className="absolute inset-0 flex">
-                    <div
-                      className="flex items-center justify-start pl-4 w-1/2"
-                      style={{ backgroundColor: offset > 20 ? "var(--success)" : "transparent" }}
-                    >
-                      {offset > 20 && (
-                        <span className="flex items-center gap-1 text-xs font-semibold text-white">
-                          <Lucide.Check className="h-4 w-4" />
-                          Mark reviewed
-                        </span>
-                      )}
-                    </div>
-                    <div
-                      className="flex items-center justify-end pr-4 w-1/2"
-                      style={{ backgroundColor: offset < -20 ? "var(--accent)" : "transparent" }}
-                    >
-                      {offset < -20 && (
-                        <span className="flex items-center gap-1 text-xs font-semibold text-white">
-                          Edit
-                          <Lucide.Pencil className="h-4 w-4" />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Main row content */}
-                  <div
-                    className="relative flex items-center gap-3 px-4 py-3 transition-transform bg-[var(--surface)]"
-                    style={{ transform: `translateX(${offset}px)` }}
-                    onTouchStart={(e) => {
-                      handleTouchStart(r._id, e);
-                      longPressTimer.current = setTimeout(() => {
-                        enterSelectMode(r._id);
-                      }, 500);
-                    }}
-                    onTouchMove={(e) => {
-                      handleTouchMove(r._id, e);
-                      if (longPressTimer.current) {
-                        clearTimeout(longPressTimer.current);
-                        longPressTimer.current = null;
-                      }
-                    }}
-                    onTouchEnd={() => {
-                      if (longPressTimer.current) {
-                        clearTimeout(longPressTimer.current);
-                        longPressTimer.current = null;
-                      }
-                      if (!selectMode) {
-                        handleTouchEnd(r._id, r);
-                      }
-                    }}
-                  >
-                    {selectMode && (
-                      <input
-                        type="checkbox"
-                        checked={!!selected[r._id]}
-                        onChange={() => toggle(r._id)}
-                        className="h-5 w-5 rounded shrink-0"
-                        style={{ accentColor: "var(--primary)" }}
-                      />
-                    )}
-
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: "var(--surface-subtle)" }}
-                    >
-                      {(!r.category || needsReview) ? (
-                        <Lucide.HelpCircle className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
-                      ) : isTransfer ? (
-                        <Lucide.ArrowRightLeft className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
-                      ) : isIncome ? (
-                        <Lucide.ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
-                      ) : (
-                        <CategoryIcon category={categoryLabel} size={18} style={{ color: "var(--text-secondary)" }} />
-                      )}
-                    </div>
-
-                    <Link href={`/activity?edit=${r._id}`} className="flex min-w-0 flex-1 items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-body font-semibold truncate" style={{ color: "var(--text)" }}>
-                          {title}
-                        </div>
-                        {secondaryLine && (
-                          <div className="text-meta truncate" style={{ color: "var(--text-secondary)" }}>
-                            {secondaryLine}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <div className="text-body font-semibold tabular-nums" style={{ color: amountColor }}>
-                          {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
-                        </div>
-                        <span
-                          className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={{
-                            backgroundColor: needsReview ? "var(--warning-subtle)" : "var(--surface-2)",
-                            color: needsReview ? "var(--warning)" : "var(--text-secondary)",
-                            border: `1px solid ${needsReview ? "var(--warning)" : "var(--border)"}`,
-                          }}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-
-                      <div className="h-2 w-2 rounded-full" style={{ backgroundColor: dotColor }} />
-                    </Link>
-                  </div>
+                  {offset > 20 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-white">
+                      <Lucide.Check className="h-4 w-4" />
+                      Mark reviewed
+                    </span>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        ))}
+                {/* Left swipe = edit (blue) */}
+                <div
+                  className="flex items-center justify-end pr-4 w-1/2"
+                  style={{ backgroundColor: offset < -20 ? "var(--accent)" : "transparent" }}
+                >
+                  {offset < -20 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-white">
+                      Edit
+                      <Lucide.Pencil className="h-4 w-4" />
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Main row content */}
+              <div
+                className="relative flex items-center gap-3 px-4 py-3 transition-transform bg-[var(--surface)]"
+                style={{ transform: `translateX(${offset}px)` }}
+                onTouchStart={(e) => {
+                  handleTouchStart(r._id, e);
+                  // Long press to enter select mode
+                  longPressTimer.current = setTimeout(() => {
+                    enterSelectMode(r._id);
+                  }, 500);
+                }}
+                onTouchMove={(e) => {
+                  handleTouchMove(r._id, e);
+                  // Cancel long press on move
+                  if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                  }
+                }}
+                onTouchEnd={() => {
+                  if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current);
+                    longPressTimer.current = null;
+                  }
+                  if (!selectMode) {
+                    handleTouchEnd(r._id);
+                  }
+                }}
+              >
+                {/* Checkbox - only show in select mode */}
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={!!selected[r._id]}
+                    onChange={() => toggle(r._id)}
+                    className="h-5 w-5 rounded shrink-0"
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                )}
+
+              {/* Icon */}
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                style={{
+                  backgroundColor: isIncome ? "var(--success-subtle)" : "var(--surface-subtle)",
+                }}
+              >
+                {isIncome ? (
+                  <Lucide.ArrowDownLeft className="h-5 w-5" style={{ color: "var(--success)" }} />
+                ) : (
+                  <Lucide.ArrowUpRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+                )}
+              </div>
+
+              {/* Main Content */}
+              <Link href={`/activity?edit=${r._id}`} className="flex-1 min-w-0">
+                {/* Primary: Title */}
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-body font-semibold truncate"
+                    style={{ color: "var(--text)" }}
+                  >
+                    {r.note || r.merchant || categoryLabel}
+                  </span>
+                  {r.needsReview && (
+                    <span
+                      className="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold"
+                      style={{ backgroundColor: "var(--warning-subtle)", color: "var(--warning)" }}
+                    >
+                      Review
+                    </span>
+                  )}
+                </div>
+                
+                {/* Secondary: Category · Context tags */}
+                <div className="flex items-center gap-1.5 text-meta truncate" style={{ color: "var(--text-secondary)" }}>
+                  <span>{categoryLabel}</span>
+                  {tagLabels.length > 0 && (
+                    <>
+                      <span style={{ color: "var(--text-tertiary)" }}>·</span>
+                      {tagLabels.map((tag: string) => (
+                        <span key={tag} className="inline-flex items-center">
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full mr-1"
+                            style={{ backgroundColor: "var(--accent)" }}
+                          />
+                          <span className="text-[11px]">{tag}</span>
+                        </span>
+                      ))}
+                    </>
+                  )}
+                </div>
+                
+                {/* Tertiary: Method/account if present */}
+                {r.methodOrAccount && (
+                  <div className="text-[10px] truncate" style={{ color: "var(--text-tertiary)" }}>
+                    {r.methodOrAccount}
+                  </div>
+                )}
+              </Link>
+
+              {/* Amount + Date */}
+              <div className="shrink-0 text-right">
+                <div
+                  className="text-body font-semibold tabular-nums"
+                  style={{ color: amountColor }}
+                >
+                  {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
+                </div>
+                <div className="text-meta" style={{ color: "var(--text-tertiary)" }}>
+                  {new Date(r.date).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </div>
+              </div>
+
+              {/* Actions Menu - only show when not in select mode */}
+              {!selectMode && (
+                <div className="relative shrink-0">
+                  <button
+                    onClick={() => onSavePattern?.(r)}
+                    className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-subtle)]"
+                    title="Save as pattern"
+                  >
+                    <Lucide.Bookmark className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                  </button>
+                </div>
+              )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Fixed Bottom Action Bar - shown when in select mode with items selected */}

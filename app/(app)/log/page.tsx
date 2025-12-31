@@ -1,13 +1,12 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import {
   EntryType,
-  dollarsToCents,
   todayYYYYMMDD,
   uniqCaseInsensitive,
   yyyymmddToLocalMidnightTs,
@@ -33,7 +32,9 @@ import * as Lucide from "lucide-react";
  */
 
 export default function LogPage() {
-  const { user } = useUser();
+  type EntryDoc = Doc<"entries">;
+  type EditableEntry = EntryDoc & { type: "expense" | "income" };
+  type AddEntryResult = { ok: boolean; id: Id<"entries"> };
 
   // State declarations first
   const [type, setType] = useState<EntryType>(() => {
@@ -54,7 +55,6 @@ export default function LogPage() {
   const [customCategory, setCustomCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
-  const [accountId, setAccountId] = useState<Id<"accounts"> | "">("");
   const [tags, setTags] = useState<string[]>([]);
 
   // Progressive disclosure state
@@ -69,9 +69,15 @@ export default function LogPage() {
   const [status, setStatus] = useState<
     { kind: "idle" } |
     { kind: "saving" } |
-    { kind: "ok"; msg: string; undoId?: string } |
+    { kind: "ok"; msg: string; undoId?: Id<"entries"> } |
     { kind: "err"; msg: string }
   >({ kind: "idle" });
+
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }
 
   const lastSavedRef = useRef<{
     type: EntryType;
@@ -86,7 +92,6 @@ export default function LogPage() {
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   const serverBuckets = useQuery(api.entries.listBuckets, { type });
-  const accounts = useQuery(api.accounts.listAccounts, { includeArchived: false }) as any[] | undefined;
   
   const categoryOptions = useMemo(() => {
     const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
@@ -94,13 +99,6 @@ export default function LogPage() {
     if (!merged.includes("Other")) merged.push("Other");
     return merged;
   }, [type, serverBuckets]);
-
-  const selectorAccounts = useMemo(() => {
-    if (!accounts) return [];
-    return accounts.filter((acc) => acc.showInTransactionSelector !== false);
-  }, [accounts]);
-
-  const fallbackMethods = ["Cash", "Checking", "Savings", "Credit Card"];
 
   const effectiveCategory = category === "Other" ? (customCategory.trim() || "Other") : category;
 
@@ -121,13 +119,10 @@ export default function LogPage() {
         category: effectiveCategory || undefined,
         note: note.trim() || undefined,
         methodOrAccount: methodOrAccount.trim() || undefined,
-        accountId: accountId ? (accountId as Id<"accounts">) : undefined,
         amountCents: amountCents!,
         date: ts,
         tags: tags.length > 0 ? tags : undefined,
-        contextTags: tags.length > 0 ? tags : [],
-        intentTags: [],
-      });
+      }) as AddEntryResult;
 
       lastSavedRef.current = {
         type,
@@ -142,13 +137,12 @@ export default function LogPage() {
       setAmountCents(null);
       setNote("");
       setMethodOrAccount("");
-      setAccountId("");
       setTags([]);
       setShowTags(false);
       setShowPayMode(false);
       setShowNote(false);
 
-      const undoId = (res as any)?.id as string | undefined;
+      const undoId = res?.id;
       
       // Determine message based on whether category was provided
       const message = effectiveCategory 
@@ -161,23 +155,23 @@ export default function LogPage() {
       setTimeout(() => {
         setStatus((s) => s.kind === "ok" ? { kind: "idle" } : s);
       }, 5000);
-    } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to save" });
+    } catch (e: unknown) {
+      setStatus({ kind: "err", msg: errorMessage(e) ?? "Failed to save" });
     }
   }
 
   async function onUndo() {
     if (status.kind !== "ok" || !status.undoId) return;
     try {
-      await deleteEntry({ id: status.undoId as any });
+      await deleteEntry({ id: status.undoId });
       setStatus({ kind: "ok", msg: "Undone" });
       setTimeout(() => setStatus({ kind: "idle" }), 1500);
-    } catch (e: any) {
-      setStatus({ kind: "err", msg: e?.message ?? "Failed to undo" });
+    } catch (e: unknown) {
+      setStatus({ kind: "err", msg: errorMessage(e) ?? "Failed to undo" });
     }
   }
 
-  const [selected, setSelected] = useState<any | null>(null);
+  const [selected, setSelected] = useState<EditableEntry | null>(null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
@@ -561,65 +555,10 @@ export default function LogPage() {
                   Done
                 </button>
               </div>
-              <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
-                {selectorAccounts.length > 0
-                  ? selectorAccounts.slice(0, 4).map((account) => (
-                      <button
-                        key={account._id}
-                        type="button"
-                        onClick={() => {
-                          if (accountId === account._id) {
-                            setAccountId("");
-                            setMethodOrAccount("");
-                          } else {
-                            setAccountId(account._id);
-                            setMethodOrAccount(account.name);
-                          }
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          borderRadius: "var(--radius-full)",
-                          fontSize: "var(--text-meta)",
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          backgroundColor: accountId === account._id ? "var(--primary)" : "transparent",
-                          color: accountId === account._id ? "var(--primary-foreground)" : "var(--text-secondary)",
-                          border: accountId === account._id ? "none" : "1px solid var(--border)",
-                        }}
-                      >
-                        {account.name}
-                      </button>
-                    ))
-                  : fallbackMethods.map((method) => (
-                      <button
-                        key={method}
-                        type="button"
-                        onClick={() => {
-                          setAccountId("");
-                          setMethodOrAccount(methodOrAccount === method ? "" : method);
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          borderRadius: "var(--radius-full)",
-                          fontSize: "var(--text-meta)",
-                          fontWeight: 500,
-                          cursor: "pointer",
-                          backgroundColor: methodOrAccount === method ? "var(--primary)" : "transparent",
-                          color: methodOrAccount === method ? "var(--primary-foreground)" : "var(--text-secondary)",
-                          border: methodOrAccount === method ? "none" : "1px solid var(--border)",
-                        }}
-                      >
-                        {method}
-                      </button>
-                    ))}
-              </div>
               <input
                 ref={payModeInputRef}
-                value={accountId ? "" : methodOrAccount}
-                onChange={(e) => {
-                  setAccountId("");
-                  setMethodOrAccount(e.target.value);
-                }}
+                value={methodOrAccount}
+                onChange={(e) => setMethodOrAccount(e.target.value)}
                 placeholder={type === "expense" ? "e.g., Debit, Discover" : "e.g., Checking, Cash"}
                 style={{
                   width: "100%",

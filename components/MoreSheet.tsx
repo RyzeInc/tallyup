@@ -7,7 +7,6 @@ import * as Lucide from "lucide-react";
 interface MoreSheetProps {
   open: boolean;
   onClose: () => void;
-  pendingReviewCount?: number;
 }
 
 interface MenuGroup {
@@ -75,7 +74,7 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
-export default function MoreSheet({ open, onClose, pendingReviewCount }: MoreSheetProps) {
+export default function MoreSheet({ open, onClose }: MoreSheetProps) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

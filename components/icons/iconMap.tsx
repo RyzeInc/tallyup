@@ -65,7 +65,7 @@ export type IconKey =
   | "default";
 
 interface IconConfig {
-  icon: ComponentType<{ size?: number; className?: string }>;
+  icon: ComponentType<{ size?: number | string; className?: string }>;
   label: string;
 }
 

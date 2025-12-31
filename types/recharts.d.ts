@@ -4,21 +4,22 @@
 declare module "recharts" {
   import type { ComponentType } from "react";
 
-  export const ResponsiveContainer: ComponentType<any>;
-  export const BarChart: ComponentType<any>;
-  export const Bar: ComponentType<any>;
-  export const LineChart: ComponentType<any>;
-  export const Line: ComponentType<any>;
-  export const PieChart: ComponentType<any>;
-  export const Pie: ComponentType<any>;
-  export const Cell: ComponentType<any>;
-  export const XAxis: ComponentType<any>;
-  export const YAxis: ComponentType<any>;
-  export const Tooltip: ComponentType<any>;
-  export const Legend: ComponentType<any>;
-  export const CartesianGrid: ComponentType<any>;
+  type Props = Record<string, unknown>;
 
-  // fallback
-  const _default: any;
+  export const ResponsiveContainer: ComponentType<Props>;
+  export const BarChart: ComponentType<Props>;
+  export const Bar: ComponentType<Props>;
+  export const LineChart: ComponentType<Props>;
+  export const Line: ComponentType<Props>;
+  export const PieChart: ComponentType<Props>;
+  export const Pie: ComponentType<Props>;
+  export const Cell: ComponentType<Props>;
+  export const XAxis: ComponentType<Props>;
+  export const YAxis: ComponentType<Props>;
+  export const Tooltip: ComponentType<Props>;
+  export const Legend: ComponentType<Props>;
+  export const CartesianGrid: ComponentType<Props>;
+
+  const _default: Record<string, ComponentType<Props>>;
   export default _default;
 }

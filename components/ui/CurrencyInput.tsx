@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useRef } from "react";
 
 export default function CurrencyInput({
   valueCents,
@@ -23,19 +23,17 @@ export default function CurrencyInput({
   onBlur?: () => void;
   autoFocus?: boolean;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => {
+    if (typeof valueCents === "number") return (valueCents / 100).toFixed(2);
+    return "";
+  });
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  // Only update from external valueCents when not focused
-  useEffect(() => {
-    if (isFocused) return;
-    if (typeof valueCents === "number") {
-      setText((valueCents / 100).toFixed(2));
-    } else if (valueCents === undefined || valueCents === null) {
-      setText("");
-    }
-  }, [valueCents, isFocused]);
+  const displayText = isFocused
+    ? text
+    : typeof valueCents === "number"
+      ? (valueCents / 100).toFixed(2)
+      : "";
 
   function parseToCentsFromString(s: string): number | null {
     if (!s || s.trim() === "") return null;
@@ -83,8 +81,8 @@ export default function CurrencyInput({
       ref={inputRef}
       type="text"
       inputMode="decimal"
-      aria-label={ariaLabel ?? "Amount"}
-      value={text}
+      aria-label={ariaLabel ?? `Amount (${currency})`}
+      value={displayText}
       placeholder={placeholder}
       autoFocus={autoFocus}
       onFocus={() => setIsFocused(true)}

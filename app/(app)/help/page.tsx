@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import * as Lucide from "lucide-react";
-import PageHeader from "@/components/ui/PageHeader";
 import { useTabs } from "@/components/PersistentTabs";
 
 /**

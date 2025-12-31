@@ -7,7 +7,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-// @ts-ignore - Sector is available but not in types
+// @ts-expect-error - Sector is available but not in types
 import { Sector } from "recharts";
 import { formatMoney } from "@/components/utils";
 
@@ -63,7 +63,17 @@ const DEFAULT_COLORS = [
 ];
 
 // Active slice shape (expanded when selected)
-const renderActiveShape = (props: any) => {
+type ActiveShapeProps = {
+  cx: number;
+  cy: number;
+  innerRadius: number;
+  outerRadius: number;
+  startAngle: number;
+  endAngle: number;
+  fill: string;
+};
+
+const renderActiveShape = (props: ActiveShapeProps) => {
   const {
     cx,
     cy,
@@ -114,7 +124,7 @@ export function DonutChart({
   const selectedSlice = activeIndex !== null ? data[activeIndex] : null;
 
   // Handle slice click/tap
-  const handleSliceClick = useCallback((entry: any, index: number) => {
+  const handleSliceClick = useCallback((_entry: unknown, index: number) => {
     const newIndex = activeIndex === index ? null : index;
     setActiveIndex(newIndex);
     
@@ -124,11 +134,6 @@ export function DonutChart({
   }, [activeIndex, data, onSliceSelect]);
 
   // Handle click outside (deselect)
-  const handlePieClick = useCallback(() => {
-    // This is called on pie background click
-    // Individual slice clicks are handled separately
-  }, []);
-
   // Format value for display
   const formatValue = (value: number) => {
     if (formatAsCurrency) {

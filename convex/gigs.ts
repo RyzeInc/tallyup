@@ -5,7 +5,9 @@ import { query } from "./_generated/server";
  * Gig-related queries for hourly rate calculations and platform grouping
  */
 
-async function requireUserId(ctx: any): Promise<string> {
+type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
+
+async function requireUserId(ctx: AuthCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
   return identity.subject;

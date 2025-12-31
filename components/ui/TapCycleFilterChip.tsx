@@ -182,13 +182,13 @@ export function useFilterChips<T extends string>(
   const { initialStates } = options;
 
   // Create initial state map
-  const createInitialState = () => {
+  const createInitialState = useCallback(() => {
     const map: Record<T, FilterState> = {} as Record<T, FilterState>;
     for (const key of keys) {
       map[key] = (initialStates as Record<T, FilterState> | undefined)?.[key] ?? "neutral";
     }
     return map;
-  };
+  }, [keys, initialStates]);
 
   const [states, setStates] = useState<Record<T, FilterState>>(createInitialState);
 
@@ -198,7 +198,7 @@ export function useFilterChips<T extends string>(
 
   const resetAll = useCallback(() => {
     setStates(createInitialState());
-  }, [keys, initialStates]);
+  }, [createInitialState]);
 
   const getIncluded = useCallback(() => {
     return keys.filter((k) => states[k] === "include");

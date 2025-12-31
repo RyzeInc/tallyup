@@ -3,16 +3,13 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
-import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import { useTabs } from "@/components/PersistentTabs";
 import { useToast } from "@/components/ToastProvider";
-import { formatMoney, centsToDollars } from "@/components/utils";
+import { formatMoney } from "@/components/utils";
 
 /**
  * Recurring Page - Elevated to top-level navigation
@@ -26,36 +23,28 @@ import { formatMoney, centsToDollars } from "@/components/utils";
  * No blank recurring creation - always transaction-based
  */
 
-interface Entry {
-  _id: string;
-  type: "expense" | "income";
-  category?: string;
-  bucket?: string;
-  note?: string;
-  amountCents: number;
-  date: number;
-  merchant?: string;
-  needsReview?: boolean;
+type Entry = Doc<"entries">;
+type EditableEntry = Entry & { type: "expense" | "income" };
+type RecurringRule = Doc<"recurringRules">;
+
+function isEditableEntry(entry: Entry): entry is EditableEntry {
+  return entry.type === "expense" || entry.type === "income";
 }
 
 export default function RecurringPage() {
   const { setActiveTab } = useTabs();
   const toast = useToast();
-  const { resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
-  const rules = useQuery((api as any).recurring.listRecurringRules as any) as any[] | undefined;
-  const updateRule = useMutation((api as any).recurring.updateRecurringRule as any);
-  const createRule = useMutation((api as any).recurring.createRecurringRule as any);
+  const rules = useQuery(api.recurring.listRecurringRules, {}) as RecurringRule[] | undefined;
+  const updateRule = useMutation(api.recurring.updateRecurringRule);
+  const createRule = useMutation(api.recurring.createRecurringRule);
 
   // Recent entries for transaction-based creation
   const recentEntries = useQuery(api.entries.listEntries, { 
-    startDate: fromMs,
-    endDate: toMs,
-    limit: 200,
+    limit: 50 
   }) as Entry[] | undefined;
 
   // Edit modal state
-  const [editingRule, setEditingRule] = useState<any | null>(null);
+  const [editingRule, setEditingRule] = useState<RecurringRule | null>(null);
   const [editName, setEditName] = useState("");
   const [editAutolink, setEditAutolink] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,7 +52,7 @@ export default function RecurringPage() {
   // Transaction-based creation state
   const [showCreate, setShowCreate] = useState(false);
   const [createStep, setCreateStep] = useState<"select" | "configure">("select");
-  const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<EditableEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   
   // Inferred/editable fields
@@ -72,10 +61,16 @@ export default function RecurringPage() {
   const [createAutolink, setCreateAutolink] = useState(true);
   const [creating, setCreating] = useState(false);
 
-  function openEdit(rule: any) {
+  function openEdit(rule: RecurringRule) {
     setEditingRule(rule);
     setEditName(rule.displayName ?? rule.name ?? rule.category ?? "");
     setEditAutolink(rule.autolinkEnabled ?? false);
+  }
+
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
   }
 
   async function handleSaveEdit() {
@@ -89,8 +84,8 @@ export default function RecurringPage() {
       });
       toast.success("Pattern updated");
       setEditingRule(null);
-    } catch (e: any) {
-      toast.error("Failed to update", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to update", { description: errorMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -99,10 +94,11 @@ export default function RecurringPage() {
   // Filter entries for selection
   const filteredEntries = useMemo(() => {
     if (!recentEntries) return [];
-    if (!searchQuery.trim()) return recentEntries;
+    const candidates = recentEntries.filter(isEditableEntry);
+    if (!searchQuery.trim()) return candidates;
     
     const q = searchQuery.toLowerCase();
-    return recentEntries.filter((e) => {
+    return candidates.filter((e) => {
       const name = (e.category || e.bucket || e.merchant || e.note || "").toLowerCase();
       return name.includes(q);
     });
@@ -112,8 +108,9 @@ export default function RecurringPage() {
   const entrySuggestions = useMemo(() => {
     if (!recentEntries) return [];
     
-    const groups = new Map<string, Entry[]>();
+    const groups = new Map<string, EditableEntry[]>();
     for (const entry of recentEntries) {
+      if (!isEditableEntry(entry)) continue;
       const key = (entry.category || entry.bucket || entry.merchant || "").toLowerCase().trim();
       if (!key) continue;
       
@@ -137,7 +134,7 @@ export default function RecurringPage() {
       .slice(0, 5);
   }, [recentEntries]);
 
-  function handleSelectEntry(entry: Entry) {
+  function handleSelectEntry(entry: EditableEntry) {
     setSelectedEntry(entry);
     setCreateName(entry.category || entry.bucket || entry.merchant || entry.note || "");
     setCreateStep("configure");
@@ -178,12 +175,11 @@ export default function RecurringPage() {
         amountCents: selectedEntry.amountCents,
         autolinkEnabled: createAutolink,
         active: true,
-        confidence: 80, // User-confirmed
       });
       toast.success("Pattern created");
       resetCreate();
-    } catch (e: any) {
-      toast.error("Failed to create", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to create", { description: errorMessage(e) });
     } finally {
       setCreating(false);
     }
@@ -205,21 +201,17 @@ export default function RecurringPage() {
         title="Patterns"
         subtitle="Saved patterns you've confirmed"
         rightSlot={
-          <div className="flex items-center gap-2">
-            <TimeRangeBadge />
-            <TimeRangeControl />
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
-              style={{
-                backgroundColor: "var(--primary)",
-                color: "var(--on-primary)",
-              }}
-            >
-              <Lucide.Plus className="h-4 w-4" />
-              Add
-            </button>
-          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+            style={{
+              backgroundColor: "var(--primary)",
+              color: "var(--on-primary)",
+            }}
+          >
+            <Lucide.Plus className="h-4 w-4" />
+            Add
+          </button>
         }
       />
 

@@ -20,18 +20,14 @@ const ThemeContext = createContext<{
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Light-first: default to light, never auto-switch to dark
-  const [theme, setThemeState] = useState<ThemeMode>("light");
-
-  // On mount, read saved preference (but only allow dim if explicitly set)
-  useEffect(() => {
+  const [theme, setThemeState] = useState<ThemeMode>(() => {
     try {
       const saved = localStorage.getItem("tallyup.theme") as ThemeMode | null;
-      if (saved === "dim") {
-        setThemeState("dim");
-      }
-      // Always default to light otherwise
-    } catch {}
-  }, []);
+      return saved === "dim" ? "dim" : "light";
+    } catch {
+      return "light";
+    }
+  });
 
   // Apply theme to document
   useEffect(() => {

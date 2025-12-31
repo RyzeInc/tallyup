@@ -2,6 +2,11 @@
 
 import { useEffect } from "react";
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
 export default function ServiceWorkerRegistration() {
   useEffect(() => {
     if (
@@ -60,26 +65,21 @@ export default function ServiceWorkerRegistration() {
       });
 
       // Install prompt handling
-      let deferredPrompt: any = null;
-
       window.addEventListener("beforeinstallprompt", (e) => {
         // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
-        // Stash the event so it can be triggered later
-        deferredPrompt = e;
         console.log("[PWA] Install prompt available");
 
         // Optional: Show custom install UI
         // You can dispatch a custom event here to show an install button
         window.dispatchEvent(
-          new CustomEvent("pwa-install-available", { detail: e })
+          new CustomEvent("pwa-install-available", { detail: e as BeforeInstallPromptEvent })
         );
       });
 
       // Log when app is successfully installed
       window.addEventListener("appinstalled", () => {
         console.log("[PWA] App installed successfully");
-        deferredPrompt = null;
       });
     }
   }, []);

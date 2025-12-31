@@ -1,8 +1,20 @@
 import { mutation, query, internalQuery } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { Entry as DetectorEntry, Candidate as DetectorCandidate } from "./detector";
 import { v } from "convex/values";
 import { getReviewReason } from "../lib/constants";
 
-async function requireUserId(ctx: any): Promise<string> {
+type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
+type EntryDoc = Doc<"entries">;
+type BudgetCategoryId = Id<"budgetCategories">;
+type RecurringRuleDoc = Doc<"recurringRules">;
+
+function isDetectorEntry(entry: EntryDoc): entry is EntryDoc & { type: "expense" | "income" } {
+  return entry.type === "expense" || entry.type === "income";
+}
+
+async function requireUserId(ctx: AuthCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
   return identity.subject;
@@ -28,8 +40,38 @@ function cleanTags(tags?: string[]): string[] | undefined {
   return out.length ? out : undefined;
 }
 
+type BudgetRelevantEntry = Pick<EntryDoc, "type" | "excludeFromBudgets" | "excludeFromTotals" | "status" | "entryType">;
+
+function shouldAffectBudgets(entry: BudgetRelevantEntry): boolean {
+  if (entry.type !== "expense") return false;
+  if (entry.excludeFromBudgets) return false;
+  if (entry.excludeFromTotals) return false;
+  if (entry.status && entry.status !== "posted") return false;
+  if (entry.entryType && (entry.entryType === "transfer" || entry.entryType === "payment")) return false;
+  return true;
+}
+
+async function enqueueBudgetDirty(
+  ctx: MutationCtx,
+  userId: string,
+  dirtyDate: number,
+  budgetCategoryId: BudgetCategoryId | undefined,
+  reason: string
+) {
+  const now = Date.now();
+  await ctx.db.insert("budgetDirtyQueue", {
+    userId,
+    budgetCategoryId,
+    dirtyDate,
+    reason,
+    status: "pending",
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 // Helper to get effective category from entry (handles migration from bucket)
-function getEffectiveCategory(entry: any): string | undefined {
+function getEffectiveCategory(entry: Pick<EntryDoc, "category" | "bucket">): string | undefined {
   return entry.category ?? entry.bucket;
 }
 
@@ -54,6 +96,22 @@ export const addEntry = mutation({
     intentTags: v.optional(v.array(v.string())),
     amountCents: v.number(),
     date: v.number(),
+    status: v.optional(v.union(v.literal("pending"), v.literal("posted"))),
+    entryType: v.optional(v.union(
+      v.literal("purchase"),
+      v.literal("refund"),
+      v.literal("transfer"),
+      v.literal("payment"),
+      v.literal("income"),
+      v.literal("fee")
+    )),
+    stableId: v.optional(v.string()),
+    originalEntryId: v.optional(v.id("entries")),
+    splitParts: v.optional(v.array(v.object({
+      budgetCategoryId: v.optional(v.id("budgetCategories")),
+      amountCents: v.number(),
+    }))),
+    currency: v.optional(v.string()),
     // Optional Phase 1+ controls.
     needsReview: v.optional(v.boolean()),
     excludeFromTotals: v.optional(v.boolean()),
@@ -112,6 +170,12 @@ export const addEntry = mutation({
       intentTags,
       amountCents,
       date: args.date,
+      status: args.status ?? "posted",
+      entryType: args.entryType ?? (args.type === "income" ? "income" : "purchase"),
+      stableId: cleanStr(args.stableId),
+      originalEntryId: args.originalEntryId,
+      splitParts: args.splitParts,
+      currency: args.currency,
       needsReview,
       reviewReason: reviewReason ?? undefined,
       excludeFromTotals,
@@ -127,6 +191,10 @@ export const addEntry = mutation({
       budgetCategoryId: args.budgetCategoryId,
     });
 
+    if (shouldAffectBudgets({ type: args.type, excludeFromBudgets: false, excludeFromTotals: excludeFromTotals, status: args.status ?? "posted", entryType: args.entryType })) {
+      await enqueueBudgetDirty(ctx, userId, args.date, args.budgetCategoryId, "entry_created");
+    }
+
     // Autolink: if any active recurring rule matches this entry and autolinkEnabled is true,
     // link the entry to the best matching rule and update lastMatchedAt.
     try {
@@ -139,7 +207,7 @@ export const addEntry = mutation({
       const categoryLower = (category ?? "").toLowerCase();
       const bucketLower = (bucket ?? "").toLowerCase();
 
-      let bestRule: any = null;
+      let bestRule: RecurringRuleDoc | null = null;
       let bestScore = 0;
 
       for (const r of activeRules) {
@@ -201,6 +269,22 @@ export const updateEntry = mutation({
     accountId: v.optional(v.union(v.id("accounts"), v.null())),
     amountCents: v.optional(v.number()),
     date: v.optional(v.number()),
+    status: v.optional(v.union(v.literal("pending"), v.literal("posted"))),
+    entryType: v.optional(v.union(
+      v.literal("purchase"),
+      v.literal("refund"),
+      v.literal("transfer"),
+      v.literal("payment"),
+      v.literal("income"),
+      v.literal("fee")
+    )),
+    stableId: v.optional(v.string()),
+    originalEntryId: v.optional(v.union(v.id("entries"), v.null())),
+    splitParts: v.optional(v.array(v.object({
+      budgetCategoryId: v.optional(v.id("budgetCategories")),
+      amountCents: v.number(),
+    }))),
+    currency: v.optional(v.string()),
     needsReview: v.optional(v.boolean()),
     excludeFromTotals: v.optional(v.boolean()),
     // Gig worker fields
@@ -218,7 +302,7 @@ export const updateEntry = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
 
-    const patch: any = { updatedAt: Date.now() };
+    const patch: Partial<EntryDoc> & { updatedAt: number } = { updatedAt: Date.now() };
 
     if (args.category !== undefined) {
       const cat = args.category.trim();
@@ -248,6 +332,12 @@ export const updateEntry = mutation({
     }
 
     if (args.excludeFromTotals !== undefined) patch.excludeFromTotals = args.excludeFromTotals;
+    if (args.status !== undefined) patch.status = args.status;
+    if (args.entryType !== undefined) patch.entryType = args.entryType;
+    if (args.stableId !== undefined) patch.stableId = cleanStr(args.stableId);
+    if (args.originalEntryId !== undefined) patch.originalEntryId = args.originalEntryId === null ? undefined : args.originalEntryId;
+    if (args.splitParts !== undefined) patch.splitParts = args.splitParts;
+    if (args.currency !== undefined) patch.currency = cleanStr(args.currency);
 
     // Gig worker fields
     if (args.hoursWorked !== undefined) patch.hoursWorked = args.hoursWorked;
@@ -291,6 +381,34 @@ export const updateEntry = mutation({
     }
 
     await ctx.db.patch(args.id, patch);
+
+    const nextEntry = {
+      ...existing,
+      ...patch,
+      budgetCategoryId:
+        args.budgetCategoryId !== undefined ? (args.budgetCategoryId === null ? undefined : args.budgetCategoryId) : existing.budgetCategoryId,
+      date: args.date !== undefined ? args.date : existing.date,
+    };
+
+    const budgetRelevantChange =
+      existing.date !== nextEntry.date ||
+      existing.budgetCategoryId !== nextEntry.budgetCategoryId ||
+      existing.amountCents !== nextEntry.amountCents ||
+      existing.excludeFromBudgets !== nextEntry.excludeFromBudgets ||
+      existing.excludeFromTotals !== nextEntry.excludeFromTotals ||
+      existing.type !== nextEntry.type ||
+      existing.status !== nextEntry.status ||
+      existing.entryType !== nextEntry.entryType ||
+      existing.splitParts !== nextEntry.splitParts;
+
+    if (budgetRelevantChange) {
+      if (shouldAffectBudgets(existing)) {
+        await enqueueBudgetDirty(ctx, userId, existing.date, existing.budgetCategoryId, "entry_updated_old");
+      }
+      if (shouldAffectBudgets(nextEntry)) {
+        await enqueueBudgetDirty(ctx, userId, nextEntry.date, nextEntry.budgetCategoryId, "entry_updated_new");
+      }
+    }
     return { ok: true };
   },
 });
@@ -302,6 +420,10 @@ export const deleteEntry = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
     await ctx.db.delete(args.id);
+
+    if (shouldAffectBudgets(existing)) {
+      await enqueueBudgetDirty(ctx, userId, existing.date, existing.budgetCategoryId, "entry_deleted");
+    }
     return { ok: true };
   },
 });
@@ -310,7 +432,7 @@ export const bulkMarkReviewed = mutation({
   args: { ids: v.array(v.id("entries")) },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
-    const ops: Array<any> = [];
+    const ops: Array<Promise<unknown>> = [];
     for (const id of args.ids) {
       const existing = await ctx.db.get(id);
       if (!existing || existing.userId !== userId) continue;
@@ -353,7 +475,7 @@ export const listEntries = query({
 
     const { start, end } = resolveBounds(args);
 
-    let rows: any[] = [];
+    let rows: EntryDoc[] = [];
     if (args.type) {
       rows = await ctx.db
         .query("entries")
@@ -410,7 +532,7 @@ export const listEntriesPaged = query({
     const takeFactor = 3; // heuristic: fetch extra to account for server-side filters
     const take = limit * takeFactor;
 
-    let fetched: any[] = [];
+    let fetched: EntryDoc[] = [];
 
     if (useTypeIndex) {
       const upper = cursorDate !== undefined ? Math.min(cursorDate, end) : end;
@@ -440,7 +562,7 @@ export const listEntriesPaged = query({
     const tagsSet = args.tags?.map((s: string) => s.trim().toLowerCase());
     const search = args.search?.trim().toLowerCase();
 
-    const out: any[] = [];
+    const out: EntryDoc[] = [];
     for (const r of fetched) {
       if (args.needsReview !== undefined && r.needsReview !== args.needsReview) continue;
       if (bucketsSet && bucketsSet.length) {
@@ -499,7 +621,7 @@ export const listCategories = query({
     const userId = await requireUserId(ctx);
 
     // If a type is provided, use the type index for efficiency. Otherwise fall back to the date index.
-    let rows: any[] = [];
+    let rows: EntryDoc[] = [];
     if (args.type) {
       rows = await ctx.db
         .query("entries")
@@ -589,7 +711,12 @@ export const entrySuggestions = query({
 
     const text = ((entry.note ?? "") + " " + (entry.methodOrAccount ?? "") + " " + (entry.bucket ?? "") + " " + (entry.category ?? "")).toLowerCase();
 
-    const suggestions: any[] = [];
+    const suggestions: Array<{
+      kind: "tag" | "category" | "rule";
+      value: string | DetectorCandidate;
+      reason: string;
+      confidence: number;
+    }> = [];
 
     // commodity merchant heuristics
     const subs = ["netflix", "spotify", "hulu", "disney", "apple", "amazon prime", "prime video", "youtube premium"];
@@ -606,18 +733,28 @@ export const entrySuggestions = query({
     const rows = await ctx.db.query("entries").withIndex("by_user_date", q => q.eq("userId", userId).gte("date", cutoff)).order("desc").take(2000);
 
     // Convert rows to detector.Entry
-    const recent: any[] = rows.map((r: any) => ({ _id: r._id, date: r.date, amountCents: r.amountCents, type: r.type, bucket: r.bucket, category: r.category, tags: r.tags }));
+    const recent: DetectorEntry[] = rows
+      .filter(isDetectorEntry)
+      .map((r) => ({
+        _id: r._id,
+        date: r.date,
+        amountCents: r.amountCents,
+        type: r.type,
+        bucket: r.bucket,
+        category: r.category,
+        tags: r.tags,
+      }));
 
     try {
-      const det = (await import("./detector")) as any;
-      const candidates = det.detectRecurringCandidatesFromEntries(recent as any[]);
+      const det = await import("./detector");
+      const candidates = det.detectRecurringCandidatesFromEntries(recent);
       for (const c of candidates) {
         // if this entry is part of the candidate examples, suggest creating a rule
         if ((c.exampleEntryIds || []).includes(args.id)) {
           suggestions.push({ kind: "rule", value: c, reason: "Repeating pattern detected", confidence: c.confidence ?? 50 });
         }
       }
-    } catch (e) {
+    } catch {
       // ignore detector errors
     }
 
@@ -639,7 +776,7 @@ export const listEntriesForUser = internalQuery({
     const start = args.startDate ?? 0;
     const end = args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000;
 
-    let rows: any[] = [];
+    let rows: EntryDoc[] = [];
     if (args.type) {
       rows = await ctx.db
         .query("entries")

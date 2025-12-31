@@ -4,15 +4,11 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
-import { centsToDollars, formatMoney } from "@/components/utils";
+import type { Doc } from "convex/_generated/dataModel";
+import { centsToDollars, formatMoney, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
-import { TimeRangePickerModal } from "@/src/components/timeRange/TimeRangePickerModal";
-import { resolveRange } from "@/src/lib/timeRange/resolve";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
-import { PresetSelectionKey, TimeRangeSelection } from "@/src/lib/timeRange/types";
 
 /**
  * Dashboard - Financial overview at a glance
@@ -24,71 +20,34 @@ import { PresetSelectionKey, TimeRangeSelection } from "@/src/lib/timeRange/type
  * 4. Quick actions
  */
 
-type Entry = {
-  _id: Id<"entries">;
-  type: "expense" | "income" | "transfer";
-  amountCents: number;
-  date: number;
-  category?: string;
-  bucket?: string;
-  note?: string;
-  excludeFromTotals?: boolean;
-  needsReview?: boolean;
-};
+type Entry = Doc<"entries">;
+type EditableEntry = Entry & { type: "expense" | "income" };
 
-const PRESET_LABELS: Record<PresetSelectionKey, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  this_week: "This Week",
-  last_week: "Last Week",
-  this_month: "This Month",
-  last_month: "Last Month",
-  this_year: "This Year",
-  last_year: "Last Year",
-};
-
-function formatShortDate(value: string): string {
-  const [y, m, d] = value.split("-").map(Number);
-  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
-  const now = new Date();
-  const includeYear = date.getFullYear() !== now.getFullYear();
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: includeYear ? "numeric" : undefined,
-  }).format(date);
-}
-
-function getSelectionLabel(selection: TimeRangeSelection): string {
-  if (selection.kind === "preset") {
-    return PRESET_LABELS[selection.key] ?? "Custom Range";
-  }
-  if (!selection.from || !selection.to) return "Custom Range";
-  return `Custom: ${formatShortDate(selection.from)}–${formatShortDate(selection.to)}`;
+function isEditableEntry(entry: Entry): entry is EditableEntry {
+  return entry.type === "expense" || entry.type === "income";
 }
 
 export default function DashboardPage() {
   const { setActiveTab } = useTabs();
-  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
-  const [selection, setSelection] = useState<TimeRangeSelection>({
-    kind: "preset",
-    key: "this_month",
-  });
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const label = useMemo(() => getSelectionLabel(selection), [selection]);
-  const resolvedRange = useMemo(
-    () => resolveRange(selection, new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone),
-    [selection]
-  );
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const [editingEntry, setEditingEntry] = useState<EditableEntry | null>(null);
+  
+  // Dashboard has its own independent time range (not linked to global)
+  // Default to "This Month" for a snapshot of current financial situation
+  const [dashboardPreset, setDashboardPreset] = useState<DateRangePreset>("month");
+  const [showPresetPicker, setShowPresetPicker] = useState(false);
+  
+  // Compute date range from dashboard's own preset
+  const { startDate, endDate, label } = useMemo(() => {
+    return getDateRangeFromPreset(dashboardPreset);
+  }, [dashboardPreset]);
 
-  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 1200 }) as Entry[] | undefined;
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Entry[] | undefined;
 
   const recentEntries = useMemo(() => {
     if (!entries) return [];
-    return [...entries]
-      .filter((entry) => entry.type !== "transfer")
+    return entries
+      .filter(isEditableEntry)
       .sort((a, b) => b.date - a.date)
       .slice(0, 8);
   }, [entries]);
@@ -100,9 +59,11 @@ export default function DashboardPage() {
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
-      if (e.type === "transfer") continue;
-      if (e.type === "income") income += e.amountCents;
-      else expense += e.amountCents;
+      if (e.type === "income") {
+        income += e.amountCents;
+      } else if (e.type === "expense") {
+        expense += e.amountCents;
+      }
     }
 
     const net = income - expense;
@@ -110,7 +71,6 @@ export default function DashboardPage() {
   }, [entries]);
 
   const reviewCount = inbox?.length ?? 0;
-  const reviewPreview = useMemo(() => (inbox ?? []).slice(0, 3), [inbox]);
 
   return (
     <div className="space-y-4 pb-4">
@@ -123,22 +83,62 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Dashboard</h1>
           </div>
-          <div className="flex items-center gap-3">
+          {/* Dashboard-specific time range picker (independent from global) */}
+          <div className="relative">
             <button
-              onClick={() => setPickerOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+              onClick={() => setShowPresetPicker(!showPresetPicker)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
               style={{
-                borderColor: "var(--border)",
-                backgroundColor: "var(--surface)",
+                backgroundColor: "var(--surface-2)",
+                border: "1px solid var(--border)",
                 color: "var(--text)",
               }}
-              aria-haspopup="dialog"
-              aria-expanded={pickerOpen}
             >
-              <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
-              <span className="max-w-[140px] truncate">{label}</span>
-              <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+              <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
+              <span>{label}</span>
+              <Lucide.ChevronDown className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
             </button>
+            
+            {showPresetPicker && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowPresetPicker(false)} 
+                />
+                <div
+                  className="absolute right-0 top-full mt-2 z-50 rounded-xl p-2 shadow-lg min-w-[160px]"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {(
+                    [
+                      { value: "today", label: "Today" },
+                      { value: "week", label: "This Week" },
+                      { value: "month", label: "This Month" },
+                      { value: "year", label: "This Year" },
+                    ] as { value: DateRangePreset; label: string }[]
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setDashboardPreset(option.value);
+                        setShowPresetPicker(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
+                      style={{
+                        backgroundColor: dashboardPreset === option.value ? "var(--accent-subtle)" : "transparent",
+                        color: dashboardPreset === option.value ? "var(--primary)" : "var(--text)",
+                        fontWeight: dashboardPreset === option.value ? 600 : 400,
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -238,20 +238,10 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-body font-medium" style={{ color: "var(--text)" }}>
-                Needs meaning
+                {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} to review
               </div>
               <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-                {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} to resolve
-              </div>
-              <div className="mt-2 space-y-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
-                {reviewPreview.map((entry: any) => (
-                  <div key={entry._id} className="truncate">
-                    {entry.merchant || entry.note || entry.category || entry.bucket || "Untitled"}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-2 text-[11px] font-semibold" style={{ color: "var(--warning)" }}>
-                Resolve now
+                Tap to categorize
               </div>
             </div>
             <Lucide.ChevronRight className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
@@ -358,20 +348,10 @@ export default function DashboardPage() {
         )}
       </SignedIn>
 
-      <TimeRangePickerModal
-        open={pickerOpen}
-        selection={selection}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(next) => {
-          setSelection(next);
-          setPickerOpen(false);
-        }}
-      />
-
       {/* Edit Modal */}
       {editingEntry && (
         <EditEntryModal
-          entry={editingEntry as any}
+          entry={editingEntry}
           onClose={() => setEditingEntry(null)}
         />
       )}

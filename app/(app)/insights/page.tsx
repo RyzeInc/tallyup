@@ -4,14 +4,11 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
-import { centsToDollars, CONTEXT_TAGS } from "@/components/utils";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
+import { centsToDollars } from "@/components/utils";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTabs } from "@/components/PersistentTabs";
@@ -37,12 +34,10 @@ import {
 type TypeFilter = "all" | "income" | "expense";
 
 interface Entry {
-  _id: Id<"entries">;
-  type: "expense" | "income" | "transfer";
+  _id: string;
+  type: "expense" | "income";
   category?: string;
   tags?: string[];
-  contextTags?: string[];
-  intentTags?: string[];
   note?: string;
   amountCents: number;
   date: number;
@@ -205,17 +200,12 @@ function KpiTooltip({
 export default function InsightsPage() {
   const router = useRouter();
   const { setActiveTab } = useTabs();
-  const { label, prevLabel, resolvedRange, previousRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
-  const { fromMs: prevFromMs, toMs: prevToMs } = toQueryArgs(previousRange);
-  const startDate = fromMs;
-  const endDate = toMs;
+  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
   
   // Filters
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNetOnly, setShowNetOnly] = useState(false);
-  const [lensSheetOpen, setLensSheetOpen] = useState(false);
   
   // Tooltip state
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
@@ -238,8 +228,8 @@ export default function InsightsPage() {
   }, [router, setActiveTab]);
 
   // Data
-  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 2000 }) as Entry[] | undefined;
-  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevFromMs, endDate: prevToMs, limit: 2000 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
+  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
 
   // Days in range
@@ -251,10 +241,9 @@ export default function InsightsPage() {
     if (!entries) return [];
     return entries.filter((e) => {
       if (e.excludeFromTotals) return false;
-      if (e.type === "transfer") return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
-        const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
+        const entryTags = e.tags ?? [];
         // OR logic: entry has at least one selected tag
         if (!selectedTags.some((t) => entryTags.includes(t))) return false;
       }
@@ -266,10 +255,9 @@ export default function InsightsPage() {
     if (!prevEntries) return [];
     return prevEntries.filter((e) => {
       if (e.excludeFromTotals) return false;
-      if (e.type === "transfer") return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
-        const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
+        const entryTags = e.tags ?? [];
         if (!selectedTags.some((t) => entryTags.includes(t))) return false;
       }
       return true;
@@ -308,13 +296,8 @@ export default function InsightsPage() {
         }
 
         // Tag breakdown
-        const combinedTags = [
-          ...(e.tags ?? []),
-          ...(e.contextTags ?? []),
-          ...(e.intentTags ?? []),
-        ];
-        if (combinedTags.length) {
-          for (const tag of combinedTags) {
+        if (e.tags?.length) {
+          for (const tag of e.tags) {
             tagSpend.set(tag, (tagSpend.get(tag) ?? 0) + e.amountCents);
           }
         } else {
@@ -322,7 +305,7 @@ export default function InsightsPage() {
         }
 
         // Reimbursable
-        if (combinedTags.includes("Reimbursable")) {
+        if (e.tags?.includes("Reimbursable")) {
           reimbursableOutstanding += e.amountCents;
         }
 
@@ -752,11 +735,6 @@ export default function InsightsPage() {
   // ─────────────────────────────────────────────────────────────
   // Toggle tag selection
   // ─────────────────────────────────────────────────────────────
-  function toggleTag(tag: string) {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  }
 
   // ─────────────────────────────────────────────────────────────
   // Render
@@ -767,12 +745,7 @@ export default function InsightsPage() {
       <PageHeader
         title="Insights"
         subtitle={`${label} at a glance`}
-        rightSlot={
-          <div className="flex items-center gap-2">
-            <TimeRangeBadge />
-            <TimeRangeControl />
-          </div>
-        }
+        rightSlot={<GlobalDateRangePicker showAllPresets />}
         compact
       />
 
@@ -1068,7 +1041,7 @@ export default function InsightsPage() {
                 >
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                     <div style={{ fontWeight: 500, color: "var(--text)" }}>Your bottom line</div>
-                    <div>The difference between what you earned and what you spent. A positive net means you're saving; a negative net means you're spending more than you make. This is the number that matters most for building wealth.</div>
+                    <div>The difference between what you earned and what you spent. A positive net means you&apos;re saving; a negative net means you&apos;re spending more than you make. This is the number that matters most for building wealth.</div>
                     <div style={{ marginTop: "4px", paddingTop: "4px", borderTop: "1px solid var(--border)" }}>
                       <span style={{ color: "var(--text-tertiary)" }}>{prevLabel}:</span>{" "}
                       <span style={{ fontWeight: 500, color: "var(--text)" }}>{prevComputed.net >= 0 ? "+" : ""}{centsToDollars(prevComputed.net)}</span>

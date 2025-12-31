@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 
 export default function Combobox({
   value,
@@ -23,8 +23,7 @@ export default function Combobox({
   const [input, setInput] = useState(value || "");
   const [activeIndex, setActiveIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => setInput(value || ""), [value]);
+  const listId = useId();
 
   const filtered = options.filter((o) => o.toLowerCase().includes((input || "").toLowerCase()));
 
@@ -50,10 +49,14 @@ export default function Combobox({
       <input
         role="combobox"
         aria-expanded={open}
+        aria-controls={listId}
         aria-autocomplete="list"
         value={input}
         placeholder={placeholder}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setInput(value || "");
+          setOpen(true);
+        }}
         onChange={(e) => {
           setInput(e.target.value);
           setOpen(true);
@@ -83,7 +86,7 @@ export default function Combobox({
       />
 
       {open && filtered.length > 0 && (
-        <ul className="absolute z-40 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-[var(--surface)]" style={{ borderColor: "var(--border)", boxShadow: "0 6px 18px rgba(0,0,0,0.08)" }}>
+        <ul id={listId} className="absolute z-40 mt-1 max-h-52 w-full overflow-auto rounded-lg border bg-[var(--surface)]" style={{ borderColor: "var(--border)", boxShadow: "0 6px 18px rgba(0,0,0,0.08)" }}>
           {filtered.map((opt, idx) => (
             <li
               key={opt + idx}

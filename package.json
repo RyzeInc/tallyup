@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest",
-    "pwa:generate-icons": "node scripts/generate-icons.js",
+    "pwa:generate-icons": "node scripts/generate-icons.mjs",
     "pwa:test": "npm run build && npm start"
   },
   "dependencies": {

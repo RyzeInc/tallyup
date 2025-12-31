@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import * as Lucide from "lucide-react";
 import { centsToDollars } from "@/components/utils";
 import { InfoTip, COMMON_TIPS } from "@/components/help/InfoTip";

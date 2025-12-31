@@ -4,15 +4,13 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import { formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useToast } from "@/components/ToastProvider";
 
 /**
@@ -33,6 +31,25 @@ interface BudgetCategory {
   isHardLimit?: boolean;
 }
 
+type EntryDoc = Doc<"entries">;
+
+type BudgetExplain = {
+  asOfDate?: number;
+};
+
+interface BudgetStatusSummary {
+  planId: string;
+  budgetCategoryId?: Id<"budgetCategories">;
+  budgetGroupId?: Id<"budgetGroups">;
+  budgetedCents: number;
+  spentCents: number;
+  availableCents: number;
+  paceExpectedCents: number;
+  paceDeltaCents: number;
+  projectedEndCents: number;
+  forecastRiskCents: number;
+}
+
 const DEFAULT_BUDGET_CATEGORIES = [
   { id: "housing", name: "Housing", icon: "🏠", description: "Rent, mortgage, property taxes", suggestedPercent: 30, matchCategories: ["rent", "mortgage", "housing"] },
   { id: "utilities", name: "Utilities", icon: "💡", description: "Electric, gas, water, internet, phone", suggestedPercent: 8, matchCategories: ["utilities", "electric", "gas", "water", "internet", "phone"] },
@@ -47,8 +64,7 @@ const DEFAULT_BUDGET_CATEGORIES = [
 ];
 
 export default function BudgetingPage() {
-  const { label, resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const { startDate, endDate, label } = useTimeRange();
   const toast = useToast();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -66,7 +82,22 @@ export default function BudgetingPage() {
   const [saving, setSaving] = useState(false);
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
-  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 2000, type: "expense" }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
+  const timezoneOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
+  const asOfDate = Date.now();
+  const budgetStatus = useQuery(api.budgetEngine.getBudgetStatus, {
+    rangeStart: startDate,
+    rangeEnd: endDate,
+    asOfDate,
+    timezoneOffsetMinutes,
+    rangeMode: "proratedBudget",
+  }) as { summary: BudgetStatusSummary[]; explain: BudgetExplain } | undefined;
+
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }
 
   const createBudgetCategory = useMutation(api.budgets.createBudgetCategory);
   const updateBudgetCategory = useMutation(api.budgets.updateBudgetCategory);
@@ -82,21 +113,14 @@ export default function BudgetingPage() {
     return map;
   }, [entries]);
 
-  const budgetSpending = useMemo(() => {
-    if (!budgetCategories) return new Map<string, number>();
-    const map = new Map<string, number>();
-    for (const budget of budgetCategories) {
-      let spent = 0;
-      const matchCats = budget.matchCategories ?? [budget.name.toLowerCase()];
-      for (const [category, amount] of categorySpending.entries()) {
-        if (matchCats.some(m => category.includes(m.toLowerCase()))) {
-          spent += amount;
-        }
-      }
-      map.set(budget._id, spent);
+  const statusByCategory = useMemo(() => {
+    const map = new Map<string, BudgetStatusSummary>();
+    if (!budgetStatus?.summary) return map;
+    for (const s of budgetStatus.summary) {
+      if (s.budgetCategoryId) map.set(s.budgetCategoryId, s);
     }
     return map;
-  }, [budgetCategories, categorySpending]);
+  }, [budgetStatus]);
 
   const totalSpent = useMemo(() => {
     let total = 0;
@@ -112,14 +136,16 @@ export default function BudgetingPage() {
     if (!budgetCategories || budgetCategories.length === 0) return { onTrack: 0, warning: 0, overspent: 0 };
     let onTrack = 0, warning = 0, overspent = 0;
     for (const budget of budgetCategories) {
-      const spent = budgetSpending.get(budget._id) ?? 0;
-      const ratio = spent / budget.budgetAmountCents;
-      if (ratio > 1) overspent++;
-      else if (ratio > 0.8) warning++;
+      const status = statusByCategory.get(budget._id);
+      const budgeted = status?.budgetedCents ?? budget.budgetAmountCents;
+      const projected = status?.projectedEndCents ?? 0;
+      const paceDelta = status?.paceDeltaCents ?? 0;
+      if (projected > budgeted) overspent++;
+      else if (paceDelta > 0) warning++;
       else onTrack++;
     }
     return { onTrack, warning, overspent };
-  }, [budgetCategories, budgetSpending]);
+  }, [budgetCategories, statusByCategory]);
 
   function resetCreateForm() {
     setCreateStep("choose");
@@ -157,8 +183,8 @@ export default function BudgetingPage() {
       toast.success("Budgets created!");
       setShowCreate(false);
       resetCreateForm();
-    } catch (e: any) {
-      toast.error("Failed to create budgets", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to create budgets", { description: errorMessage(e) });
     } finally {
       setCreating(false);
     }
@@ -177,8 +203,8 @@ export default function BudgetingPage() {
       });
       toast.success("Budget updated");
       setEditingBudget(null);
-    } catch (e: any) {
-      toast.error("Failed to update", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to update", { description: errorMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -191,8 +217,8 @@ export default function BudgetingPage() {
       await updateBudgetCategory({ id: editingBudget._id, archived: true });
       toast.success("Budget archived");
       setEditingBudget(null);
-    } catch (e: any) {
-      toast.error("Failed to archive", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to archive", { description: errorMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -211,9 +237,8 @@ export default function BudgetingPage() {
         }
       />
 
-      <div className="flex items-center justify-end gap-2">
-        <TimeRangeBadge />
-        <TimeRangeControl />
+      <div className="flex items-center justify-end">
+        <GlobalDateRangePicker />
       </div>
 
       <SignedOut>
@@ -223,7 +248,14 @@ export default function BudgetingPage() {
       <SignedIn>
         {budgetCategories && budgetCategories.length > 0 && (
           <div className="rounded-2xl p-4" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
-            <div className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>Budget Health ({label})</div>
+            <div className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+              Budget Health ({label})
+              {budgetStatus?.explain?.asOfDate && (
+                <span className="ml-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
+                  As of {new Date(budgetStatus.explain.asOfDate).toLocaleDateString()}
+                </span>
+              )}
+            </div>
             <div className="flex gap-4">
               <div className="flex-1 text-center">
                 <div className="text-2xl font-bold" style={{ color: "var(--success)" }}>{budgetHealth.onTrack}</div>
@@ -246,11 +278,15 @@ export default function BudgetingPage() {
         ) : (
           <div className="space-y-3">
             {budgetCategories.map((budget) => {
-              const spent = budgetSpending.get(budget._id) ?? 0;
-              const remaining = budget.budgetAmountCents - spent;
-              const percentage = (spent / budget.budgetAmountCents) * 100;
-              const isOverBudget = spent > budget.budgetAmountCents;
-              const isWarning = percentage > 80 && !isOverBudget;
+              const status = statusByCategory.get(budget._id);
+              const budgeted = status?.budgetedCents ?? budget.budgetAmountCents;
+              const spent = status?.spentCents ?? 0;
+              const available = status?.availableCents ?? (budgeted - spent);
+              const paceDelta = status?.paceDeltaCents ?? 0;
+              const projectedEnd = status?.projectedEndCents ?? spent;
+              const percentage = budgeted > 0 ? (spent / budgeted) * 100 : 0;
+              const isOverBudget = projectedEnd > budgeted;
+              const isWarning = paceDelta > 0 && !isOverBudget;
               return (
                 <button key={budget._id} onClick={() => openEdit(budget)} className="w-full text-left rounded-xl p-4 transition-colors hover:opacity-90" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
                   <div className="flex items-center justify-between mb-2">
@@ -260,12 +296,32 @@ export default function BudgetingPage() {
                       {budget.rolloverEnabled && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--primary-subtle)", color: "var(--primary)" }}>Rollover</span>}
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{formatMoney(spent)} / {formatMoney(budget.budgetAmountCents)}</div>
-                      <div className="text-xs" style={{ color: isOverBudget ? "var(--danger)" : isWarning ? "var(--warning)" : "var(--success)" }}>{isOverBudget ? `${formatMoney(Math.abs(remaining))} over` : `${formatMoney(remaining)} left`}</div>
+                      <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{formatMoney(spent)} / {formatMoney(budgeted)}</div>
+                      <div className="text-xs" style={{ color: isOverBudget ? "var(--danger)" : isWarning ? "var(--warning)" : "var(--success)" }}>
+                        {isOverBudget ? `${formatMoney(Math.abs(projectedEnd - budgeted))} projected over` : `${formatMoney(available)} available`}
+                      </div>
                     </div>
                   </div>
                   <div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-2)" }}>
                     <div className="h-full rounded-full transition-all duration-300" style={{ width: `${Math.min(percentage, 100)}%`, backgroundColor: isOverBudget ? "var(--danger)" : isWarning ? "var(--warning)" : "var(--success)" }} />
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <div style={{ color: "var(--text-tertiary)" }}>Available</div>
+                      <div className="font-medium tabular-nums" style={{ color: "var(--text)" }}>{formatMoney(available)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: "var(--text-tertiary)" }}>Pace</div>
+                      <div className="font-medium tabular-nums" style={{ color: paceDelta > 0 ? "var(--warning)" : "var(--success)" }}>
+                        {paceDelta > 0 ? `${formatMoney(paceDelta)} over` : `${formatMoney(Math.abs(paceDelta))} under`}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: "var(--text-tertiary)" }}>Forecast</div>
+                      <div className="font-medium tabular-nums" style={{ color: projectedEnd > budgeted ? "var(--danger)" : "var(--text)" }}>
+                        {formatMoney(projectedEnd)}
+                      </div>
+                    </div>
                   </div>
                 </button>
               );
@@ -353,7 +409,20 @@ export default function BudgetingPage() {
                     {DEFAULT_BUDGET_CATEGORIES.map((cat) => {
                       const isSelected = selectedCategories.has(cat.id);
                       return (
-                        <button key={cat.id} onClick={() => { const updated = new Set(selectedCategories); isSelected ? updated.delete(cat.id) : updated.add(cat.id); setSelectedCategories(updated); }} className="w-full flex items-center gap-3 p-3 rounded-xl text-left" style={{ backgroundColor: isSelected ? "var(--primary-subtle)" : "var(--surface-2)", border: `1.5px solid ${isSelected ? "var(--primary)" : "var(--border)"}` }}>
+                        <button
+                          key={cat.id}
+                          onClick={() => {
+                            const updated = new Set(selectedCategories);
+                            if (isSelected) {
+                              updated.delete(cat.id);
+                            } else {
+                              updated.add(cat.id);
+                            }
+                            setSelectedCategories(updated);
+                          }}
+                          className="w-full flex items-center gap-3 p-3 rounded-xl text-left"
+                          style={{ backgroundColor: isSelected ? "var(--primary-subtle)" : "var(--surface-2)", border: `1.5px solid ${isSelected ? "var(--primary)" : "var(--border)"}` }}
+                        >
                           <span className="text-lg">{cat.icon}</span>
                           <div className="flex-1"><div className="text-sm font-medium" style={{ color: "var(--text)" }}>{cat.name}</div><div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{cat.description}</div></div>
                           <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: isSelected ? "var(--primary)" : "var(--surface)", border: isSelected ? "none" : "2px solid var(--border)" }}>{isSelected && <Lucide.Check className="h-3 w-3 text-white" />}</div>

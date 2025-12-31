@@ -1,13 +1,14 @@
 "use client";
 
 import { centsToDollars } from "./utils";
+import type { Doc } from "convex/_generated/dataModel";
 
 export default function EntryCard({
   entry,
   rightSlot,
   children,
 }: {
-  entry: any;
+  entry: Doc<"entries">;
   rightSlot?: React.ReactNode;
   children?: React.ReactNode;
 }) {

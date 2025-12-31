@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { useTabs } from "./PersistentTabs";
 import { useQuickLog } from "./log/QuickLogProvider";
@@ -48,7 +49,7 @@ export default function TopNav() {
   const [showRightFade, setShowRightFade] = useState(true);
 
   // Get review count for badge
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
   const tabs: NavTab[] = [

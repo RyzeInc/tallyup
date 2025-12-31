@@ -76,6 +76,12 @@ export default function GoalsPage() {
   const updateGoalMutation = useMutation(api.goals.updateGoal);
   const updateGoalProgress = useMutation(api.goals.updateGoalProgress);
 
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }
+
   const activeGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "active"), [goals]);
   const completedGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "completed"), [goals]);
 
@@ -132,8 +138,8 @@ export default function GoalsPage() {
       });
       toast.success("Goal created!");
       resetCreate();
-    } catch (e: any) {
-      toast.error("Failed to create goal", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to create goal", { description: errorMessage(e) });
     } finally {
       setCreating(false);
     }
@@ -155,8 +161,8 @@ export default function GoalsPage() {
       }
       toast.success("Goal updated");
       setEditingGoal(null);
-    } catch (e: any) {
-      toast.error("Failed to update goal", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to update goal", { description: errorMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -169,8 +175,8 @@ export default function GoalsPage() {
       await updateGoalMutation({ id: editingGoal._id, status: "completed" });
       toast.success("Goal completed! 🎉");
       setEditingGoal(null);
-    } catch (e: any) {
-      toast.error("Failed to complete goal", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to complete goal", { description: errorMessage(e) });
     } finally {
       setSaving(false);
     }
@@ -183,8 +189,8 @@ export default function GoalsPage() {
       await updateGoalMutation({ id: editingGoal._id, status: "abandoned" });
       toast.success("Goal archived");
       setEditingGoal(null);
-    } catch (e: any) {
-      toast.error("Failed to archive goal", { description: e?.message });
+    } catch (e: unknown) {
+      toast.error("Failed to archive goal", { description: errorMessage(e) });
     } finally {
       setSaving(false);
     }

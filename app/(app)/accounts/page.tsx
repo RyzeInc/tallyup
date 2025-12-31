@@ -1,159 +1,229 @@
 "use client";
 
-import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import type { Id } from "convex/_generated/dataModel";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
-import * as Lucide from "lucide-react";
-import PageHeader from "@/components/ui/PageHeader";
-import EmptyState from "@/components/ui/EmptyState";
+import type { Id } from "convex/_generated/dataModel";
 import { formatMoney } from "@/components/utils";
+import * as Lucide from "lucide-react";
+import EmptyState from "@/components/ui/EmptyState";
+import PageHeader from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ToastProvider";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 
-type AccountType =
-  | "credit"
-  | "checking"
-  | "savings"
-  | "investment"
-  | "loan"
-  | "business"
-  | "other";
+/**
+ * Accounts Management Page
+ * 
+ * Features:
+ * - List all accounts (checking, savings, credit cards, etc.)
+ * - Create new accounts
+ * - Edit account details
+ * - Update balances
+ * - Hide/close accounts
+ */
 
-interface AccountSnapshot {
-  balance: number;
-  asOf: number;
-}
+type AccountType = "checking" | "savings" | "credit_card" | "investment" | "loan" | "cash" | "manual";
+type AccountStatus = "active" | "hidden" | "closed";
+type Ownership = "personal" | "shared" | "business";
 
-interface AccountRow {
+interface Account {
   _id: Id<"accounts">;
   name: string;
-  type: AccountType;
-  institutionName?: string;
-  logoKey?: string;
-  last4?: string;
-  creditLimit?: number;
-  showInTransactionSelector?: boolean;
-  latestSnapshot?: AccountSnapshot | null;
-  changePct?: number | null;
+  accountType: AccountType;
+  institution?: string;
+  balanceCurrentCents?: number;
+  balanceAvailableCents?: number;
+  balanceAsOf?: number;
+  currency?: string;
+  ownership?: Ownership;
+  status: AccountStatus;
+  creditLimitCents?: number;
+  interestRatePercent?: number;
+  icon?: string;
+  color?: string;
+  displayOrder?: number;
+  excludeFromNetWorth?: boolean;
 }
 
-const SECTION_ORDER: {
-  key: AccountType;
-  title: string;
-  addLabel: string;
-  emptyLabel: string;
-}[] = [
-  { key: "credit", title: "Credit", addLabel: "Credit", emptyLabel: "No accounts yet" },
-  { key: "checking", title: "Checking", addLabel: "Checking", emptyLabel: "No accounts yet" },
-  { key: "savings", title: "Savings", addLabel: "Savings", emptyLabel: "No accounts yet" },
-  { key: "investment", title: "Investments", addLabel: "Investments", emptyLabel: "No accounts yet" },
-  { key: "loan", title: "Loans & Debt", addLabel: "Loan", emptyLabel: "No accounts yet" },
-  { key: "business", title: "Business Accounts", addLabel: "Business", emptyLabel: "No accounts yet" },
-  { key: "other", title: "Other", addLabel: "Other", emptyLabel: "No accounts yet" },
-];
-
-const TYPE_LABELS: Record<AccountType, string> = {
-  credit: "Balance",
-  checking: "Available",
-  savings: "Available",
-  investment: "Current",
-  loan: "Owed",
-  business: "Available",
-  other: "Balance",
+const ACCOUNT_TYPE_CONFIG: Record<AccountType, { label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; color: string }> = {
+  checking: { label: "Checking", icon: Lucide.Landmark, color: "#2F6F85" },
+  savings: { label: "Savings", icon: Lucide.PiggyBank, color: "#10B981" },
+  credit_card: { label: "Credit Card", icon: Lucide.CreditCard, color: "#F59E0B" },
+  investment: { label: "Investment", icon: Lucide.TrendingUp, color: "#6F9EA8" },
+  loan: { label: "Loan", icon: Lucide.Percent, color: "#EF4444" },
+  cash: { label: "Cash", icon: Lucide.Banknote, color: "#84CC16" },
+  manual: { label: "Manual", icon: Lucide.Edit3, color: "#8B5CF6" },
 };
 
-function formatPercent(value?: number | null) {
-  if (value === null || value === undefined || Number.isNaN(value)) return "—";
-  const pct = value * 100;
-  const sign = pct > 0 ? "+" : "";
-  return `${sign}${pct.toFixed(1)}%`;
-}
-
-function daysAgo(ts?: number | null) {
-  if (!ts) return null;
-  const diff = Date.now() - ts;
-  return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)));
-}
-
-function getMonogram(name: string) {
-  const trimmed = name.trim();
-  if (!trimmed) return "A";
-  return trimmed.slice(0, 2).toUpperCase();
-}
+const OWNERSHIP_OPTIONS: { value: Ownership; label: string }[] = [
+  { value: "personal", label: "Personal" },
+  { value: "shared", label: "Shared" },
+  { value: "business", label: "Business" },
+];
 
 export default function AccountsPage() {
   const toast = useToast();
-  const { resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
-  const [openSections, setOpenSections] = useState<Record<AccountType, boolean>>({
-    credit: true,
-    checking: true,
-    savings: true,
-    investment: true,
-    loan: true,
-    business: true,
-    other: true,
-  });
-  const [showUpdateSheet, setShowUpdateSheet] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
-  const overview = useQuery(api.accounts.getAccountsOverview, {
-    startDate: fromMs,
-    endDate: toMs,
-  }) as { accounts: AccountRow[]; totals: any } | undefined;
+  // Queries
+  const accounts = useQuery(api.accounts.listAccounts, {
+    includeHidden: showHidden,
+    includeClosed: showClosed,
+  }) as Account[] | undefined;
 
-  const accounts = overview?.accounts ?? [];
-  const totals = overview?.totals;
+  // Mutations
+  const createAccount = useMutation(api.accounts.createAccount);
+  const updateAccount = useMutation(api.accounts.updateAccount);
 
-  const grouped = useMemo(() => {
-    const next: Record<AccountType, AccountRow[]> = {
-      credit: [],
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }
+
+  // Create form state
+  const [createName, setCreateName] = useState("");
+  const [createType, setCreateType] = useState<AccountType>("checking");
+  const [createInstitution, setCreateInstitution] = useState("");
+  const [createBalance, setCreateBalance] = useState("");
+  const [createOwnership, setCreateOwnership] = useState<Ownership>("personal");
+  const [createCreditLimit, setCreateCreditLimit] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  // Edit form state
+  const [editName, setEditName] = useState("");
+  const [editInstitution, setEditInstitution] = useState("");
+  const [editBalance, setEditBalance] = useState("");
+  const [editOwnership, setEditOwnership] = useState<Ownership>("personal");
+  const [editStatus, setEditStatus] = useState<AccountStatus>("active");
+  const [editCreditLimit, setEditCreditLimit] = useState("");
+  const [editExcludeFromNetWorth, setEditExcludeFromNetWorth] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Group accounts by type
+  const groupedAccounts = useMemo(() => {
+    if (!accounts) return {};
+    const groups: Record<AccountType, Account[]> = {
       checking: [],
       savings: [],
+      credit_card: [],
       investment: [],
       loan: [],
-      business: [],
-      other: [],
+      cash: [],
+      manual: [],
     };
-    for (const account of accounts) {
-      next[account.type].push(account);
+    for (const acc of accounts) {
+      groups[acc.accountType].push(acc);
     }
-    return next;
+    return groups;
   }, [accounts]);
 
-  const handleToggleSection = (type: AccountType) => {
-    setOpenSections((prev) => ({ ...prev, [type]: !prev[type] }));
-  };
+  // Calculate totals
+  const totals = useMemo(() => {
+    if (!accounts) return { assets: 0, liabilities: 0, netWorth: 0 };
+    let assets = 0;
+    let liabilities = 0;
+    for (const acc of accounts) {
+      if (acc.excludeFromNetWorth || acc.status !== "active") continue;
+      const balance = acc.balanceCurrentCents ?? 0;
+      if (acc.accountType === "credit_card" || acc.accountType === "loan") {
+        liabilities += Math.abs(balance);
+      } else {
+        assets += balance;
+      }
+    }
+    return { assets, liabilities, netWorth: assets - liabilities };
+  }, [accounts]);
+
+  function resetCreateForm() {
+    setCreateName("");
+    setCreateType("checking");
+    setCreateInstitution("");
+    setCreateBalance("");
+    setCreateOwnership("personal");
+    setCreateCreditLimit("");
+  }
+
+  function openEdit(account: Account) {
+    setEditingAccount(account);
+    setEditName(account.name);
+    setEditInstitution(account.institution ?? "");
+    setEditBalance(account.balanceCurrentCents ? (account.balanceCurrentCents / 100).toFixed(2) : "");
+    setEditOwnership(account.ownership ?? "personal");
+    setEditStatus(account.status);
+    setEditCreditLimit(account.creditLimitCents ? (account.creditLimitCents / 100).toFixed(2) : "");
+    setEditExcludeFromNetWorth(account.excludeFromNetWorth ?? false);
+  }
+
+  async function handleCreate() {
+    if (!createName.trim()) {
+      toast.error("Account name is required");
+      return;
+    }
+    setCreating(true);
+    try {
+      const balanceCents = createBalance ? Math.round(parseFloat(createBalance) * 100) : undefined;
+      const creditLimitCents = createCreditLimit ? Math.round(parseFloat(createCreditLimit) * 100) : undefined;
+      await createAccount({
+        name: createName.trim(),
+        accountType: createType,
+        institution: createInstitution.trim() || undefined,
+        balanceCurrentCents: balanceCents,
+        ownership: createOwnership,
+        creditLimitCents,
+      });
+      toast.success("Account created");
+      setShowCreate(false);
+      resetCreateForm();
+    } catch (e: unknown) {
+      toast.error("Failed to create account", { description: errorMessage(e) });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleSaveEdit() {
+    if (!editingAccount) return;
+    setSaving(true);
+    try {
+      const balanceCents = editBalance ? Math.round(parseFloat(editBalance) * 100) : undefined;
+      const creditLimitCents = editCreditLimit ? Math.round(parseFloat(editCreditLimit) * 100) : undefined;
+      await updateAccount({
+        id: editingAccount._id,
+        name: editName.trim() || undefined,
+        institution: editInstitution.trim() || undefined,
+        balanceCurrentCents: balanceCents,
+        ownership: editOwnership,
+        status: editStatus,
+        creditLimitCents,
+        excludeFromNetWorth: editExcludeFromNetWorth,
+      });
+      toast.success("Account updated");
+      setEditingAccount(null);
+    } catch (e: unknown) {
+      toast.error("Failed to update account", { description: errorMessage(e) });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="space-y-4 pb-4">
       <PageHeader
         title="Accounts"
-        subtitle="Balances stay manual-first and always in sync."
+        subtitle="Manage your financial accounts"
         rightSlot={
-          <div className="flex items-center gap-2">
-            <TimeRangeControl />
-            <button
-              onClick={() => setShowUpdateSheet(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-              style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
-            >
-              <Lucide.RefreshCw className="h-4 w-4" />
-              Update
-            </button>
-            <Link
-              href="/accounts/add"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-              style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
-            >
-              <Lucide.Plus className="h-4 w-4" />
-              Add
-            </Link>
-          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+            style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+          >
+            <Lucide.Plus className="h-4 w-4" />
+            Add Account
+          </button>
         }
       />
 
@@ -161,7 +231,7 @@ export default function AccountsPage() {
         <EmptyState
           icon={<Lucide.LogIn className="h-7 w-7" style={{ color: "var(--text-tertiary)" }} />}
           title="Sign in to manage accounts"
-          subtitle="Track balances manually while staying ready for future integrations."
+          subtitle="Track your bank accounts, credit cards, and more."
           action={
             <SignInButton mode="modal">
               <button
@@ -176,400 +246,495 @@ export default function AccountsPage() {
       </SignedOut>
 
       <SignedIn>
-        {/* Overview Card */}
-        <div className="rounded-2xl p-4 space-y-4" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <div className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
-                Net Worth
-              </div>
-              <div className="text-3xl font-bold mt-1" style={{ color: "var(--text)" }}>
-                {formatMoney(totals?.netWorth ?? 0)}
-              </div>
-              <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-                As of {totals?.asOf ? new Date(totals.asOf).toLocaleString() : "—"}
-              </div>
-            </div>
+        {/* Net Worth Summary */}
+        <div
+          className="rounded-2xl p-4"
+          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <div className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+            Net Worth
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="rounded-xl p-3" style={{ backgroundColor: "var(--surface-2)" }}>
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
-                Assets
-              </div>
-              <div className="text-xl font-semibold mt-1" style={{ color: "var(--success)" }}>
-                {formatMoney(totals?.assets ?? 0)}
-              </div>
-              <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-                {formatPercent(totals?.assetsChangePct)}
-                {totals?.assetsChangePct === null && (
-                  <span className="ml-2" style={{ color: "var(--text-tertiary)" }}>
-                    Add another update to see change.
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="rounded-xl p-3" style={{ backgroundColor: "var(--surface-2)" }}>
-              <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-tertiary)" }}>
-                Debt
-              </div>
-              <div className="text-xl font-semibold mt-1" style={{ color: "var(--danger)" }}>
-                {formatMoney(totals?.debt ?? 0)}
-              </div>
-              <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-                {formatPercent(totals?.debtChangePct)}
-                {totals?.debtChangePct === null && (
-                  <span className="ml-2" style={{ color: "var(--text-tertiary)" }}>
-                    Add another update to see change.
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sections */}
-        <div className="space-y-4">
-          {SECTION_ORDER.map((section) => {
-            const sectionAccounts = grouped[section.key] ?? [];
-            const sectionTotal = sectionAccounts.reduce((sum, account) => {
-              const balance = account.latestSnapshot?.balance ?? 0;
-              const value = section.key === "credit" || section.key === "loan" ? Math.abs(balance) : balance;
-              return sum + value;
-            }, 0);
-
-            const isOpen = openSections[section.key];
-
-            return (
-              <div key={section.key} className="rounded-2xl" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
-                <button
-                  type="button"
-                  onClick={() => handleToggleSection(section.key)}
-                  className="w-full flex items-center justify-between px-4 py-3"
-                >
-                  <div className="flex items-center gap-2">
-                    {isOpen ? (
-                      <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
-                    ) : (
-                      <Lucide.ChevronRight className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
-                    )}
-                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                      {section.title}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                      {formatMoney(sectionTotal)}
-                    </span>
-                    <Link
-                      href={`/accounts/add?type=${section.key}`}
-                      className="text-xs font-medium px-2 py-1 rounded-full"
-                      style={{ backgroundColor: "var(--surface-2)", color: "var(--text-secondary)" }}
-                    >
-                      Add
-                    </Link>
-                  </div>
-                </button>
-
-                {isOpen && (
-                  <div className="px-4 pb-4 space-y-2">
-                    {sectionAccounts.length === 0 ? (
-                      <div
-                        className="border border-dashed rounded-xl p-4 text-center"
-                        style={{ borderColor: "var(--border)", color: "var(--text-tertiary)" }}
-                      >
-                        <div className="text-sm font-medium mb-2">{section.emptyLabel}</div>
-                        <Link
-                          href={`/accounts/add?type=${section.key}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium"
-                          style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
-                        >
-                          <Lucide.Plus className="h-3 w-3" />
-                          Add {section.addLabel}
-                        </Link>
-                      </div>
-                    ) : (
-                      sectionAccounts.map((account) => (
-                        <AccountCard key={account._id} account={account} />
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </SignedIn>
-
-      {showUpdateSheet && (
-        <UpdateBalancesSheet
-          accounts={accounts}
-          grouped={grouped}
-          onClose={() => setShowUpdateSheet(false)}
-          toast={toast}
-        />
-      )}
-    </div>
-  );
-}
-
-function AccountCard({ account }: { account: AccountRow }) {
-  const latest = account.latestSnapshot;
-  const balance = latest?.balance ?? null;
-  const days = daysAgo(latest?.asOf);
-  const isDebt = account.type === "credit" || account.type === "loan";
-  const staleThreshold = account.type === "credit" || account.type === "checking" || account.type === "investment" ? 7 : 30;
-  const isStale = days !== null && days > staleThreshold;
-  const subLabel = account.institutionName || account.last4 ? [account.institutionName, account.last4].filter(Boolean).join(" • ") : null;
-
-  const utilization = account.type === "credit" && account.creditLimit && balance !== null
-    ? Math.round((Math.abs(balance) / account.creditLimit) * 100)
-    : null;
-
-  return (
-    <Link
-      href={`/accounts/${account._id}`}
-      className="block rounded-xl p-3 transition-colors"
-      style={{
-        backgroundColor: isStale ? "var(--warning-subtle)" : "var(--surface-2)",
-        border: `1px solid ${isStale ? "var(--warning-subtle)" : "var(--border)"}`,
-      }}
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="relative h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            {account.logoKey && (
-              <img
-                src={account.logoKey}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            )}
-            <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-              {getMonogram(account.institutionName ?? account.name)}
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-bold" style={{ color: "var(--text)" }}>
+              {formatMoney(totals.netWorth)}
             </span>
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold truncate" style={{ color: "var(--text)" }}>
-              {account.name}
+          <div className="flex gap-4 mt-3 text-sm">
+            <div>
+              <span style={{ color: "var(--text-secondary)" }}>Assets: </span>
+              <span style={{ color: "var(--success)" }}>{formatMoney(totals.assets)}</span>
             </div>
-            {subLabel && (
-              <div className="text-xs truncate" style={{ color: "var(--text-tertiary)" }}>
-                {subLabel}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-            {TYPE_LABELS[account.type]}
-          </div>
-          <div className="text-sm font-semibold" style={{ color: isDebt ? "var(--danger)" : "var(--text)" }}>
-            {balance === null ? "—" : formatMoney(balance)}
-          </div>
-        </div>
-        <div className="text-right min-w-[72px]">
-          <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-            {account.type === "credit" ? "Utilized" : "Change"}
-          </div>
-          <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-            {account.type === "credit"
-              ? utilization !== null ? `${utilization}%` : "—"
-              : formatPercent(account.changePct)}
-          </div>
-        </div>
-      </div>
-      <div className="mt-2 text-xs" style={{ color: isStale ? "var(--warning)" : "var(--text-tertiary)" }}>
-        Updated {days ?? 0} days ago
-      </div>
-    </Link>
-  );
-}
-
-function UpdateBalancesSheet({
-  accounts,
-  grouped,
-  onClose,
-  toast,
-}: {
-  accounts: AccountRow[];
-  grouped: Record<AccountType, AccountRow[]>;
-  onClose: () => void;
-  toast: any;
-}) {
-  const addSnapshots = useMutation(api.accounts.addAccountSnapshots);
-  const [saving, setSaving] = useState(false);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  const orderedAccounts = useMemo(() => {
-    const all: AccountRow[] = [];
-    SECTION_ORDER.forEach((section) => {
-      all.push(...(grouped[section.key] ?? []));
-    });
-    return all;
-  }, [grouped]);
-
-  const handleChange = (id: string, value: string) => {
-    setValues((prev) => ({ ...prev, [id]: value }));
-  };
-
-  const focusNext = (currentId: string) => {
-    const index = orderedAccounts.findIndex((acc) => acc._id === currentId);
-    if (index === -1) return;
-    const next = orderedAccounts[index + 1];
-    if (next) {
-      inputRefs.current[next._id]?.focus();
-    }
-  };
-
-  const handleSave = async () => {
-    const updates = orderedAccounts
-      .map((acc) => {
-        const raw = values[acc._id] ?? "";
-        if (!raw.trim()) return null;
-        const nextValue = Math.round(parseFloat(raw) * 100);
-        if (!Number.isFinite(nextValue)) return null;
-        if (acc.latestSnapshot?.balance === nextValue) return null;
-        return { accountId: acc._id, balance: nextValue };
-      })
-      .filter(Boolean) as { accountId: Id<"accounts">; balance: number }[];
-
-    if (updates.length === 0) {
-      toast.error("Enter at least one balance");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await addSnapshots({ updates, asOf: Date.now() });
-      toast.success("Balances updated");
-      onClose();
-    } catch (e: any) {
-      toast.error("Failed to update balances", { description: e?.message });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div
-        className="relative w-full sm:max-w-xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5"
-        style={{ backgroundColor: "var(--surface)" }}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-              Update Balances
-            </h2>
-            <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
-              One timestamp applies to all edited rows.
+            <div>
+              <span style={{ color: "var(--text-secondary)" }}>Liabilities: </span>
+              <span style={{ color: "var(--danger)" }}>{formatMoney(totals.liabilities)}</span>
             </div>
           </div>
-          <button onClick={onClose}>
-            <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+        </div>
+
+        {/* Filter toggles */}
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setShowHidden(!showHidden)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showHidden ? "ring-2 ring-offset-1" : ""
+            }`}
+            style={{
+              backgroundColor: showHidden ? "var(--primary-subtle)" : "var(--surface-2)",
+              color: showHidden ? "var(--primary)" : "var(--text-secondary)",
+            }}
+          >
+            <Lucide.EyeOff className="h-3 w-3 inline mr-1" />
+            Show Hidden
+          </button>
+          <button
+            onClick={() => setShowClosed(!showClosed)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              showClosed ? "ring-2 ring-offset-1" : ""
+            }`}
+            style={{
+              backgroundColor: showClosed ? "var(--primary-subtle)" : "var(--surface-2)",
+              color: showClosed ? "var(--primary)" : "var(--text-secondary)",
+            }}
+          >
+            <Lucide.Archive className="h-3 w-3 inline mr-1" />
+            Show Closed
           </button>
         </div>
 
-        <div className="space-y-4">
-          {SECTION_ORDER.map((section) => {
-            const sectionAccounts = grouped[section.key] ?? [];
-            if (sectionAccounts.length === 0) return null;
-            return (
-              <div key={section.key} className="space-y-2">
-                <div className="text-xs font-semibold uppercase" style={{ color: "var(--text-tertiary)" }}>
-                  {section.title}
-                </div>
-                {sectionAccounts.map((account) => {
-                  const updatedAt = account.latestSnapshot?.asOf;
-                  return (
-                    <div
-                      key={account._id}
-                      className="flex items-center gap-3 rounded-xl p-3"
-                      style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)" }}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div
-                          className="relative h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden"
-                          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-                        >
-                          {account.logoKey && (
-                            <img
-                              src={account.logoKey}
-                              alt=""
-                              className="absolute inset-0 h-full w-full object-cover"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          )}
-                          <span className="text-xs font-semibold" style={{ color: "var(--text)" }}>
-                            {getMonogram(account.institutionName ?? account.name)}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium truncate" style={{ color: "var(--text)" }}>
-                            {account.name}
-                          </div>
-                          <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                            Last updated {updatedAt ? new Date(updatedAt).toLocaleDateString() : "—"}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="w-32">
-                        <input
-                          ref={(el) => {
-                            inputRefs.current[account._id] = el;
-                          }}
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={values[account._id] ?? ""}
-                          onChange={(e) => handleChange(account._id, e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              focusNext(account._id);
-                            }
-                          }}
-                          className="w-full px-3 py-2 rounded-lg text-sm"
-                          style={{ backgroundColor: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)" }}
-                        />
-                      </div>
+        {/* Account Groups */}
+        {accounts && accounts.length === 0 ? (
+          <EmptyState
+            icon={<Lucide.Landmark className="h-7 w-7" style={{ color: "var(--text-tertiary)" }} />}
+            title="No accounts yet"
+            subtitle="Add your first account to start tracking balances."
+            action={
+              <button
+                onClick={() => setShowCreate(true)}
+                className="px-4 py-2 rounded-xl text-sm font-medium"
+                style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+              >
+                Add Account
+              </button>
+            }
+          />
+        ) : (
+          <div className="space-y-4">
+            {(Object.entries(groupedAccounts) as [AccountType, Account[]][])
+              .filter(([, accs]) => accs.length > 0)
+              .map(([type, accs]) => {
+                const config = ACCOUNT_TYPE_CONFIG[type];
+                const Icon = config.icon;
+                return (
+                  <div key={type}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className="h-4 w-4" style={{ color: config.color }} />
+                      <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+                        {config.label}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
+                    <div className="space-y-2">
+                      {accs.map((acc) => (
+                        <button
+                          key={acc._id}
+                          onClick={() => openEdit(acc)}
+                          className="w-full text-left rounded-xl p-4 transition-colors hover:opacity-90"
+                          style={{
+                            backgroundColor: "var(--surface)",
+                            border: "1px solid var(--border)",
+                            opacity: acc.status !== "active" ? 0.6 : 1,
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium" style={{ color: "var(--text)" }}>
+                                  {acc.name}
+                                </span>
+                                {acc.status === "hidden" && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--surface-2)", color: "var(--text-tertiary)" }}>
+                                    Hidden
+                                  </span>
+                                )}
+                                {acc.status === "closed" && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}>
+                                    Closed
+                                  </span>
+                                )}
+                              </div>
+                              {acc.institution && (
+                                <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+                                  {acc.institution}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <div
+                                className="font-semibold"
+                                style={{
+                                  color: acc.accountType === "credit_card" || acc.accountType === "loan"
+                                    ? "var(--danger)"
+                                    : "var(--text)",
+                                }}
+                              >
+                                {formatMoney(acc.balanceCurrentCents ?? 0)}
+                              </div>
+                              {acc.balanceAsOf && (
+                                <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                                  as of {new Date(acc.balanceAsOf).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
 
-        <div className="flex gap-2 pt-4">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium"
-            style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
-          >
-            {saving ? "Saving..." : "Save updates"}
-          </button>
-        </div>
-      </div>
+        {/* Create Modal */}
+        {showCreate && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setShowCreate(false)} />
+            <div
+              className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5"
+              style={{ backgroundColor: "var(--surface)" }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                  Add Account
+                </h2>
+                <button onClick={() => setShowCreate(false)}>
+                  <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Account Name */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Account Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                    placeholder="e.g., Chase Checking"
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                  />
+                </div>
+
+                {/* Account Type */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Account Type
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(Object.entries(ACCOUNT_TYPE_CONFIG) as [AccountType, typeof ACCOUNT_TYPE_CONFIG[AccountType]][]).map(
+                      ([type, config]) => {
+                        const Icon = config.icon;
+                        return (
+                          <button
+                            key={type}
+                            onClick={() => setCreateType(type)}
+                            className={`flex items-center gap-2 p-2 rounded-lg text-sm transition-colors ${
+                              createType === type ? "ring-2" : ""
+                            }`}
+                            style={{
+                              backgroundColor: createType === type ? "var(--primary-subtle)" : "var(--surface-2)",
+                              color: createType === type ? "var(--primary)" : "var(--text-secondary)",
+                            }}
+                          >
+                            <Icon className="h-4 w-4" style={{ color: config.color }} />
+                            {config.label}
+                          </button>
+                        );
+                      }
+                    )}
+                  </div>
+                </div>
+
+                {/* Institution */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Institution
+                  </label>
+                  <input
+                    type="text"
+                    value={createInstitution}
+                    onChange={(e) => setCreateInstitution(e.target.value)}
+                    placeholder="e.g., Chase, Bank of America"
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                  />
+                </div>
+
+                {/* Current Balance */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Current Balance
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-tertiary)" }}>
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={createBalance}
+                      onChange={(e) => setCreateBalance(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-7 pr-3 py-2 rounded-lg text-sm"
+                      style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Credit Limit (for credit cards) */}
+                {createType === "credit_card" && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                      Credit Limit
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-tertiary)" }}>
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={createCreditLimit}
+                        onChange={(e) => setCreateCreditLimit(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-3 py-2 rounded-lg text-sm"
+                        style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Ownership */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Ownership
+                  </label>
+                  <div className="flex gap-2">
+                    {OWNERSHIP_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setCreateOwnership(opt.value)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          createOwnership === opt.value ? "ring-2" : ""
+                        }`}
+                        style={{
+                          backgroundColor: createOwnership === opt.value ? "var(--primary-subtle)" : "var(--surface-2)",
+                          color: createOwnership === opt.value ? "var(--primary)" : "var(--text-secondary)",
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setShowCreate(false)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-medium"
+                    style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCreate}
+                    disabled={creating || !createName.trim()}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+                  >
+                    {creating ? "Creating..." : "Create Account"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editingAccount && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setEditingAccount(null)} />
+            <div
+              className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5"
+              style={{ backgroundColor: "var(--surface)" }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                  Edit Account
+                </h2>
+                <button onClick={() => setEditingAccount(null)}>
+                  <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Account Name */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Account Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                  />
+                </div>
+
+                {/* Institution */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Institution
+                  </label>
+                  <input
+                    type="text"
+                    value={editInstitution}
+                    onChange={(e) => setEditInstitution(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                  />
+                </div>
+
+                {/* Current Balance */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Current Balance
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-tertiary)" }}>
+                      $
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editBalance}
+                      onChange={(e) => setEditBalance(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 rounded-lg text-sm"
+                      style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Credit Limit (for credit cards) */}
+                {editingAccount.accountType === "credit_card" && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                      Credit Limit
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-tertiary)" }}>
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editCreditLimit}
+                        onChange={(e) => setEditCreditLimit(e.target.value)}
+                        className="w-full pl-7 pr-3 py-2 rounded-lg text-sm"
+                        style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Ownership */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Ownership
+                  </label>
+                  <div className="flex gap-2">
+                    {OWNERSHIP_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setEditOwnership(opt.value)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          editOwnership === opt.value ? "ring-2" : ""
+                        }`}
+                        style={{
+                          backgroundColor: editOwnership === opt.value ? "var(--primary-subtle)" : "var(--surface-2)",
+                          color: editOwnership === opt.value ? "var(--primary)" : "var(--text-secondary)",
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    Status
+                  </label>
+                  <div className="flex gap-2">
+                    {(["active", "hidden", "closed"] as AccountStatus[]).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => setEditStatus(status)}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${
+                          editStatus === status ? "ring-2" : ""
+                        }`}
+                        style={{
+                          backgroundColor: editStatus === status ? "var(--primary-subtle)" : "var(--surface-2)",
+                          color: editStatus === status ? "var(--primary)" : "var(--text-secondary)",
+                        }}
+                      >
+                        {status}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Exclude from Net Worth */}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editExcludeFromNetWorth}
+                    onChange={(e) => setEditExcludeFromNetWorth(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                  />
+                  <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                    Exclude from net worth calculations
+                  </span>
+                </label>
+
+                {/* Actions */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={() => setEditingAccount(null)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-medium"
+                    style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={saving}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                    style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
+                  >
+                    {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </SignedIn>
     </div>
   );
 }

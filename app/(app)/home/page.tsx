@@ -4,17 +4,13 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
 import { centsToDollars } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import EditEntryModal from "@/components/EditEntryModal";
+import { useTabs } from "@/components/PersistentTabs";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
 import PageHeader from "@/components/ui/PageHeader";
-import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
 
 /**
  * Home Tab - Clean, confident first impression
@@ -26,6 +22,55 @@ import TimeRangeBadge from "@/components/TimeRangeBadge";
  * 4. Recent transactions grouped by date
  */
 
+// Home-specific time scopes (Option C - Locked but Switchable)
+type HomeScope = "this-month" | "last-month" | "this-week" | "last-week" | "last-90-days";
+
+const SCOPE_OPTIONS: { key: HomeScope; label: string; short: string }[] = [
+  { key: "this-month", label: "This Month", short: "This Month" },
+  { key: "last-month", label: "Last Month", short: "Last Month" },
+  { key: "this-week", label: "This Week", short: "This Week" },
+  { key: "last-week", label: "Last Week", short: "Last Week" },
+  { key: "last-90-days", label: "Last 90 Days", short: "90 Days" },
+];
+
+function getScopeDates(scope: HomeScope): { startDate: number; endDate: number; label: string } {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const endOfToday = todayStart + 24 * 60 * 60 * 1000;
+
+  switch (scope) {
+    case "this-month": {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return { startDate: start, endDate: endOfToday, label: "This Month" };
+    }
+    case "last-month": {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+      const end = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return { startDate: start, endDate: end, label: "Last Month" };
+    }
+    case "this-week": {
+      const dayOfWeek = now.getDay();
+      const diff = (dayOfWeek + 6) % 7; // Monday start
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - diff);
+      weekStart.setHours(0, 0, 0, 0);
+      return { startDate: weekStart.getTime(), endDate: endOfToday, label: "This Week" };
+    }
+    case "last-week": {
+      const dayOfWeek = now.getDay();
+      const diff = (dayOfWeek + 6) % 7;
+      const thisWeekStart = new Date(now);
+      thisWeekStart.setDate(thisWeekStart.getDate() - diff);
+      thisWeekStart.setHours(0, 0, 0, 0);
+      const lastWeekStart = thisWeekStart.getTime() - 7 * 24 * 60 * 60 * 1000;
+      return { startDate: lastWeekStart, endDate: thisWeekStart.getTime(), label: "Last Week" };
+    }
+    case "last-90-days": {
+      const start = todayStart - 90 * 24 * 60 * 60 * 1000;
+      return { startDate: start, endDate: endOfToday, label: "Last 90 Days" };
+    }
+  }
+}
 
 function getLastTransactionText(lastDate?: number): string | null {
   if (!lastDate) return null;
@@ -71,9 +116,84 @@ function groupEntriesByDate(entries: Entry[]): Map<string, Entry[]> {
   return groups;
 }
 
+// Time Range Selector (compact dropdown-style)
+function TimeRangeSelector({ 
+  scope, 
+  onScopeChange 
+}: { 
+  scope: HomeScope; 
+  onScopeChange: (s: HomeScope) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = SCOPE_OPTIONS.find(o => o.key === scope)!;
+
+  return (
+    <div style={{ position: "relative", zIndex: 50 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+        style={{
+          backgroundColor: "var(--surface)",
+          border: "1px solid var(--border)",
+          color: "var(--text)",
+          minHeight: 36,
+        }}
+      >
+        {current.short}
+        <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
+      </button>
+
+      {open && (
+        <>
+          <div 
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 40,
+            }}
+            onClick={() => setOpen(false)}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              top: "100%",
+              marginTop: 4,
+              zIndex: 50,
+              padding: "4px 0",
+              minWidth: 140,
+              borderRadius: 12,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+              backgroundColor: "var(--surface)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {SCOPE_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => {
+                  onScopeChange(opt.key);
+                  setOpen(false);
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-[var(--surface-2)]"
+                style={{
+                  color: opt.key === scope ? "var(--primary)" : "var(--text)",
+                  backgroundColor: opt.key === scope ? "var(--accent-subtle)" : "transparent",
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 type Entry = {
-  _id: Id<"entries">;
-  type: "expense" | "income" | "transfer";
+  _id: string;
+  type: "expense" | "income";
   amountCents: number;
   date: number;
   category?: string;
@@ -86,15 +206,24 @@ type Entry = {
 };
 
 export default function HomePage() {
+  const { activeTab, previousTab } = useTabs();
   const quickLog = useQuickLog();
-  const { label, resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
   
+  // Home scope always defaults to "this-month" - no persistence
+  const [scope, setScope] = useState<HomeScope>("this-month");
+  const { startDate, endDate, label } = useMemo(() => getScopeDates(scope), [scope]);
+
+  // Reset scope to "this-month" when tab becomes active from another tab
+  const justActivated = activeTab === "dashboard" && previousTab !== null && previousTab !== "dashboard";
+  if (justActivated && scope !== "this-month") {
+    setScope("this-month");
+  }
+
   // Edit modal state
   const [editEntry, setEditEntry] = useState<Entry | null>(null);
 
   // Fetch entries for selected scope
-  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 500 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 500 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 200 }) as Entry[] | undefined;
 
   // Compute financial snapshot
@@ -107,7 +236,6 @@ export default function HomePage() {
 
     for (const e of entries) {
       if (e.excludeFromTotals) continue;
-      if (e.type === "transfer") continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
 
@@ -130,7 +258,6 @@ export default function HomePage() {
   const recentEntries = useMemo(() => {
     if (!entries) return [];
     return [...entries]
-      .filter((entry) => entry.type !== "transfer")
       .sort((a, b) => b.date - a.date)
       .slice(0, 10);
   }, [entries]);
@@ -146,12 +273,7 @@ export default function HomePage() {
       {/* Header with compact time range */}
       <PageHeader
         title="Home"
-        rightSlot={
-          <div className="flex items-center gap-2">
-            <TimeRangeBadge />
-            <TimeRangeControl />
-          </div>
-        }
+        rightSlot={<TimeRangeSelector scope={scope} onScopeChange={setScope} />}
         compact
       />
 

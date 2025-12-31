@@ -58,7 +58,7 @@ export function getGigGroup(platform?: string | null): GigGroupKey | null {
  */
 export function getPlatformsInGroup(group: GigGroupKey): string[] {
   return Object.entries(GIG_PLATFORM_GROUP)
-    .filter(([_, g]) => g === group)
+    .filter(([, g]) => g === group)
     .map(([platform]) => platform);
 }
 

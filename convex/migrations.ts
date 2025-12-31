@@ -23,7 +23,7 @@ export const backfillCategoryFromBucket = internalMutation({
       .collect();
     
     let migrated = 0;
-    const updates: Promise<any>[] = [];
+    const updates: Promise<unknown>[] = [];
     
     for (const entry of entries) {
       if (!entry.category && entry.bucket) {

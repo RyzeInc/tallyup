@@ -1,33 +1,27 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import { centsToDollars } from "@/components/utils";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 const COLORS = ["#2F6F85", "#10B981", "#F59E0B", "#6F9EA8", "#EC4899", "#C87A5A"];
 
 export default function SummaryPage() {
-  const { user } = useUser();
-  const router = useRouter();
   const { open: openQuickLog } = useQuickLog();
-  const { label, prevLabel, resolvedRange, previousRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
-  const { fromMs: prevFromMs, toMs: prevToMs } = toQueryArgs(previousRange);
+  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
-  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 1200 }) as any[] | undefined;
-  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevFromMs, endDate: prevToMs, limit: 1200 }) as any[] | undefined;
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Doc<"entries">[] | undefined;
+  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 1200 }) as Doc<"entries">[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
 
   // Get recent entries for mini-list (last 5)
   const recentEntries = useMemo(() => {
@@ -47,7 +41,6 @@ export default function SummaryPage() {
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
-      if (e.type === "transfer") continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
 
@@ -80,7 +73,6 @@ export default function SummaryPage() {
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
-      if (e.type === "transfer") continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
     }
@@ -117,10 +109,7 @@ export default function SummaryPage() {
           <div>
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Home</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <TimeRangeBadge />
-            <TimeRangeControl />
-          </div>
+          <GlobalDateRangePicker />
         </div>
 
         <SignedOut>
@@ -354,7 +343,7 @@ export default function SummaryPage() {
                           </div>
                           <div className="text-meta truncate" style={{ color: "var(--text-secondary)" }}>
                             {e.category || e.bucket || "Uncategorized"}
-                            {e.tags?.length > 0 && ` · ${e.tags.slice(0, 2).join(", ")}`}
+                            {(e.tags?.length ?? 0) > 0 && ` · ${(e.tags ?? []).slice(0, 2).join(", ")}`}
                           </div>
                         </div>
                         <div className="shrink-0 text-right">

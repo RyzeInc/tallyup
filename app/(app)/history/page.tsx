@@ -8,28 +8,35 @@ import * as Lucide from "lucide-react";
 import RecurringModal from "@/components/RecurringModal";
 import EditEntryModal from "@/components/EditEntryModal";
 import ActivityTable from "@/components/activity/ActivityTable";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { EntryType, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuickLog } from "@/components/log/QuickLogProvider";
+import type { Doc } from "convex/_generated/dataModel";
+
+type EntryDoc = Doc<"entries">;
+type EditableEntry = EntryDoc & { type: "expense" | "income" };
+type EntriesPage = { rows: EntryDoc[]; nextCursor?: number };
+type SortBy = "newest" | "oldest" | "highest" | "lowest";
+
+function isEditableEntry(entry: EntryDoc): entry is EditableEntry {
+  return entry.type === "expense" || entry.type === "income";
+}
 
 export default function HistoryPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { open: openQuickLog } = useQuickLog();
 
-  const { resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
-  const startDate = fromMs;
-  const endDate = toMs;
+  const { startDate, endDate } = useTimeRange();
 
-  const [type, setType] = useState<"all" | EntryType>(() => (searchParams.get("type") as any) ?? "all");
+  const initialType = (() => {
+    const raw = searchParams.get("type");
+    return raw === "income" || raw === "expense" ? raw : "all";
+  })();
+  const [type, setType] = useState<"all" | EntryType>(initialType);
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
   const reviewOnly = searchParams.get("review") === "1";
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -49,10 +56,10 @@ export default function HistoryPage() {
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
+  const [sortBy, setSortBy] = useState<SortBy>("newest");
 
   // Get review count for badge
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
+  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as EntryDoc[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
   // Focus search on mount if requested
@@ -134,7 +141,7 @@ export default function HistoryPage() {
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   // paginated entries: cursor-based pages from server
-  const [pages, setPages] = useState<any[][]>([]);
+  const [pages, setPages] = useState<EntryDoc[][]>([]);
   const [seenIds, setSeenIds] = useState<Record<string, boolean>>({});
   const [nextCursor, setNextCursor] = useState<number | undefined>(undefined);
   const [cursorList, setCursorList] = useState<Array<number | undefined>>([undefined]);
@@ -151,7 +158,7 @@ export default function HistoryPage() {
     search: q ? q : undefined,
     limit: 60,
     cursorDate: currentCursor,
-  }) as any | undefined;
+  }) as EntriesPage | undefined;
 
   // when filters change, reset pages
   useEffect(() => {
@@ -164,7 +171,7 @@ export default function HistoryPage() {
   // append page result when it arrives
   useEffect(() => {
     if (!pageResult?.rows) return;
-    const newRows: any[] = [];
+    const newRows: EntryDoc[] = [];
     const seen = { ...seenIds };
     for (const r of pageResult.rows) {
       if (!seen[r._id]) {
@@ -218,18 +225,20 @@ export default function HistoryPage() {
     }
   }, [pages, sortBy, minAmount, maxAmount, selectedMethods]);
 
-  const [selected, setSelected] = useState<any | null>(null);
+  const [selected, setSelected] = useState<EditableEntry | null>(null);
 
   // Edit modal state - triggered by ?edit=id query param
   const editId = searchParams.get("edit");
-  const [editEntry, setEditEntry] = useState<any | null>(null);
+  const [editEntry, setEditEntry] = useState<EditableEntry | null>(null);
 
   // Load entry for editing when editId changes
   useEffect(() => {
     if (editId && allEntries.length > 0) {
       const entry = allEntries.find((e) => e._id === editId);
-      if (entry) {
+      if (entry && isEditableEntry(entry)) {
         setEditEntry(entry);
+      } else if (entry) {
+        setEditEntry(null);
       }
     } else if (!editId) {
       setEditEntry(null);
@@ -252,14 +261,7 @@ export default function HistoryPage() {
   }
 
   // Count active filters
-  const activeFilterCount =
-    selectedCategories.length +
-    selectedTags.length +
-    selectedMethods.length +
-    (minAmount ? 1 : 0) +
-    (maxAmount ? 1 : 0) +
-    (type !== "all" ? 1 : 0) +
-    (reviewOnly ? 1 : 0);
+  const activeFilterCount = selectedCategories.length + selectedTags.length + selectedMethods.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
 
   // Clear a specific filter
   function clearCategory(cat: string) {
@@ -325,12 +327,7 @@ export default function HistoryPage() {
       <PageHeader
         title="Activity"
         subtitle="All transactions"
-        rightSlot={
-          <div className="flex items-center gap-2">
-            <TimeRangeBadge />
-            <TimeRangeControl />
-          </div>
-        }
+        rightSlot={<GlobalDateRangePicker showAllPresets />}
         compact
       />
 
@@ -370,7 +367,7 @@ export default function HistoryPage() {
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search transactions"
+            placeholder="Search transactions…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             style={{
@@ -396,33 +393,135 @@ export default function HistoryPage() {
               <Lucide.X className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
             </button>
           )}
+        </div>
+
+        {/* Compact Filter Row */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+          {/* Type chips */}
+          {(["all", "expense", "income"] as const).map((t) => {
+            const isActive = type === t;
+            const label = t === "all" ? "All" : t === "expense" ? "Spent" : "Received";
+            const Icon = t === "expense" ? Lucide.ArrowUpRight : t === "income" ? Lucide.ArrowDownLeft : null;
+            return (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 14px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "var(--text-meta)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  transition: "all 150ms ease",
+                  backgroundColor: isActive ? "var(--accent-subtle)" : "transparent",
+                  color: isActive ? "var(--primary)" : "var(--text)",
+                  border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
+                }}
+              >
+                {Icon && <Icon className="h-4 w-4" />}
+                {label}
+              </button>
+            );
+          })}
+
+          {/* Review filter */}
+          <button
+            onClick={toggleReview}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              transition: "all 150ms ease",
+              backgroundColor: reviewOnly ? "var(--warning-subtle)" : "transparent",
+              color: reviewOnly ? "var(--warning)" : "var(--text)",
+              border: reviewOnly ? "1px solid var(--warning)" : "1px solid var(--border)",
+            }}
+          >
+            <Lucide.AlertCircle className="h-4 w-4" />
+            Review
+            {reviewCount > 0 && (
+              <span
+                style={{
+                  padding: "2px 6px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  backgroundColor: "var(--warning)",
+                  color: "white",
+                }}
+              >
+                {reviewCount}
+              </span>
+            )}
+          </button>
+
+          {/* Spacer */}
+          <div style={{ flex: 1, minWidth: 8 }} />
+
+          {/* Select button - inline with Filters */}
+          <button
+            onClick={() => setSelectMode(!selectMode)}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              backgroundColor: selectMode ? "var(--accent-subtle)" : "transparent",
+              color: selectMode ? "var(--primary)" : "var(--text)",
+              border: selectMode ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
+          >
+            <Lucide.CheckSquare className="h-4 w-4" />
+            Select
+          </button>
+
+          {/* Filters button */}
           <button
             onClick={() => setFiltersOpen(true)}
-            className="relative rounded-full p-2 transition-colors"
-            style={{ backgroundColor: "var(--surface-2)" }}
-            aria-label="Open filters"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              backgroundColor: activeFilterCount > 0 ? "var(--accent-subtle)" : "transparent",
+              color: activeFilterCount > 0 ? "var(--primary)" : "var(--text)",
+              border: activeFilterCount > 0 ? "1px solid var(--primary)" : "1px solid var(--border)",
+            }}
           >
-            <Lucide.SlidersHorizontal className="h-4 w-4" style={{ color: "var(--text)" }} />
+            <Lucide.SlidersHorizontal className="h-4 w-4" />
+            Filters
             {activeFilterCount > 0 && (
               <span
-                className="absolute -top-1 -right-1 rounded-full px-1.5 text-[10px] font-semibold"
-                style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+                style={{
+                  padding: "2px 6px",
+                  borderRadius: "var(--radius-full)",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  backgroundColor: "var(--primary)",
+                  color: "var(--primary-foreground)",
+                }}
               >
                 {activeFilterCount}
               </span>
             )}
           </button>
         </div>
-
-        {/* Quick Add CTA */}
-        <button
-          onClick={() => openQuickLog()}
-          className="w-full rounded-xl px-4 py-3 text-left transition-colors"
-          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-        >
-          <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>Quick Add</div>
-          <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Fast log in seconds</div>
-        </button>
 
         {/* Active filter pills */}
         {activeFilterCount > 0 && (
@@ -552,7 +651,9 @@ export default function HistoryPage() {
             <ActivityTable
               entries={allEntries}
               onDelete={(id) => deleteEntry({ id })}
-              onSavePattern={(e) => setSelected(e)}
+              onSavePattern={(e) => {
+                if (isEditableEntry(e)) setSelected(e);
+              }}
               onBulkComplete={() => {
                 setPages([]);
                 setCursorList([undefined]);
@@ -679,74 +780,6 @@ export default function HistoryPage() {
                     }}
                   >
                     <Lucide.X className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
-                  </button>
-                </div>
-
-                {/* Type filter */}
-                <div style={{ marginBottom: "var(--space-4)" }}>
-                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Type</h3>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
-                    {(["all", "expense", "income"] as const).map((t) => {
-                      const isActive = type === t;
-                      const label = t === "all" ? "All" : t === "expense" ? "Spent" : "Received";
-                      return (
-                        <button
-                          key={t}
-                          onClick={() => setType(t)}
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: "var(--radius-full)",
-                            fontSize: "var(--text-micro)",
-                            fontWeight: 500,
-                            cursor: "pointer",
-                            backgroundColor: isActive ? "var(--accent-subtle)" : "transparent",
-                            color: isActive ? "var(--primary)" : "var(--text)",
-                            border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Review filter */}
-                <div style={{ marginBottom: "var(--space-4)" }}>
-                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Review</h3>
-                  <button
-                    onClick={toggleReview}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "8px 14px",
-                      borderRadius: "var(--radius-full)",
-                      fontSize: "var(--text-meta)",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      transition: "all 150ms ease",
-                      backgroundColor: reviewOnly ? "var(--warning-subtle)" : "transparent",
-                      color: reviewOnly ? "var(--warning)" : "var(--text)",
-                      border: reviewOnly ? "1px solid var(--warning)" : "1px solid var(--border)",
-                    }}
-                  >
-                    <Lucide.AlertCircle className="h-4 w-4" />
-                    Needs meaning
-                    {reviewCount > 0 && (
-                      <span
-                        style={{
-                          padding: "2px 6px",
-                          borderRadius: "var(--radius-full)",
-                          fontSize: "10px",
-                          fontWeight: 700,
-                          backgroundColor: "var(--warning)",
-                          color: "white",
-                        }}
-                      >
-                        {reviewCount}
-                      </span>
-                    )}
                   </button>
                 </div>
 
@@ -928,7 +961,7 @@ export default function HistoryPage() {
                       return (
                         <button
                           key={opt.key}
-                          onClick={() => setSortBy(opt.key as any)}
+                          onClick={() => setSortBy(opt.key as SortBy)}
                           style={{
                             padding: "10px 12px",
                             borderRadius: "var(--radius-md)",

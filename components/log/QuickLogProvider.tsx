@@ -1,7 +1,6 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import QuickLogModal from "./QuickLogModal";
 
 export type ToastAction = {

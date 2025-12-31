@@ -1,13 +1,14 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import RecurringModal from "@/components/RecurringModal";
+import type { Doc } from "convex/_generated/dataModel";
 
 // Basic smoke test for auto-apply confirmation
 describe("RecurringModal", () => {
   const entry = { _id: "e1", amountCents: 1000, type: "expense", bucket: "Personal" };
   it("requires confirmation when auto-apply is enabled", async () => {
     const onClose = vi.fn();
-    render(<RecurringModal entry={entry as any} onClose={onClose} /> as any);
+    render(<RecurringModal entry={entry as Doc<"entries">} onClose={onClose} />);
 
     // enable auto-apply checkbox
     const autoApplyToggle = await screen.findByLabelText(/Auto-apply to future entries/i);

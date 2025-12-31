@@ -4,12 +4,9 @@ import { SignedIn, SignedOut, useUser, SignOutButton, SignInButton } from "@cler
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
-import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTheme, APPEARANCE_OPTIONS } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
@@ -41,24 +38,21 @@ const REVIEW_REMINDER_KEY = "tallyup.reviewReminder";
 
 export default function SettingsPage() {
   const { user } = useUser();
-  const { label, resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
-  const startDate = fromMs;
-  const endDate = toMs;
   const { theme, setTheme: changeTheme } = useTheme();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
-  const exportLabel = useMemo(() => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    return `${start.toLocaleDateString()}-${end.toLocaleDateString()}`;
-  }, [startDate, endDate]);
 
   // Category/tag management state
   const [pinnedExpense, setPinnedExpense] = useState<ExpenseSpace[]>([]);
   const [pinnedIncome, setPinnedIncome] = useState<IncomeSpace[]>([]);
   const [pinnedTags, setPinnedTags] = useState<ContextTag[]>([]);
   const [hiddenTags, setHiddenTags] = useState<ContextTag[]>([]);
+
+  function errorMessage(error: unknown): string | undefined {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return undefined;
+  }
 
   useEffect(() => {
     try {
@@ -125,18 +119,28 @@ export default function SettingsPage() {
     try { localStorage.setItem("tallyup.requireAuth", next ? "1" : "0"); } catch {}
   }
 
-  // Export data - driven by global time range
-  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 5000 }) as any[] | undefined;
-  const accounts = useQuery(api.accounts.listAccounts, { includeArchived: true }) as any[] | undefined;
+  // Export data - use local date range state for flexibility
+  const [exportStartDate, setExportStartDate] = useState(() => {
+    // Default to last 90 days
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return d.getTime();
+  });
+  const [exportEndDate, setExportEndDate] = useState(() => Date.now());
+  const exportLabel = useMemo(() => {
+    const start = new Date(exportStartDate);
+    const end = new Date(exportEndDate);
+    return `${start.toLocaleDateString()} – ${end.toLocaleDateString()}`;
+  }, [exportStartDate, exportEndDate]);
+  
+  const entries = useQuery(api.entries.listEntries, { startDate: exportStartDate, endDate: exportEndDate, limit: 5000 }) as Doc<"entries">[] | undefined;
   const [exporting, setExporting] = useState(false);
   async function exportCSV() {
     if (!entries) return;
     setExporting(true);
     try {
-      const accountMap = new Map((accounts ?? []).map((acc) => [acc._id, acc.name]));
-      const rows = [["Date", "Type", "Category", "Amount", "Tags", "Note", "Method/Account", "AccountId", "AccountName"]];
+      const rows = [["Date", "Type", "Category", "Amount", "Tags", "Note", "Method/Account"]];
       for (const e of entries) {
-        const accountName = e.accountId ? accountMap.get(e.accountId) ?? "" : "";
         rows.push([
           new Date(e.date).toLocaleDateString(),
           e.type,
@@ -145,8 +149,6 @@ export default function SettingsPage() {
           (e.tags ?? []).join("; "),
           e.note ?? "",
           e.methodOrAccount ?? "",
-          e.accountId ?? "",
-          accountName,
         ]);
       }
       const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -158,8 +160,8 @@ export default function SettingsPage() {
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Export complete", { description: `${entries.length} transactions exported` });
-    } catch (e: any) {
-      toast.error("Export failed", { description: e?.message ?? "Unknown error" });
+    } catch (e: unknown) {
+      toast.error("Export failed", { description: errorMessage(e) ?? "Unknown error" });
     } finally {
       setExporting(false);
     }
@@ -168,7 +170,7 @@ export default function SettingsPage() {
   // Help actions
   function resetFilters() {
     try {
-      localStorage.removeItem("tallyup.timeRange.selection.v1");
+      localStorage.removeItem("tallyup.timeRange");
     } catch {}
     window.location.href = "/activity";
   }
@@ -227,7 +229,7 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-2">
                 {/* Show pinned first, then rest */}
-                {[...pinnedExpense.filter(c => EXPENSE_SPACES.includes(c)), ...EXPENSE_SPACES.filter(c => !pinnedExpense.includes(c))].map((cat, i) => {
+                {[...pinnedExpense.filter(c => EXPENSE_SPACES.includes(c)), ...EXPENSE_SPACES.filter(c => !pinnedExpense.includes(c))].map((cat) => {
                   const isPinned = pinnedExpense.includes(cat);
                   return (
                     <div
@@ -270,7 +272,7 @@ export default function SettingsPage() {
                 </span>
               </div>
               <div className="space-y-2">
-                {[...pinnedIncome.filter(c => INCOME_SPACES.includes(c)), ...INCOME_SPACES.filter(c => !pinnedIncome.includes(c))].map((cat, i) => {
+                {[...pinnedIncome.filter(c => INCOME_SPACES.includes(c)), ...INCOME_SPACES.filter(c => !pinnedIncome.includes(c))].map((cat) => {
                   const isPinned = pinnedIncome.includes(cat);
                   return (
                     <div
@@ -372,7 +374,7 @@ export default function SettingsPage() {
                 })}
               </div>
               <p className="text-xs mt-3" style={{ color: "var(--text-tertiary)" }}>
-                Hidden tags won't appear in quick-add flows but remain on existing entries.
+                Hidden tags won&apos;t appear in quick-add flows but remain on existing entries.
               </p>
             </div>
           </div>
@@ -400,13 +402,80 @@ export default function SettingsPage() {
                 <label className="text-xs font-medium mb-2 block" style={{ color: "var(--text-tertiary)" }}>
                   Time Range
                 </label>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{label}</div>
-                  <div className="flex items-center gap-2">
-                    <TimeRangeBadge />
-                    <TimeRangeControl />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>From</label>
+                    <input
+                      type="date"
+                      value={new Date(exportStartDate).toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value);
+                        if (!isNaN(d.getTime())) setExportStartDate(d.getTime());
+                      }}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm"
+                      style={{
+                        backgroundColor: "var(--input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs mb-1 block" style={{ color: "var(--text-secondary)" }}>To</label>
+                    <input
+                      type="date"
+                      value={new Date(exportEndDate).toISOString().split('T')[0]}
+                      onChange={(e) => {
+                        const d = new Date(e.target.value);
+                        if (!isNaN(d.getTime())) setExportEndDate(d.getTime());
+                      }}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm"
+                      style={{
+                        backgroundColor: "var(--input)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    />
                   </div>
                 </div>
+              </div>
+
+              {/* Quick presets */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {[
+                  { label: "Last 30 days", days: 30 },
+                  { label: "Last 90 days", days: 90 },
+                  { label: "This year", days: -1 },
+                  { label: "All time", days: -2 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => {
+                      const now = new Date();
+                      let start: Date;
+                      if (preset.days === -1) {
+                        // This year
+                        start = new Date(now.getFullYear(), 0, 1);
+                      } else if (preset.days === -2) {
+                        // All time - go back 10 years
+                        start = new Date(now.getFullYear() - 10, 0, 1);
+                      } else {
+                        start = new Date();
+                        start.setDate(start.getDate() - preset.days);
+                      }
+                      setExportStartDate(start.getTime());
+                      setExportEndDate(now.getTime());
+                    }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium"
+                    style={{
+                      backgroundColor: "var(--surface-2)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
 
               <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
@@ -882,7 +951,7 @@ function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> })
           });
         });
       }
-    } catch (e) {
+    } catch {
       toast.error("Failed to save settings");
     } finally {
       setSaving(false);
