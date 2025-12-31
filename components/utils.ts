@@ -1,3 +1,6 @@
+import { resolveRange } from "@/src/lib/timeRange/resolve";
+import type { PresetSelectionKey } from "@/src/lib/timeRange/types";
+
 export type EntryType = "expense" | "income";
 
 export const DEFAULT_BUCKETS = ["Personal", "Work", "Household", "Side/Hustle", "Other"] as const;
@@ -237,4 +240,28 @@ export function uniqCaseInsensitive(arr: string[]): string[] {
 export function cacheKey(userId: string, type: EntryType, bucket?: string) {
   const b = (bucket ?? "all").toLowerCase().replace(/[^a-z0-9]+/g, "_");
   return `tallyup_categories_${userId}_${type}_${b}`;
+}
+
+export type DateRangePreset = PresetSelectionKey;
+
+function formatYYYYMMDD(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function getDateRangeFromPreset(
+  preset: DateRangePreset,
+  now: Date = new Date()
+): { from: string; to: string; fromMs: number; toMs: number } {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const range = resolveRange({ kind: "preset", key: preset }, now, timezone);
+  const inclusiveTo = new Date(range.to.getTime() - 86400000);
+  return {
+    from: formatYYYYMMDD(range.from),
+    to: formatYYYYMMDD(inclusiveTo),
+    fromMs: range.from.getTime(),
+    toMs: range.to.getTime(),
+  };
 }
