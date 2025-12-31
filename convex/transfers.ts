@@ -102,6 +102,7 @@ export const createTransfer = mutation({
       const fromEntryId = await ctx.db.insert("entries", {
         userId,
         type: "transfer",
+        transactionType: "TRANSFER",
         amountCents,
         date: args.date,
         accountId: args.fromAccountId,
@@ -110,8 +111,11 @@ export const createTransfer = mutation({
         category: "Transfer Out",
         excludeFromTotals: true,
         excludeFromBudgets: true,
-        excludeFromCashFlow: args.transferType === "internal",
+        ignoredForBudgets: true,
+        ignoredForInsights: true,
+        excludeFromCashFlow: true,
         needsReview: false,
+        reviewReason: undefined,
         createdAt: now,
         updatedAt: now,
       });
@@ -125,6 +129,7 @@ export const createTransfer = mutation({
       const toEntryId = await ctx.db.insert("entries", {
         userId,
         type: "transfer",
+        transactionType: "TRANSFER",
         amountCents,
         date: args.date,
         accountId: args.toAccountId,
@@ -133,8 +138,11 @@ export const createTransfer = mutation({
         category: "Transfer In",
         excludeFromTotals: true,
         excludeFromBudgets: true,
-        excludeFromCashFlow: args.transferType === "internal",
+        ignoredForBudgets: true,
+        ignoredForInsights: true,
+        excludeFromCashFlow: true,
         needsReview: false,
+        reviewReason: undefined,
         createdAt: now,
         updatedAt: now,
       });

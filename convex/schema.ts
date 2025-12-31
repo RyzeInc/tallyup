@@ -7,6 +7,10 @@ export default defineSchema({
 
     // Type can be expense, income, or transfer (for internal account movements)
     type: v.union(v.literal("expense"), v.literal("income"), v.literal("transfer")),
+    // Normalized transaction type for UI semantics
+    transactionType: v.optional(
+      v.union(v.literal("SPENT"), v.literal("RECEIVED"), v.literal("TRANSFER"))
+    ),
 
     // Primary field: Category (expense) or Source (income) in UI
     category: v.optional(v.string()),
@@ -38,6 +42,9 @@ export default defineSchema({
     excludeFromBudgets: v.optional(v.boolean()),
     // Exclude from cash flow reports (internal transfers)
     excludeFromCashFlow: v.optional(v.boolean()),
+    // Alias flags for newer semantics
+    ignoredForBudgets: v.optional(v.boolean()),
+    ignoredForInsights: v.optional(v.boolean()),
 
     // optional: a link to a detected or user-created recurring series/rule (typed id)
     recurringRuleId: v.optional(v.id("recurringRules")),
@@ -63,15 +70,15 @@ export default defineSchema({
 
     // Context tags (composable, multi-select): Personal, Business, Shared, etc.
     contextTags: v.optional(v.array(v.string())),
-    // Intent tag (single-select): Essential, Discretionary, Planned, Unexpected, etc.
-    intentTag: v.optional(v.string()),
+    // Intent tags (multi-select): Essential, Discretionary, Planned, Unexpected, etc.
+    intentTags: v.optional(v.array(v.string())),
 
     // Merchant info - raw and normalized
     merchantRaw: v.optional(v.string()), // original merchant string
     merchantNormalized: v.optional(v.string()), // cleaned/mapped merchant name
 
     // Review reason - why this entry is in the inbox
-    reviewReason: v.optional(v.string()), // "missing_category", "mixed_context", "unknown_merchant", etc.
+    reviewReason: v.optional(v.string()), // "NEEDS_CATEGORY", "NEEDS_CONTEXT", "NEEDS_ACCOUNT"
 
     needsReview: v.boolean(),
 
@@ -129,6 +136,15 @@ export default defineSchema({
   })
     .index("by_user_active", ["userId", "active"])
     .index("by_user_confidence", ["userId", "confidence"]),
+
+  analyticsEvents: defineTable({
+    userId: v.string(),
+    event: v.string(),
+    data: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_user_event", ["userId", "event"])
+    .index("by_user_date", ["userId", "createdAt"]),
 
   // ============================================
   // BUDGETS - Planning separated from logging
@@ -329,67 +345,63 @@ export default defineSchema({
     .index("by_user", ["userId"]),
 
   // ============================================
-  // ACCOUNTS - Financial accounts tracking
+  // ACCOUNTS - Manual-first account metadata
   // ============================================
   accounts: defineTable({
     userId: v.string(),
-    
-    // Account name (e.g., "Chase Checking", "Amex Platinum")
+
+    // Nickname (required)
     name: v.string(),
-    
+
     // Account type
-    accountType: v.union(
+    type: v.union(
+      v.literal("credit"),
       v.literal("checking"),
       v.literal("savings"),
-      v.literal("credit_card"),
       v.literal("investment"),
       v.literal("loan"),
-      v.literal("cash"),
-      v.literal("manual")
+      v.literal("business"),
+      v.literal("other")
     ),
-    
-    // Institution name (e.g., "Chase", "Bank of America")
-    institution: v.optional(v.string()),
-    
-    // Balance tracking
-    balanceCurrentCents: v.optional(v.number()),
-    balanceAvailableCents: v.optional(v.number()),
-    balanceAsOf: v.optional(v.number()), // timestamp of last balance update
-    
-    // Currency
-    currency: v.optional(v.string()), // default "USD"
-    
-    // Ownership type
-    ownership: v.optional(v.union(
-      v.literal("personal"),
-      v.literal("shared"),
-      v.literal("business")
-    )),
-    
-    // Status
-    status: v.union(
-      v.literal("active"),
-      v.literal("hidden"),
-      v.literal("closed")
-    ),
-    
-    // Credit-specific fields
-    creditLimitCents: v.optional(v.number()),
-    interestRatePercent: v.optional(v.number()),
-    
-    // Display preferences
-    icon: v.optional(v.string()),
-    color: v.optional(v.string()),
-    displayOrder: v.optional(v.number()),
-    
-    // Exclude from calculations
-    excludeFromNetWorth: v.optional(v.boolean()),
-    
+
+    // Institution details
+    institutionName: v.optional(v.string()),
+    logoKey: v.optional(v.string()),
+    last4: v.optional(v.string()),
+
+    // Credit/debt fields
+    creditLimit: v.optional(v.number()),
+    apr: v.optional(v.number()),
+    interestRate: v.optional(v.number()),
+    minPayment: v.optional(v.number()),
+
+    // Investment display mode
+    valuationMode: v.optional(v.union(v.literal("totalOnly"))),
+
+    // Transaction selector toggle
+    showInTransactionSelector: v.optional(v.boolean()),
+
+    // Soft-delete
+    isArchived: v.optional(v.boolean()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_status", ["userId", "status"]),
+    .index("by_user_archived", ["userId", "isArchived"]),
+
+  // ============================================
+  // ACCOUNT SNAPSHOTS - Balance history
+  // ============================================
+  accountSnapshots: defineTable({
+    userId: v.string(),
+    accountId: v.id("accounts"),
+    asOf: v.number(),
+    balance: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_account_asOf", ["accountId", "asOf"])
+    .index("by_user_asOf", ["userId", "asOf"]),
 
   // ============================================
   // CATEGORIES - Hierarchical category system

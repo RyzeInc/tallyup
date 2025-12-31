@@ -9,7 +9,7 @@ import React, {
   useMemo,
   useEffect,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DateRangePreset, getDateRangeFromPreset, todayYYYYMMDD } from "./utils";
 
 interface TimeRangeContextValue {
@@ -21,6 +21,7 @@ interface TimeRangeContextValue {
   startDate: number;
   endDate: number;
   label: string;
+  timeRange: { preset: DateRangePreset; start?: string; end?: string };
   // Previous period for comparisons
   prevStartDate: number;
   prevEndDate: number;
@@ -35,8 +36,7 @@ const TimeRangeContext = createContext<TimeRangeContextValue | null>(null);
 const STORAGE_KEY = "tallyup.timeRange";
 const DEFAULT_TIMEZONE = "America/New_York";
 
-// Pages where time range should NOT sync to URL (independent time range)
-const INDEPENDENT_TIME_PAGES = ["/dashboard", "/home"];
+// Single global time range shared across tabs
 
 export function useTimeRange() {
   const ctx = useContext(TimeRangeContext);
@@ -45,7 +45,6 @@ export function useTimeRange() {
   return ctx;
 }
 
-// Compute previous period based on current preset
 function getPreviousPeriod(
   preset: DateRangePreset,
   customFrom: string,
@@ -54,74 +53,23 @@ function getPreviousPeriod(
   const now = new Date();
 
   switch (preset) {
-    case "today": {
-      const yest = new Date(now);
-      yest.setDate(yest.getDate() - 1);
-      const start = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate()).getTime();
-      const end = start + 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "Yesterday" };
+    case "THIS_MONTH": {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+      const endDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return { startDate: start, endDate, label: "Last Month" };
     }
 
-    case "yesterday": {
-      const dayBefore = new Date(now);
-      dayBefore.setDate(dayBefore.getDate() - 2);
-      const start = new Date(dayBefore.getFullYear(), dayBefore.getMonth(), dayBefore.getDate()).getTime();
-      const end = start + 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "Day before" };
+    case "LAST_30": {
+      const current = getDateRangeFromPreset("LAST_30");
+      const duration = current.endDate - current.startDate;
+      const endDate = current.startDate;
+      return { startDate: endDate - duration, endDate, label: "Previous 30 Days" };
     }
 
-    case "week": {
-      const range = getDateRangeFromPreset("last-week");
-      return { ...range, label: "Last Week" };
-    }
-
-    case "last-week": {
-      // Two weeks ago
-      const twoWeeksAgo = new Date(now);
-      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-      const dayOfWeek = twoWeeksAgo.getDay();
-      const diff = (dayOfWeek + 6) % 7;
-      twoWeeksAgo.setDate(twoWeeksAgo.getDate() - diff);
-      twoWeeksAgo.setHours(0, 0, 0, 0);
-      const start = twoWeeksAgo.getTime();
-      const end = start + 7 * 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "2 Weeks Ago" };
-    }
-
-    case "month": {
-      const range = getDateRangeFromPreset("last-month");
-      return { ...range, label: "Last Month" };
-    }
-
-    case "last-month": {
-      const twoMonthsAgo = new Date(now);
-      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-      twoMonthsAgo.setDate(1);
-      twoMonthsAgo.setHours(0, 0, 0, 0);
-      const start = twoMonthsAgo.getTime();
-      const endDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
-      return { startDate: start, endDate, label: "2 Months Ago" };
-    }
-
-    case "year": {
-      const range = getDateRangeFromPreset("last-year");
-      return { ...range, label: "Last Year" };
-    }
-
-    case "last-year": {
-      const twoYearsAgo = new Date(now);
-      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-      twoYearsAgo.setMonth(0, 1);
-      twoYearsAgo.setHours(0, 0, 0, 0);
-      const start = twoYearsAgo.getTime();
-      const end = new Date(now.getFullYear() - 1, 0, 1).getTime();
-      return { startDate: start, endDate: end, label: "2 Years Ago" };
-    }
-
-    case "custom":
+    case "CUSTOM":
     default: {
       // For custom, compute same-length previous period
-      const current = getDateRangeFromPreset("custom", customFrom, customTo);
+      const current = getDateRangeFromPreset("CUSTOM", customFrom, customTo);
       const duration = current.endDate - current.startDate;
       const prevEnd = current.startDate;
       const prevStart = prevEnd - duration;
@@ -131,16 +79,12 @@ function getPreviousPeriod(
 }
 
 export function TimeRangeProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Check if current page should use independent time range
-  const isIndependentPage = INDEPENDENT_TIME_PAGES.some(p => pathname?.startsWith(p));
-  
   // Initialize from URL params, then localStorage, then default
   const [preset, setPresetState] = useState<DateRangePreset>(() => {
-    if (typeof window === "undefined") return "week";
+    if (typeof window === "undefined") return "THIS_MONTH";
     
     // Try URL first (for shareable links)
     const urlPreset = searchParams?.get("range") as DateRangePreset | null;
@@ -153,10 +97,10 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return parsed.preset || "week";
+        return parsed.preset || "THIS_MONTH";
       }
     } catch {}
-    return "week";
+    return "THIS_MONTH";
   });
 
   const [customFrom, setCustomFrom] = useState(() => {
@@ -219,16 +163,16 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
     }
   }, [preset, customFrom, customTo, timezone]);
 
-  // Sync to URL when time range changes (except on independent pages)
+  // Sync to URL when time range changes
   const prevUrlRef = React.useRef<string>("");
   useEffect(() => {
-    if (typeof window === "undefined" || isIndependentPage) return;
+    if (typeof window === "undefined") return;
     
     const params = new URLSearchParams(searchParams?.toString() || "");
     
     // Set range params
     params.set("range", preset);
-    if (preset === "custom") {
+    if (preset === "CUSTOM") {
       params.set("from", customFrom);
       params.set("to", customTo);
     } else {
@@ -236,25 +180,25 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
       params.delete("to");
     }
     
-    const newUrl = `${pathname}?${params.toString()}`;
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
     
     // Avoid infinite loops
     if (newUrl !== prevUrlRef.current) {
       prevUrlRef.current = newUrl;
       router.replace(newUrl, { scroll: false });
     }
-  }, [preset, customFrom, customTo, pathname, isIndependentPage, router, searchParams]);
+  }, [preset, customFrom, customTo, router, searchParams]);
 
   // Read from URL when navigating (for shareable links)
   useEffect(() => {
-    if (typeof window === "undefined" || isIndependentPage) return;
+    if (typeof window === "undefined") return;
     
     const urlPreset = searchParams?.get("range") as DateRangePreset | null;
     if (urlPreset && isValidPreset(urlPreset) && urlPreset !== preset) {
       setPresetState(urlPreset);
     }
     
-    if (urlPreset === "custom") {
+    if (urlPreset === "CUSTOM") {
       const urlFrom = searchParams?.get("from");
       const urlTo = searchParams?.get("to");
       if (urlFrom && isValidDateString(urlFrom) && urlFrom !== customFrom) {
@@ -264,7 +208,7 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
         setCustomTo(urlTo);
       }
     }
-  }, [searchParams, isIndependentPage, preset, customFrom, customTo]);
+  }, [searchParams, preset, customFrom, customTo]);
 
   const setPreset = useCallback((p: DateRangePreset) => {
     setPresetState(p);
@@ -278,7 +222,7 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
     }
     setCustomFrom(from);
     setCustomTo(to);
-    setPresetState("custom");
+    setPresetState("CUSTOM");
   }, []);
 
   const currentRange = useMemo(() => {
@@ -299,6 +243,11 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
       startDate: currentRange.startDate,
       endDate: currentRange.endDate,
       label: currentRange.label,
+      timeRange: {
+        preset,
+        start: new Date(currentRange.startDate).toISOString(),
+        end: new Date(currentRange.endDate).toISOString(),
+      },
       prevStartDate: previousPeriod.startDate,
       prevEndDate: previousPeriod.endDate,
       prevLabel: previousPeriod.label,
@@ -317,10 +266,7 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
 
 // Helper: validate preset value
 function isValidPreset(value: string): value is DateRangePreset {
-  return [
-    "today", "yesterday", "week", "last-week", 
-    "month", "last-month", "year", "last-year", "custom"
-  ].includes(value);
+  return ["THIS_MONTH", "LAST_30", "CUSTOM"].includes(value);
 }
 
 // Helper: validate date string (YYYY-MM-DD)

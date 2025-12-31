@@ -92,6 +92,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [note, setNote] = useState("");
   const [merchant, setMerchant] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
+  const [accountId, setAccountId] = useState<Id<"accounts"> | "">("");
 
   // Gig worker fields
   const [hoursWorked, setHoursWorked] = useState("");
@@ -102,8 +103,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [linkedBudgetId, setLinkedBudgetId] = useState("");
 
   // Transfer-specific state
-  const [fromAccount, setFromAccount] = useState("");
-  const [toAccount, setToAccount] = useState("");
+  const [fromAccount, setFromAccount] = useState<Id<"accounts"> | "">("");
+  const [toAccount, setToAccount] = useState<Id<"accounts"> | "">("");
 
   // Tags - split into context and intent
   const [contextTags, setContextTags] = useState<string[]>([]);
@@ -129,7 +130,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   // Fetch accounts for dropdowns
-  const accounts = useQuery(api.accounts.listAccounts, {}) as any[] | undefined;
+  const accounts = useQuery(api.accounts.listAccounts, { includeArchived: false }) as any[] | undefined;
 
   // Fetch goals and budget categories for linking
   const goals = useQuery(api.goals.listGoals, {}) as any[] | undefined;
@@ -211,7 +212,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
   // Form validation
   const isValidAmount = amountCents !== null && amountCents > 0;
-  const canSave = isValidAmount && (type !== "transfer" || (fromAccount && toAccount));
+  const canSave = isValidAmount && (type !== "transfer" || (fromAccount && toAccount && fromAccount !== toAccount));
 
   // Meaning preview text
   const meaningPreview = useMemo(() => {
@@ -242,12 +243,18 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
     } catch {}
   }, []);
 
-  // Get account options for selectors
-  const accountOptions = useMemo(() => {
-    if (!accounts) return ["Cash", "Checking", "Savings", "Credit Card"];
-    const names = accounts.map(a => a.name);
-    return names.length > 0 ? names : ["Cash", "Checking", "Savings", "Credit Card"];
+  const selectorAccounts = useMemo(() => {
+    if (!accounts) return [];
+    return accounts.filter((acc) => acc.showInTransactionSelector !== false);
   }, [accounts]);
+
+  const fallbackMethods = ["Cash", "Checking", "Savings", "Credit Card"];
+
+  const getAccountName = (id?: Id<"accounts"> | "") => {
+    if (!id) return "Account";
+    const match = accounts?.find((acc) => acc._id === id);
+    return match?.name ?? "Account";
+  };
 
   async function onSave() {
     if (!canSave) return;
@@ -266,21 +273,22 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
           date: ts,
           transferType: "internal",
           note: note.trim() || undefined,
+          fromAccountId: fromAccount ? (fromAccount as Id<"accounts">) : undefined,
+          toAccountId: toAccount ? (toAccount as Id<"accounts">) : undefined,
         });
         undoId = res as unknown as string;
       } else {
-        // Combine context and intent tags
-        const allTags = [...contextTags, ...intentTags];
-        
         const res = await addEntry({
           type,
           category: effectiveCategory || undefined,
           note: note.trim() || undefined,
           merchant: merchant.trim() || undefined,
           methodOrAccount: methodOrAccount.trim() || undefined,
+          accountId: accountId ? (accountId as Id<"accounts">) : undefined,
           amountCents: amountCents!,
           date: ts,
-          tags: allTags.length > 0 ? allTags : undefined,
+          contextTags,
+          intentTags,
           // Gig worker fields
           hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
           platformType: platformType || undefined,
@@ -314,6 +322,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       setPlatformType("");
       setLinkedGoalId("");
       setLinkedBudgetId("");
+      setAccountId("");
       if (type === "transfer") {
         setFromAccount("");
         setToAccount("");
@@ -326,7 +335,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       if (type === "transfer") {
         recap = `Saved: Transfer ${amountStr}`;
         if (fromAccount && toAccount) {
-          recap += ` • ${fromAccount} → ${toAccount}`;
+          recap += ` • ${getAccountName(fromAccount)} → ${getAccountName(toAccount)}`;
         }
       } else {
         const typeLabel = type === "expense" ? "Spent" : "Received";
@@ -562,30 +571,69 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             Account / Method
           </label>
           <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-            {accountOptions.slice(0, 4).map((account) => (
-              <button
-                key={account}
-                type="button"
-                onClick={() => setMethodOrAccount(methodOrAccount === account ? "" : account)}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: "var(--radius-full)",
-                  fontSize: "var(--text-meta)",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  transition: "all 150ms ease",
-                  backgroundColor: methodOrAccount === account ? "var(--primary)" : "var(--surface-2)",
-                  color: methodOrAccount === account ? "var(--primary-foreground)" : "var(--text)",
-                  border: methodOrAccount === account ? "none" : "1px solid var(--border)",
-                }}
-              >
-                {account}
-              </button>
-            ))}
+            {selectorAccounts.length > 0
+              ? selectorAccounts.slice(0, 4).map((account) => (
+                  <button
+                    key={account._id}
+                    type="button"
+                    onClick={() => {
+                      if (accountId === account._id) {
+                        setAccountId("");
+                        setMethodOrAccount("");
+                      } else {
+                        setAccountId(account._id);
+                        setMethodOrAccount(account.name);
+                      }
+                    }}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-meta)",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      transition: "all 150ms ease",
+                      backgroundColor: accountId === account._id ? "var(--primary)" : "var(--surface-2)",
+                      color: accountId === account._id ? "var(--primary-foreground)" : "var(--text)",
+                      border: accountId === account._id ? "none" : "1px solid var(--border)",
+                    }}
+                  >
+                    {account.name}
+                  </button>
+                ))
+              : fallbackMethods.map((method) => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => {
+                      setAccountId("");
+                      setMethodOrAccount(methodOrAccount === method ? "" : method);
+                    }}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-meta)",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      transition: "all 150ms ease",
+                      backgroundColor: methodOrAccount === method ? "var(--primary)" : "var(--surface-2)",
+                      color: methodOrAccount === method ? "var(--primary-foreground)" : "var(--text)",
+                      border: methodOrAccount === method ? "none" : "1px solid var(--border)",
+                    }}
+                  >
+                    {method}
+                  </button>
+                ))}
             {/* Custom input trigger */}
             <input
-              value={!accountOptions.slice(0, 4).includes(methodOrAccount) ? methodOrAccount : ""}
-              onChange={(e) => setMethodOrAccount(e.target.value)}
+              value={
+                selectorAccounts.length > 0
+                  ? accountId ? "" : methodOrAccount
+                  : !fallbackMethods.includes(methodOrAccount) ? methodOrAccount : ""
+              }
+              onChange={(e) => {
+                setAccountId("");
+                setMethodOrAccount(e.target.value);
+              }}
               placeholder="Other..."
               style={{
                 flex: 1,
@@ -620,7 +668,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             </label>
             <select
               value={fromAccount}
-              onChange={(e) => setFromAccount(e.target.value)}
+              onChange={(e) => setFromAccount(e.target.value as Id<"accounts"> | "")}
               style={{
                 width: "100%",
                 backgroundColor: "var(--surface-2)",
@@ -633,8 +681,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               }}
             >
               <option value="">Select...</option>
-              {accountOptions.map((account) => (
-                <option key={account} value={account}>{account}</option>
+              {(accounts ?? []).map((account) => (
+                <option key={account._id} value={account._id}>{account.name}</option>
               ))}
             </select>
           </div>
@@ -655,7 +703,7 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
             </label>
             <select
               value={toAccount}
-              onChange={(e) => setToAccount(e.target.value)}
+              onChange={(e) => setToAccount(e.target.value as Id<"accounts"> | "")}
               style={{
                 width: "100%",
                 backgroundColor: "var(--surface-2)",
@@ -668,8 +716,8 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               }}
             >
               <option value="">Select...</option>
-              {accountOptions.filter(a => a !== fromAccount).map((account) => (
-                <option key={account} value={account}>{account}</option>
+              {(accounts ?? []).filter((acc) => acc._id !== fromAccount).map((account) => (
+                <option key={account._id} value={account._id}>{account.name}</option>
               ))}
             </select>
           </div>

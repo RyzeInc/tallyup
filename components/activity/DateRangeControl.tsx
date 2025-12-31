@@ -6,26 +6,14 @@ import DatePicker from "@/components/ui/DatePicker";
 
 // All available date range presets
 export type DateRangePreset =
-  | "today"
-  | "yesterday"
-  | "week"
-  | "last-week"
-  | "month"
-  | "last-month"
-  | "year"
-  | "last-year"
-  | "custom";
+  | "THIS_MONTH"
+  | "LAST_30"
+  | "CUSTOM";
 
 const presetLabels: Record<DateRangePreset, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  week: "This Week",
-  "last-week": "Last Week",
-  month: "This Month",
-  "last-month": "Last Month",
-  year: "This Year",
-  "last-year": "Last Year",
-  custom: "Custom",
+  THIS_MONTH: "This Month",
+  LAST_30: "Last 30 Days",
+  CUSTOM: "Custom",
 };
 
 export default function DateRangeControl({
@@ -65,21 +53,11 @@ export default function DateRangeControl({
     setTempTo(to);
   }, [from, to]);
 
-  const presets: DateRangePreset[] = [
-    "today",
-    "yesterday",
-    "week",
-    "last-week",
-    "month",
-    "last-month",
-    "year",
-    "last-year",
-    "custom",
-  ];
+  const presets: DateRangePreset[] = ["THIS_MONTH", "LAST_30", "CUSTOM"];
 
   function selectMode(m: DateRangePreset) {
     setRange(m);
-    if (m !== "custom") {
+    if (m !== "CUSTOM") {
       setOpen(false);
     }
   }
@@ -91,9 +69,9 @@ export default function DateRangeControl({
   }
 
   const displayLabel =
-    range === "custom" && from && to
+    range === "CUSTOM" && from && to
       ? `${from} – ${to}`
-      : presetLabels[range as DateRangePreset] || presetLabels.month;
+      : presetLabels[range as DateRangePreset] || presetLabels.THIS_MONTH;
 
   return (
     <>

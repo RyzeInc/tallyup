@@ -3,6 +3,7 @@
 import { SignedIn, SignedOut, SignInButton, useUser } from "@clerk/nextjs";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import type { Id } from "convex/_generated/dataModel";
 import { api } from "convex/_generated/api";
 import {
   EntryType,
@@ -53,6 +54,7 @@ export default function LogPage() {
   const [customCategory, setCustomCategory] = useState("");
   const [note, setNote] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
+  const [accountId, setAccountId] = useState<Id<"accounts"> | "">("");
   const [tags, setTags] = useState<string[]>([]);
 
   // Progressive disclosure state
@@ -84,6 +86,7 @@ export default function LogPage() {
   const deleteEntry = useMutation(api.entries.deleteEntry);
 
   const serverBuckets = useQuery(api.entries.listBuckets, { type });
+  const accounts = useQuery(api.accounts.listAccounts, { includeArchived: false }) as any[] | undefined;
   
   const categoryOptions = useMemo(() => {
     const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
@@ -91,6 +94,13 @@ export default function LogPage() {
     if (!merged.includes("Other")) merged.push("Other");
     return merged;
   }, [type, serverBuckets]);
+
+  const selectorAccounts = useMemo(() => {
+    if (!accounts) return [];
+    return accounts.filter((acc) => acc.showInTransactionSelector !== false);
+  }, [accounts]);
+
+  const fallbackMethods = ["Cash", "Checking", "Savings", "Credit Card"];
 
   const effectiveCategory = category === "Other" ? (customCategory.trim() || "Other") : category;
 
@@ -111,9 +121,12 @@ export default function LogPage() {
         category: effectiveCategory || undefined,
         note: note.trim() || undefined,
         methodOrAccount: methodOrAccount.trim() || undefined,
+        accountId: accountId ? (accountId as Id<"accounts">) : undefined,
         amountCents: amountCents!,
         date: ts,
         tags: tags.length > 0 ? tags : undefined,
+        contextTags: tags.length > 0 ? tags : [],
+        intentTags: [],
       });
 
       lastSavedRef.current = {
@@ -129,6 +142,7 @@ export default function LogPage() {
       setAmountCents(null);
       setNote("");
       setMethodOrAccount("");
+      setAccountId("");
       setTags([]);
       setShowTags(false);
       setShowPayMode(false);
@@ -547,10 +561,65 @@ export default function LogPage() {
                   Done
                 </button>
               </div>
+              <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
+                {selectorAccounts.length > 0
+                  ? selectorAccounts.slice(0, 4).map((account) => (
+                      <button
+                        key={account._id}
+                        type="button"
+                        onClick={() => {
+                          if (accountId === account._id) {
+                            setAccountId("");
+                            setMethodOrAccount("");
+                          } else {
+                            setAccountId(account._id);
+                            setMethodOrAccount(account.name);
+                          }
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "var(--radius-full)",
+                          fontSize: "var(--text-meta)",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          backgroundColor: accountId === account._id ? "var(--primary)" : "transparent",
+                          color: accountId === account._id ? "var(--primary-foreground)" : "var(--text-secondary)",
+                          border: accountId === account._id ? "none" : "1px solid var(--border)",
+                        }}
+                      >
+                        {account.name}
+                      </button>
+                    ))
+                  : fallbackMethods.map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => {
+                          setAccountId("");
+                          setMethodOrAccount(methodOrAccount === method ? "" : method);
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "var(--radius-full)",
+                          fontSize: "var(--text-meta)",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          backgroundColor: methodOrAccount === method ? "var(--primary)" : "transparent",
+                          color: methodOrAccount === method ? "var(--primary-foreground)" : "var(--text-secondary)",
+                          border: methodOrAccount === method ? "none" : "1px solid var(--border)",
+                        }}
+                      >
+                        {method}
+                      </button>
+                    ))}
+              </div>
               <input
                 ref={payModeInputRef}
-                value={methodOrAccount}
-                onChange={(e) => setMethodOrAccount(e.target.value)}
+                value={accountId ? "" : methodOrAccount}
+                onChange={(e) => {
+                  setAccountId("");
+                  setMethodOrAccount(e.target.value);
+                }}
                 placeholder={type === "expense" ? "e.g., Debit, Discover" : "e.g., Checking, Cash"}
                 style={{
                   width: "100%",

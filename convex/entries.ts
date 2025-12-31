@@ -1,5 +1,18 @@
 import { mutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+import { getReviewReason } from "../lib/constants";
+
+const timeRangeArgs = v.optional(
+  v.object({
+    preset: v.union(
+      v.literal("THIS_MONTH"),
+      v.literal("LAST_30"),
+      v.literal("CUSTOM")
+    ),
+    start: v.optional(v.string()),
+    end: v.optional(v.string()),
+  })
+);
 
 async function requireUserId(ctx: any): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
@@ -32,6 +45,42 @@ function getEffectiveCategory(entry: any): string | undefined {
   return entry.category ?? entry.bucket;
 }
 
+function parseIsoToTs(value?: string): number | undefined {
+  if (!value) return undefined;
+  const ts = Date.parse(value);
+  return Number.isNaN(ts) ? undefined : ts;
+}
+
+function resolveTimeRange(args: {
+  timeRange?: { preset: "THIS_MONTH" | "LAST_30" | "CUSTOM"; start?: string; end?: string };
+  startDate?: number;
+  endDate?: number;
+}): { start: number; end: number } {
+  if (args.timeRange) {
+    const start = parseIsoToTs(args.timeRange.start);
+    const end = parseIsoToTs(args.timeRange.end);
+
+    if (start !== undefined && end !== undefined) {
+      return { start, end };
+    }
+
+    const now = new Date();
+    if (args.timeRange.preset === "THIS_MONTH") {
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+      return { start: startDate, end: Date.now() + 1 };
+    }
+    if (args.timeRange.preset === "LAST_30") {
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return { start: todayStart - 30 * 24 * 60 * 60 * 1000, end: Date.now() + 1 };
+    }
+  }
+
+  return {
+    start: args.startDate ?? 0,
+    end: args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000,
+  };
+}
+
 export const addEntry = mutation({
   args: {
     type: v.union(v.literal("expense"), v.literal("income")),
@@ -41,6 +90,9 @@ export const addEntry = mutation({
     note: v.optional(v.string()),
     merchant: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
+    accountId: v.optional(v.id("accounts")),
+    contextTags: v.optional(v.array(v.string())),
+    intentTags: v.optional(v.array(v.string())),
     amountCents: v.number(),
     date: v.number(),
     // Optional Phase 1+ controls.
@@ -58,10 +110,8 @@ export const addEntry = mutation({
 
     // Accept either category or bucket, prefer category
     const categoryValue = cleanStr(args.category) ?? cleanStr(args.bucket);
-    if (!categoryValue) throw new Error("Category or bucket is required.");
-    
     const category = categoryValue;
-    const bucket = cleanStr(args.bucket) ?? categoryValue;
+    const bucket = categoryValue ? (cleanStr(args.bucket) ?? categoryValue) : cleanStr(args.bucket);
 
     const amountCents = Math.round(args.amountCents);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
@@ -72,24 +122,39 @@ export const addEntry = mutation({
     const merchant = cleanStr(args.merchant);
     const methodOrAccount = cleanStr(args.methodOrAccount);
     const tags = cleanTags(args.tags);
+    const contextTags = cleanTags(args.contextTags);
+    const intentTags = cleanTags(args.intentTags);
 
     const now = Date.now();
-    const needsReview = args.needsReview ?? false;
+    const reviewReason = getReviewReason({
+      category,
+      contextTags,
+      intentTags,
+      amountCents,
+      methodOrAccount,
+    });
+    const needsReview = args.needsReview ?? !!reviewReason;
+    const transactionType = args.type === "income" ? "RECEIVED" : "SPENT";
 
     const excludeFromTotals = args.excludeFromTotals ?? false;
 
     const insertedId = await ctx.db.insert("entries", {
       userId,
       type: args.type,
+      transactionType,
       bucket,
       category,
       tags,
       note,
       merchant,
       methodOrAccount,
+      accountId: args.accountId,
+      contextTags,
+      intentTags,
       amountCents,
       date: args.date,
       needsReview,
+      reviewReason: reviewReason ?? undefined,
       excludeFromTotals,
       occurredAt: args.date,
       enteredAt: now,
@@ -112,8 +177,8 @@ export const addEntry = mutation({
         .order("desc")
         .take(200);
 
-      const categoryLower = category.toLowerCase();
-      const bucketLower = bucket.toLowerCase();
+      const categoryLower = (category ?? "").toLowerCase();
+      const bucketLower = (bucket ?? "").toLowerCase();
 
       let bestRule: any = null;
       let bestScore = 0;
@@ -174,6 +239,7 @@ export const updateEntry = mutation({
     note: v.optional(v.string()),
     merchant: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
+    accountId: v.optional(v.union(v.id("accounts"), v.null())),
     amountCents: v.optional(v.number()),
     date: v.optional(v.number()),
     needsReview: v.optional(v.boolean()),
@@ -185,7 +251,7 @@ export const updateEntry = mutation({
     goalId: v.optional(v.union(v.id("goals"), v.null())),
     budgetCategoryId: v.optional(v.union(v.id("budgetCategories"), v.null())),
     contextTags: v.optional(v.array(v.string())),
-    intentTag: v.optional(v.union(v.string(), v.null())),
+    intentTags: v.optional(v.array(v.string())),
     recurringRuleId: v.optional(v.union(v.id("recurringRules"), v.null())),
   },
   handler: async (ctx, args) => {
@@ -209,6 +275,7 @@ export const updateEntry = mutation({
     if (args.note !== undefined) patch.note = cleanStr(args.note);
     if (args.merchant !== undefined) patch.merchant = cleanStr(args.merchant);
     if (args.methodOrAccount !== undefined) patch.methodOrAccount = cleanStr(args.methodOrAccount);
+    if (args.accountId !== undefined) patch.accountId = args.accountId ?? undefined;
 
     if (args.amountCents !== undefined) {
       const cents = Math.round(args.amountCents);
@@ -220,9 +287,6 @@ export const updateEntry = mutation({
       // Keep richer timestamp aligned unless you've already started using a different occurredAt.
       patch.occurredAt = args.date;
     }
-
-    if (args.needsReview !== undefined) patch.needsReview = args.needsReview;
-    else if (args.category !== undefined) patch.needsReview = !cleanStr(args.category);
 
     if (args.excludeFromTotals !== undefined) patch.excludeFromTotals = args.excludeFromTotals;
 
@@ -240,11 +304,31 @@ export const updateEntry = mutation({
     if (args.contextTags !== undefined) {
       patch.contextTags = args.contextTags.length > 0 ? args.contextTags : undefined;
     }
-    if (args.intentTag !== undefined) {
-      patch.intentTag = args.intentTag === null || args.intentTag === "" ? undefined : args.intentTag;
+    if (args.intentTags !== undefined) {
+      patch.intentTags = args.intentTags.length > 0 ? args.intentTags : undefined;
     }
     if (args.recurringRuleId !== undefined) {
       patch.recurringRuleId = args.recurringRuleId === null ? undefined : args.recurringRuleId;
+    }
+
+    const next = { ...existing, ...patch };
+    if (next.type === "transfer") {
+      patch.reviewReason = undefined;
+      patch.needsReview = false;
+      patch.transactionType = "TRANSFER";
+    } else {
+      const reviewReason = getReviewReason({
+        category: next.category,
+        contextTags: next.contextTags,
+        intentTags: next.intentTags,
+        amountCents: next.amountCents,
+        methodOrAccount: next.methodOrAccount,
+      });
+      patch.reviewReason = reviewReason ?? undefined;
+      patch.needsReview = !!reviewReason;
+      if (!patch.transactionType) {
+        patch.transactionType = next.type === "income" ? "RECEIVED" : "SPENT";
+      }
     }
 
     await ctx.db.patch(args.id, patch);
@@ -300,6 +384,7 @@ export const listEntries = query({
   args: {
     type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
     bucket: v.optional(v.string()),
+    timeRange: timeRangeArgs,
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     limit: v.optional(v.number()),
@@ -308,8 +393,7 @@ export const listEntries = query({
     const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 300, 20), 800);
 
-    const start = args.startDate ?? 0;
-    const end = args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000;
+    const { start, end } = resolveTimeRange(args);
 
     let rows: any[] = [];
     if (args.type) {
@@ -347,6 +431,7 @@ export const listEntriesPaged = query({
     type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
     buckets: v.optional(v.array(v.string())),
     categories: v.optional(v.array(v.string())),
+    timeRange: timeRangeArgs,
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     needsReview: v.optional(v.boolean()),
@@ -360,8 +445,7 @@ export const listEntriesPaged = query({
     const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 60, 10), 200);
 
-    const start = args.startDate ?? 0;
-    const end = args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000;
+    const { start, end } = resolveTimeRange(args);
 
     const useTypeIndex = !!args.type;
     const cursorDate = args.cursorDate;
@@ -412,13 +496,31 @@ export const listEntriesPaged = query({
         if (!categoriesSet.includes(c)) continue;
       }
       if (tagsSet && tagsSet.length) {
-        const rs = (r.tags ?? []).map((t: string) => (t ?? "").toLowerCase());
+        const rs = [
+          ...(r.tags ?? []),
+          ...(r.contextTags ?? []),
+          ...(r.intentTags ?? []),
+        ].map((t: string) => (t ?? "").toLowerCase());
         let ok = false;
         for (const t of tagsSet) if (rs.includes(t)) { ok = true; break; }
         if (!ok) continue;
       }
       if (search) {
-        const hay = ((r.note ?? "") + " " + (r.category ?? "") + " " + (r.tags ?? []).join(" ")).toLowerCase();
+        const hay = (
+          (r.note ?? "") +
+          " " +
+          (r.merchant ?? "") +
+          " " +
+          (r.category ?? "") +
+          " " +
+          (r.methodOrAccount ?? "") +
+          " " +
+          (r.tags ?? []).join(" ") +
+          " " +
+          (r.contextTags ?? []).join(" ") +
+          " " +
+          (r.intentTags ?? []).join(" ")
+        ).toLowerCase();
         if (!hay.includes(search)) continue;
       }
       out.push(r);

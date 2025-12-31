@@ -49,6 +49,7 @@ export default function TransfersPage() {
   const [toAccount, setToAccount] = useState<Id<"accounts"> | "">("");
   const [transferType, setTransferType] = useState<TransferType>("internal");
   const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const resetCreate = () => {
     setShowCreate(false);
@@ -58,10 +59,15 @@ export default function TransfersPage() {
     setToAccount("");
     setTransferType("internal");
     setNote("");
+    setError(null);
   };
 
   const handleCreate = async () => {
     if (!amount) return;
+    if (fromAccount && toAccount && fromAccount === toAccount) {
+      setError("From and To accounts must be different.");
+      return;
+    }
     
     setCreating(true);
     try {
@@ -76,6 +82,7 @@ export default function TransfersPage() {
       resetCreate();
     } catch (e) {
       console.error("Failed to create transfer:", e);
+      setError("Failed to create transfer.");
     } finally {
       setCreating(false);
     }
@@ -293,7 +300,7 @@ export default function TransfersPage() {
                     style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
                   >
                     <option value="">External / Not Specified</option>
-                    {accounts?.map((acc) => (
+                    {accounts?.filter((acc) => acc._id !== fromAccount).map((acc) => (
                       <option key={acc._id} value={acc._id}>{acc.name}</option>
                     ))}
                   </select>
@@ -313,6 +320,12 @@ export default function TransfersPage() {
                     style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
                   />
                 </div>
+
+                {error && (
+                  <div className="text-sm" style={{ color: "var(--danger)" }}>
+                    {error}
+                  </div>
+                )}
 
                 <button
                   onClick={handleCreate}

@@ -6,6 +6,9 @@ import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import TimeRangeBadge from "@/components/TimeRangeBadge";
+import { useTimeRange } from "@/components/TimeRangeProvider";
 import { useTabs } from "@/components/PersistentTabs";
 import { useToast } from "@/components/ToastProvider";
 import { formatMoney, centsToDollars } from "@/components/utils";
@@ -37,13 +40,15 @@ interface Entry {
 export default function RecurringPage() {
   const { setActiveTab } = useTabs();
   const toast = useToast();
+  const { timeRange } = useTimeRange();
   const rules = useQuery((api as any).recurring.listRecurringRules as any) as any[] | undefined;
   const updateRule = useMutation((api as any).recurring.updateRecurringRule as any);
   const createRule = useMutation((api as any).recurring.createRecurringRule as any);
 
   // Recent entries for transaction-based creation
   const recentEntries = useQuery(api.entries.listEntries, { 
-    limit: 50 
+    timeRange,
+    limit: 200,
   }) as Entry[] | undefined;
 
   // Edit modal state
@@ -197,17 +202,21 @@ export default function RecurringPage() {
         title="Patterns"
         subtitle="Saved patterns you've confirmed"
         rightSlot={
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
-            style={{
-              backgroundColor: "var(--primary)",
-              color: "var(--on-primary)",
-            }}
-          >
-            <Lucide.Plus className="h-4 w-4" />
-            Add
-          </button>
+          <div className="flex items-center gap-2">
+            <TimeRangeBadge />
+            <TimeRangeControl />
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+              style={{
+                backgroundColor: "var(--primary)",
+                color: "var(--on-primary)",
+              }}
+            >
+              <Lucide.Plus className="h-4 w-4" />
+              Add
+            </button>
+          </div>
         }
       />
 

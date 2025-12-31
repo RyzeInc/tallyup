@@ -4,10 +4,14 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import { centsToDollars, formatMoney, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
+import type { Id } from "convex/_generated/dataModel";
+import { centsToDollars, formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import TimeRangeBadge from "@/components/TimeRangeBadge";
+import { useTimeRange } from "@/components/TimeRangeProvider";
 
 /**
  * Dashboard - Financial overview at a glance
@@ -20,8 +24,8 @@ import { useTabs } from "@/components/PersistentTabs";
  */
 
 type Entry = {
-  _id: string;
-  type: "expense" | "income";
+  _id: Id<"entries">;
+  type: "expense" | "income" | "transfer";
   amountCents: number;
   date: number;
   category?: string;
@@ -34,23 +38,17 @@ type Entry = {
 export default function DashboardPage() {
   const { setActiveTab } = useTabs();
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
-  
-  // Dashboard has its own independent time range (not linked to global)
-  // Default to "This Month" for a snapshot of current financial situation
-  const [dashboardPreset, setDashboardPreset] = useState<DateRangePreset>("month");
-  const [showPresetPicker, setShowPresetPicker] = useState(false);
-  
-  // Compute date range from dashboard's own preset
-  const { startDate, endDate, label } = useMemo(() => {
-    return getDateRangeFromPreset(dashboardPreset);
-  }, [dashboardPreset]);
+  const { label, timeRange } = useTimeRange();
 
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 1200 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
 
   const recentEntries = useMemo(() => {
     if (!entries) return [];
-    return [...entries].sort((a, b) => b.date - a.date).slice(0, 8);
+    return [...entries]
+      .filter((entry) => entry.type !== "transfer")
+      .sort((a, b) => b.date - a.date)
+      .slice(0, 8);
   }, [entries]);
 
   const computed = useMemo(() => {
@@ -60,6 +58,7 @@ export default function DashboardPage() {
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
+      if (e.type === "transfer") continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
     }
@@ -69,6 +68,7 @@ export default function DashboardPage() {
   }, [entries]);
 
   const reviewCount = inbox?.length ?? 0;
+  const reviewPreview = useMemo(() => (inbox ?? []).slice(0, 3), [inbox]);
 
   return (
     <div className="space-y-4 pb-4">
@@ -81,62 +81,9 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Dashboard</h1>
           </div>
-          {/* Dashboard-specific time range picker (independent from global) */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPresetPicker(!showPresetPicker)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
-            >
-              <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
-              <span>{label}</span>
-              <Lucide.ChevronDown className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
-            </button>
-            
-            {showPresetPicker && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShowPresetPicker(false)} 
-                />
-                <div
-                  className="absolute right-0 top-full mt-2 z-50 rounded-xl p-2 shadow-lg min-w-[160px]"
-                  style={{
-                    backgroundColor: "var(--surface)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {(
-                    [
-                      { value: "today", label: "Today" },
-                      { value: "week", label: "This Week" },
-                      { value: "month", label: "This Month" },
-                      { value: "year", label: "This Year" },
-                    ] as { value: DateRangePreset; label: string }[]
-                  ).map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        setDashboardPreset(option.value);
-                        setShowPresetPicker(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
-                      style={{
-                        backgroundColor: dashboardPreset === option.value ? "var(--accent-subtle)" : "transparent",
-                        color: dashboardPreset === option.value ? "var(--primary)" : "var(--text)",
-                        fontWeight: dashboardPreset === option.value ? 600 : 400,
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+          <div className="flex items-center gap-3">
+            <TimeRangeBadge />
+            <TimeRangeControl />
           </div>
         </div>
 
@@ -236,10 +183,20 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-body font-medium" style={{ color: "var(--text)" }}>
-                {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} to review
+                Needs meaning
               </div>
               <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-                Tap to categorize
+                {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} to resolve
+              </div>
+              <div className="mt-2 space-y-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
+                {reviewPreview.map((entry: any) => (
+                  <div key={entry._id} className="truncate">
+                    {entry.merchant || entry.note || entry.category || entry.bucket || "Untitled"}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-2 text-[11px] font-semibold" style={{ color: "var(--warning)" }}>
+                Resolve now
               </div>
             </div>
             <Lucide.ChevronRight className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />

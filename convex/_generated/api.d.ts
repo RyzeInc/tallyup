@@ -9,6 +9,7 @@
  */
 
 import type * as accounts from "../accounts.js";
+import type * as analytics from "../analytics.js";
 import type * as budgets from "../budgets.js";
 import type * as categories from "../categories.js";
 import type * as detector from "../detector.js";
@@ -30,6 +31,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
+  analytics: typeof analytics;
   budgets: typeof budgets;
   categories: typeof categories;
   detector: typeof detector;

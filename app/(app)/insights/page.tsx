@@ -4,10 +4,12 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { centsToDollars, CONTEXT_TAGS } from "@/components/utils";
-import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -34,10 +36,12 @@ import {
 type TypeFilter = "all" | "income" | "expense";
 
 interface Entry {
-  _id: string;
-  type: "expense" | "income";
+  _id: Id<"entries">;
+  type: "expense" | "income" | "transfer";
   category?: string;
   tags?: string[];
+  contextTags?: string[];
+  intentTags?: string[];
   note?: string;
   amountCents: number;
   date: number;
@@ -200,7 +204,7 @@ function KpiTooltip({
 export default function InsightsPage() {
   const router = useRouter();
   const { setActiveTab } = useTabs();
-  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
+  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel, timeRange } = useTimeRange();
   
   // Filters
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -229,7 +233,7 @@ export default function InsightsPage() {
   }, [router, setActiveTab]);
 
   // Data
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 2000 }) as Entry[] | undefined;
   const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
 
@@ -242,9 +246,10 @@ export default function InsightsPage() {
     if (!entries) return [];
     return entries.filter((e) => {
       if (e.excludeFromTotals) return false;
+      if (e.type === "transfer") return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
-        const entryTags = e.tags ?? [];
+        const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
         // OR logic: entry has at least one selected tag
         if (!selectedTags.some((t) => entryTags.includes(t))) return false;
       }
@@ -256,9 +261,10 @@ export default function InsightsPage() {
     if (!prevEntries) return [];
     return prevEntries.filter((e) => {
       if (e.excludeFromTotals) return false;
+      if (e.type === "transfer") return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
-        const entryTags = e.tags ?? [];
+        const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
         if (!selectedTags.some((t) => entryTags.includes(t))) return false;
       }
       return true;
@@ -297,8 +303,13 @@ export default function InsightsPage() {
         }
 
         // Tag breakdown
-        if (e.tags?.length) {
-          for (const tag of e.tags) {
+        const combinedTags = [
+          ...(e.tags ?? []),
+          ...(e.contextTags ?? []),
+          ...(e.intentTags ?? []),
+        ];
+        if (combinedTags.length) {
+          for (const tag of combinedTags) {
             tagSpend.set(tag, (tagSpend.get(tag) ?? 0) + e.amountCents);
           }
         } else {
@@ -306,7 +317,7 @@ export default function InsightsPage() {
         }
 
         // Reimbursable
-        if (e.tags?.includes("Reimbursable")) {
+        if (combinedTags.includes("Reimbursable")) {
           reimbursableOutstanding += e.amountCents;
         }
 
@@ -751,7 +762,12 @@ export default function InsightsPage() {
       <PageHeader
         title="Insights"
         subtitle={`${label} at a glance`}
-        rightSlot={<GlobalDateRangePicker showAllPresets />}
+        rightSlot={
+          <div className="flex items-center gap-2">
+            <TimeRangeBadge />
+            <TimeRangeControl showAllPresets />
+          </div>
+        }
         compact
       />
 

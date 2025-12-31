@@ -10,7 +10,8 @@ import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useToast } from "@/components/ToastProvider";
 
 /**
@@ -45,7 +46,7 @@ const DEFAULT_BUDGET_CATEGORIES = [
 ];
 
 export default function BudgetingPage() {
-  const { startDate, endDate, label } = useTimeRange();
+  const { label, timeRange } = useTimeRange();
   const toast = useToast();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -63,7 +64,7 @@ export default function BudgetingPage() {
   const [saving, setSaving] = useState(false);
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 2000, type: "expense" }) as any[] | undefined;
 
   const createBudgetCategory = useMutation(api.budgets.createBudgetCategory);
   const updateBudgetCategory = useMutation(api.budgets.updateBudgetCategory);
@@ -208,8 +209,9 @@ export default function BudgetingPage() {
         }
       />
 
-      <div className="flex items-center justify-end">
-        <GlobalDateRangePicker />
+      <div className="flex items-center justify-end gap-2">
+        <TimeRangeBadge />
+        <TimeRangeControl />
       </div>
 
       <SignedOut>

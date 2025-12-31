@@ -5,21 +5,10 @@ import * as Lucide from "lucide-react";
 import { useTimeRange } from "./TimeRangeProvider";
 import { DateRangePreset } from "./utils";
 
-// Grouped presets for the new 5-row layout
 const PRESET_ROWS: { label?: string; presets: { key: DateRangePreset; label: string }[] }[] = [
-  { presets: [{ key: "custom", label: "Custom Range" }] },
-  { label: "Month", presets: [{ key: "month", label: "This Month" }, { key: "last-month", label: "Last Month" }] },
-  { label: "Week", presets: [{ key: "week", label: "This Week" }, { key: "last-week", label: "Last Week" }] },
-  { label: "Year", presets: [{ key: "year", label: "This Year" }, { key: "last-year", label: "Last Year" }] },
-  { presets: [{ key: "today", label: "Today" }, { key: "yesterday", label: "Yesterday" }] },
-];
-
-// Quick presets for inline display (if needed)
-const QUICK_PRESETS: { key: DateRangePreset; label: string }[] = [
-  { key: "month", label: "This Month" },
-  { key: "last-month", label: "Last Month" },
-  { key: "week", label: "This Week" },
-  { key: "custom", label: "Custom Range" },
+  { presets: [{ key: "THIS_MONTH", label: "This Month" }] },
+  { presets: [{ key: "LAST_30", label: "Last 30 Days" }] },
+  { presets: [{ key: "CUSTOM", label: "Custom Range" }] },
 ];
 
 interface GlobalDateRangePickerProps {
@@ -55,7 +44,7 @@ export default function GlobalDateRangePicker({
   }, [customFrom, customTo]);
 
   function selectPreset(p: DateRangePreset) {
-    if (p === "custom") {
+    if (p === "CUSTOM") {
       setShowCustom(true);
     } else {
       setPreset(p);
@@ -145,27 +134,27 @@ export default function GlobalDateRangePicker({
                         <button
                           onClick={() => selectPreset(row.presets[0].key)}
                           className={`w-full flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition-colors ${
-                            preset === row.presets[0].key && row.presets[0].key !== "custom"
+                            preset === row.presets[0].key && row.presets[0].key !== "CUSTOM"
                               ? "bg-[var(--accent-subtle)]"
                               : "hover:bg-[var(--surface-subtle)]"
                           }`}
                           style={{
                             border: `1px solid ${
-                              preset === row.presets[0].key && row.presets[0].key !== "custom"
+                              preset === row.presets[0].key && row.presets[0].key !== "CUSTOM"
                                 ? "var(--accent)"
                                 : "var(--border)"
                             }`,
                             color:
-                              preset === row.presets[0].key && row.presets[0].key !== "custom"
+                              preset === row.presets[0].key && row.presets[0].key !== "CUSTOM"
                                 ? "var(--accent)"
                                 : "var(--text)",
                           }}
                         >
                           <span>{row.presets[0].label}</span>
-                          {preset === row.presets[0].key && row.presets[0].key !== "custom" && (
+                          {preset === row.presets[0].key && row.presets[0].key !== "CUSTOM" && (
                             <Lucide.Check className="h-4 w-4" style={{ color: "var(--accent)" }} />
                           )}
-                          {row.presets[0].key === "custom" && (
+                          {row.presets[0].key === "CUSTOM" && (
                             <Lucide.ChevronRight
                               className="h-4 w-4"
                               style={{ color: "var(--text-tertiary)" }}

@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
-import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
 import * as Lucide from "lucide-react";
@@ -18,10 +19,10 @@ export default function SummaryPage() {
   const { user } = useUser();
   const router = useRouter();
   const { open: openQuickLog } = useQuickLog();
-  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel } = useTimeRange();
+  const { label, prevStartDate, prevEndDate, prevLabel, timeRange } = useTimeRange();
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 1200 }) as any[] | undefined;
   const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 1200 }) as any[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
 
@@ -43,6 +44,7 @@ export default function SummaryPage() {
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
+      if (e.type === "transfer") continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
 
@@ -75,6 +77,7 @@ export default function SummaryPage() {
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
+      if (e.type === "transfer") continue;
       if (e.type === "income") income += e.amountCents;
       else expense += e.amountCents;
     }
@@ -111,7 +114,10 @@ export default function SummaryPage() {
           <div>
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Home</h1>
           </div>
-          <GlobalDateRangePicker />
+          <div className="flex items-center gap-2">
+            <TimeRangeBadge />
+            <TimeRangeControl />
+          </div>
         </div>
 
         <SignedOut>

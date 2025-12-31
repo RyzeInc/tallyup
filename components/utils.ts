@@ -220,16 +220,7 @@ export function startOfYearLocalTs(now = new Date()): number {
   return d.getTime();
 }
 
-export type DateRangePreset =
-  | "today"
-  | "yesterday"
-  | "week"
-  | "last-week"
-  | "month"
-  | "last-month"
-  | "year"
-  | "last-year"
-  | "custom";
+export type DateRangePreset = "THIS_MONTH" | "LAST_30" | "CUSTOM";
 
 export interface DateRange {
   startDate: number;
@@ -246,51 +237,15 @@ export function getDateRangeFromPreset(
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
   switch (preset) {
-    case "today":
-      return { startDate: todayStart, endDate: Date.now() + 1, label: "Today" };
-
-    case "yesterday": {
-      const yest = new Date(now);
-      yest.setDate(yest.getDate() - 1);
-      const start = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate()).getTime();
-      const end = start + 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "Yesterday" };
-    }
-
-    case "week":
-      return { startDate: startOfWeekLocalTs(now), endDate: Date.now() + 1, label: "This Week" };
-
-    case "last-week": {
-      const lastWeekDate = new Date(now);
-      lastWeekDate.setDate(lastWeekDate.getDate() - 7);
-      const start = startOfWeekLocalTs(lastWeekDate);
-      const end = start + 7 * 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "Last Week" };
-    }
-
-    case "month":
+    case "THIS_MONTH":
       return { startDate: startOfMonthLocalTs(now), endDate: Date.now() + 1, label: "This Month" };
 
-    case "last-month": {
-      const lastMonthDate = new Date(now);
-      lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-      const start = startOfMonthLocalTs(lastMonthDate);
-      const endMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      return { startDate: start, endDate: endMonth, label: "Last Month" };
+    case "LAST_30": {
+      const start = todayStart - 30 * 24 * 60 * 60 * 1000;
+      return { startDate: start, endDate: Date.now() + 1, label: "Last 30 Days" };
     }
 
-    case "year":
-      return { startDate: startOfYearLocalTs(now), endDate: Date.now() + 1, label: "This Year" };
-
-    case "last-year": {
-      const lastYearDate = new Date(now);
-      lastYearDate.setFullYear(lastYearDate.getFullYear() - 1);
-      const start = startOfYearLocalTs(lastYearDate);
-      const end = new Date(now.getFullYear(), 0, 1).getTime();
-      return { startDate: start, endDate: end, label: "Last Year" };
-    }
-
-    case "custom":
+    case "CUSTOM":
     default: {
       const s = yyyymmddToLocalMidnightTs(customFrom ?? todayYYYYMMDD());
       const e = yyyymmddToLocalMidnightTs(customTo ?? todayYYYYMMDD()) + 24 * 60 * 60 * 1000;

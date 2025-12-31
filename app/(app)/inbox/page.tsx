@@ -12,7 +12,7 @@ import {
   EXPENSE_SPACES,
   INCOME_SPACES,
 } from "@/components/utils";
-import { CONTEXT_TAGS, INTENT_TAGS } from "@/lib/constants";
+import { CONTEXT_TAGS, INTENT_TAGS, getReviewReason } from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
@@ -65,19 +65,29 @@ export default function ReviewTriagePage() {
     | undefined;
 
   const updateEntry = useMutation(api.entries.updateEntry);
+  const logEvent = useMutation(api.analytics.logEvent);
 
   // Categorize entries by what they're missing
   const categorizedEntries = useMemo(() => {
     if (!inbox) return { category: [], context: [], account: [], all: [] };
-    
-    const needsCategory = inbox.filter(e => !e.category);
-    const needsContext = inbox.filter(e => !e.contextTags || e.contextTags.length === 0);
-    const needsAccount = inbox.filter(e => !e.methodOrAccount);
-    
+
+    const withReason = inbox.map((entry) => {
+      const reason =
+        entry.reviewReason ??
+        getReviewReason({
+          category: entry.category ?? null,
+          contextTags: entry.contextTags ?? [],
+          intentTags: entry.intentTags ?? [],
+          amountCents: Math.abs(entry.amountCents ?? 0),
+          methodOrAccount: entry.methodOrAccount ?? null,
+        });
+      return { entry, reason };
+    });
+
     return {
-      category: needsCategory,
-      context: needsContext,
-      account: needsAccount,
+      category: withReason.filter((r) => r.reason === "NEEDS_CATEGORY").map((r) => r.entry),
+      context: withReason.filter((r) => r.reason === "NEEDS_CONTEXT").map((r) => r.entry),
+      account: withReason.filter((r) => r.reason === "NEEDS_ACCOUNT").map((r) => r.entry),
       all: inbox,
     };
   }, [inbox]);
@@ -199,6 +209,7 @@ export default function ReviewTriagePage() {
                 key={entry._id}
                 entry={entry}
                 onUpdate={updateEntry}
+                onLogEvent={logEvent}
                 catSuggestions={catSuggestions}
                 onMakeRecurring={() => setSelectedEntry(entry)}
                 toast={toast}
@@ -233,12 +244,14 @@ export default function ReviewTriagePage() {
 function ReviewTriageItem({
   entry,
   onUpdate,
+  onLogEvent,
   catSuggestions,
   onMakeRecurring,
   toast,
 }: {
   entry: any;
   onUpdate: (args: any) => Promise<any>;
+  onLogEvent: (args: { event: string; data?: any }) => Promise<any>;
   catSuggestions: string[];
   onMakeRecurring?: () => void;
   toast: any;
@@ -250,9 +263,18 @@ function ReviewTriageItem({
   const [expanded, setExpanded] = useState(false);
 
   // Determine what needs attention
-  const needsCategory = !entry.category;
-  const needsContext = !entry.contextTags || entry.contextTags.length === 0;
-  const needsAccount = !entry.methodOrAccount;
+  const reviewReason =
+    entry.reviewReason ??
+    getReviewReason({
+      category: entry.category ?? null,
+      contextTags: entry.contextTags ?? [],
+      intentTags: entry.intentTags ?? [],
+      amountCents: Math.abs(entry.amountCents ?? 0),
+      methodOrAccount: entry.methodOrAccount ?? null,
+    });
+  const needsCategory = reviewReason === "NEEDS_CATEGORY";
+  const needsContext = reviewReason === "NEEDS_CONTEXT";
+  const needsAccount = reviewReason === "NEEDS_ACCOUNT";
 
   // Quick suggestions for category
   const quickCategories = useMemo(() => {
@@ -274,6 +296,16 @@ function ReviewTriageItem({
       
       await onUpdate(updates);
       toast.success("Resolved");
+      try {
+        await onLogEvent({
+          event: "review_resolved",
+          data: {
+            durationMs: entry.createdAt ? Date.now() - entry.createdAt : undefined,
+            method: "manual",
+            amountCents: Math.abs(entry.amountCents ?? 0),
+          },
+        });
+      } catch {}
     } catch (e: any) {
       toast.error("Failed to update", { description: e?.message });
     } finally {
@@ -290,6 +322,24 @@ function ReviewTriageItem({
         needsReview: false,
       });
       toast.success(`Set to ${cat}`);
+      try {
+        await onLogEvent({
+          event: "category_suggestion_used",
+          data: {
+            source: "review_queue",
+            category: cat,
+            amountCents: Math.abs(entry.amountCents ?? 0),
+          },
+        });
+        await onLogEvent({
+          event: "review_resolved",
+          data: {
+            durationMs: entry.createdAt ? Date.now() - entry.createdAt : undefined,
+            method: "quick_category",
+            amountCents: Math.abs(entry.amountCents ?? 0),
+          },
+        });
+      } catch {}
     } catch (e: any) {
       toast.error("Failed to update", { description: e?.message });
     } finally {
@@ -307,6 +357,16 @@ function ReviewTriageItem({
         needsReview: false,
       });
       toast.success(`Added ${ctx}`);
+      try {
+        await onLogEvent({
+          event: "review_resolved",
+          data: {
+            durationMs: entry.createdAt ? Date.now() - entry.createdAt : undefined,
+            method: "quick_context",
+            amountCents: Math.abs(entry.amountCents ?? 0),
+          },
+        });
+      } catch {}
     } catch (e: any) {
       toast.error("Failed to update", { description: e?.message });
     } finally {
@@ -323,6 +383,16 @@ function ReviewTriageItem({
         needsReview: false,
       });
       toast.success(`Set account to ${account}`);
+      try {
+        await onLogEvent({
+          event: "review_resolved",
+          data: {
+            durationMs: entry.createdAt ? Date.now() - entry.createdAt : undefined,
+            method: "quick_account",
+            amountCents: Math.abs(entry.amountCents ?? 0),
+          },
+        });
+      } catch {}
     } catch (e: any) {
       toast.error("Failed to update", { description: e?.message });
     } finally {
