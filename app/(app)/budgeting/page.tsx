@@ -10,6 +10,7 @@ import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useToast } from "@/components/ToastProvider";
@@ -46,7 +47,8 @@ const DEFAULT_BUDGET_CATEGORIES = [
 ];
 
 export default function BudgetingPage() {
-  const { label, timeRange } = useTimeRange();
+  const { label, resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
   const toast = useToast();
 
   const [showCreate, setShowCreate] = useState(false);
@@ -64,7 +66,7 @@ export default function BudgetingPage() {
   const [saving, setSaving] = useState(false);
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
-  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 2000, type: "expense" }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 2000, type: "expense" }) as any[] | undefined;
 
   const createBudgetCategory = useMutation(api.budgets.createBudgetCategory);
   const updateBudgetCategory = useMutation(api.budgets.updateBudgetCategory);

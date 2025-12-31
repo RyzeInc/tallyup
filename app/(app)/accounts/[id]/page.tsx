@@ -9,6 +9,9 @@ import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { formatMoney } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import {
   LineChart,
   Line,
@@ -26,51 +29,6 @@ type AccountType =
   | "loan"
   | "business"
   | "other";
-
-type RangeKey = "1w" | "1m" | "3m" | "1y" | "ytd";
-
-const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
-  { key: "1w", label: "1W" },
-  { key: "1m", label: "1M" },
-  { key: "3m", label: "3M" },
-  { key: "1y", label: "1Y" },
-  { key: "ytd", label: "YTD" },
-];
-
-function startOfDay(ts: number) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function getRangeWindow(range: RangeKey) {
-  const now = Date.now();
-  const endDate = now;
-  const startDate = (() => {
-    const d = new Date(now);
-    switch (range) {
-      case "1w":
-        d.setDate(d.getDate() - 7);
-        break;
-      case "1m":
-        d.setMonth(d.getMonth() - 1);
-        break;
-      case "3m":
-        d.setMonth(d.getMonth() - 3);
-        break;
-      case "1y":
-        d.setFullYear(d.getFullYear() - 1);
-        break;
-      case "ytd":
-        d.setMonth(0, 1);
-        break;
-      default:
-        break;
-    }
-    return startOfDay(d.getTime());
-  })();
-  return { startDate, endDate };
-}
 
 function getNowDateInput() {
   return new Date().toISOString().slice(0, 10);
@@ -91,7 +49,8 @@ export default function AccountDetailPage() {
   const toast = useToast();
   const accountId = params?.id as Id<"accounts">;
 
-  const [range, setRange] = useState<RangeKey>("1m");
+  const { resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
   const [showUpdate, setShowUpdate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
 
@@ -108,12 +67,10 @@ export default function AccountDetailPage() {
   const [editMinPayment, setEditMinPayment] = useState("");
   const [editShowSelector, setEditShowSelector] = useState(true);
 
-  const { startDate, endDate } = useMemo(() => getRangeWindow(range), [range]);
-
   const data = useQuery(api.accounts.getAccountWithSnapshots, {
     accountId,
-    startDate,
-    endDate,
+    startDate: fromMs,
+    endDate: toMs,
     limit: 600,
   }) as
     | {
@@ -230,14 +187,17 @@ export default function AccountDetailPage() {
         title={account.name}
         subtitle="Snapshots tell the real story."
         rightSlot={
-          <button
-            onClick={handleOpenEdit}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
-            style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
-          >
-            <Lucide.Pencil className="h-4 w-4" />
-            Edit
-          </button>
+          <div className="flex items-center gap-2">
+            <TimeRangeControl />
+            <button
+              onClick={handleOpenEdit}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: "var(--surface-2)", color: "var(--text)" }}
+            >
+              <Lucide.Pencil className="h-4 w-4" />
+              Edit
+            </button>
+          </div>
         }
       />
 
@@ -277,22 +237,6 @@ export default function AccountDetailPage() {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="text-sm font-semibold" style={{ color: "var(--text)" }}>
             Snapshot trend
-          </div>
-          <div className="flex items-center gap-2">
-            {RANGE_OPTIONS.map((opt) => (
-              <button
-                key={opt.key}
-                onClick={() => setRange(opt.key)}
-                className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-                style={{
-                  backgroundColor: range === opt.key ? "var(--accent-subtle)" : "var(--surface-2)",
-                  color: range === opt.key ? "var(--accent)" : "var(--text-secondary)",
-                  border: range === opt.key ? "1px solid var(--accent)" : "1px solid transparent",
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
           </div>
         </div>
         <div className="h-48">

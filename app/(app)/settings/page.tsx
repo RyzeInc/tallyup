@@ -7,6 +7,7 @@ import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTheme, APPEARANCE_OPTIONS } from "@/components/ThemeProvider";
@@ -40,7 +41,10 @@ const REVIEW_REMINDER_KEY = "tallyup.reviewReminder";
 
 export default function SettingsPage() {
   const { user } = useUser();
-  const { startDate, endDate, label, timeRange } = useTimeRange();
+  const { label, resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const startDate = fromMs;
+  const endDate = toMs;
   const { theme, setTheme: changeTheme } = useTheme();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
@@ -122,7 +126,7 @@ export default function SettingsPage() {
   }
 
   // Export data - driven by global time range
-  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 5000 }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 5000 }) as any[] | undefined;
   const accounts = useQuery(api.accounts.listAccounts, { includeArchived: true }) as any[] | undefined;
   const [exporting, setExporting] = useState(false);
   async function exportCSV() {
@@ -164,7 +168,7 @@ export default function SettingsPage() {
   // Help actions
   function resetFilters() {
     try {
-      localStorage.removeItem("tallyup.timeRange");
+      localStorage.removeItem("tallyup.timeRange.selection.v1");
     } catch {}
     window.location.href = "/activity";
   }

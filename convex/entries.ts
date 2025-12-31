@@ -2,18 +2,6 @@ import { mutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getReviewReason } from "../lib/constants";
 
-const timeRangeArgs = v.optional(
-  v.object({
-    preset: v.union(
-      v.literal("THIS_MONTH"),
-      v.literal("LAST_30"),
-      v.literal("CUSTOM")
-    ),
-    start: v.optional(v.string()),
-    end: v.optional(v.string()),
-  })
-);
-
 async function requireUserId(ctx: any): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
@@ -45,36 +33,7 @@ function getEffectiveCategory(entry: any): string | undefined {
   return entry.category ?? entry.bucket;
 }
 
-function parseIsoToTs(value?: string): number | undefined {
-  if (!value) return undefined;
-  const ts = Date.parse(value);
-  return Number.isNaN(ts) ? undefined : ts;
-}
-
-function resolveTimeRange(args: {
-  timeRange?: { preset: "THIS_MONTH" | "LAST_30" | "CUSTOM"; start?: string; end?: string };
-  startDate?: number;
-  endDate?: number;
-}): { start: number; end: number } {
-  if (args.timeRange) {
-    const start = parseIsoToTs(args.timeRange.start);
-    const end = parseIsoToTs(args.timeRange.end);
-
-    if (start !== undefined && end !== undefined) {
-      return { start, end };
-    }
-
-    const now = new Date();
-    if (args.timeRange.preset === "THIS_MONTH") {
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      return { start: startDate, end: Date.now() + 1 };
-    }
-    if (args.timeRange.preset === "LAST_30") {
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-      return { start: todayStart - 30 * 24 * 60 * 60 * 1000, end: Date.now() + 1 };
-    }
-  }
-
+function resolveBounds(args: { startDate?: number; endDate?: number }): { start: number; end: number } {
   return {
     start: args.startDate ?? 0,
     end: args.endDate ?? Date.now() + 365 * 24 * 60 * 60 * 1000,
@@ -384,7 +343,6 @@ export const listEntries = query({
   args: {
     type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
     bucket: v.optional(v.string()),
-    timeRange: timeRangeArgs,
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     limit: v.optional(v.number()),
@@ -393,7 +351,7 @@ export const listEntries = query({
     const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 300, 20), 800);
 
-    const { start, end } = resolveTimeRange(args);
+    const { start, end } = resolveBounds(args);
 
     let rows: any[] = [];
     if (args.type) {
@@ -431,7 +389,6 @@ export const listEntriesPaged = query({
     type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
     buckets: v.optional(v.array(v.string())),
     categories: v.optional(v.array(v.string())),
-    timeRange: timeRangeArgs,
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     needsReview: v.optional(v.boolean()),
@@ -445,7 +402,7 @@ export const listEntriesPaged = query({
     const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 60, 10), 200);
 
-    const { start, end } = resolveTimeRange(args);
+    const { start, end } = resolveBounds(args);
 
     const useTypeIndex = !!args.type;
     const cursorDate = args.cursorDate;

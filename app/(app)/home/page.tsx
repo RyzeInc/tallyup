@@ -12,6 +12,7 @@ import EditEntryModal from "@/components/EditEntryModal";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 
@@ -86,13 +87,14 @@ type Entry = {
 
 export default function HomePage() {
   const quickLog = useQuickLog();
-  const { label, timeRange } = useTimeRange();
+  const { label, resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
   
   // Edit modal state
   const [editEntry, setEditEntry] = useState<Entry | null>(null);
 
   // Fetch entries for selected scope
-  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 500 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 500 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 200 }) as Entry[] | undefined;
 
   // Compute financial snapshot

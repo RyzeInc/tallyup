@@ -9,9 +9,10 @@ import { centsToDollars, formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
-import TimeRangeControl from "@/components/TimeRangeControl";
-import TimeRangeBadge from "@/components/TimeRangeBadge";
-import { useTimeRange } from "@/components/TimeRangeProvider";
+import { TimeRangePickerModal } from "@/src/components/timeRange/TimeRangePickerModal";
+import { resolveRange } from "@/src/lib/timeRange/resolve";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
+import { PresetSelectionKey, TimeRangeSelection } from "@/src/lib/timeRange/types";
 
 /**
  * Dashboard - Financial overview at a glance
@@ -35,12 +36,53 @@ type Entry = {
   needsReview?: boolean;
 };
 
+const PRESET_LABELS: Record<PresetSelectionKey, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  this_week: "This Week",
+  last_week: "Last Week",
+  this_month: "This Month",
+  last_month: "Last Month",
+  this_year: "This Year",
+  last_year: "Last Year",
+};
+
+function formatShortDate(value: string): string {
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(y, (m ?? 1) - 1, d ?? 1);
+  const now = new Date();
+  const includeYear = date.getFullYear() !== now.getFullYear();
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: includeYear ? "numeric" : undefined,
+  }).format(date);
+}
+
+function getSelectionLabel(selection: TimeRangeSelection): string {
+  if (selection.kind === "preset") {
+    return PRESET_LABELS[selection.key] ?? "Custom Range";
+  }
+  if (!selection.from || !selection.to) return "Custom Range";
+  return `Custom: ${formatShortDate(selection.from)}–${formatShortDate(selection.to)}`;
+}
+
 export default function DashboardPage() {
   const { setActiveTab } = useTabs();
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
-  const { label, timeRange } = useTimeRange();
+  const [selection, setSelection] = useState<TimeRangeSelection>({
+    kind: "preset",
+    key: "this_month",
+  });
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const label = useMemo(() => getSelectionLabel(selection), [selection]);
+  const resolvedRange = useMemo(
+    () => resolveRange(selection, new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone),
+    [selection]
+  );
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
 
-  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 1200 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 1200 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
 
   const recentEntries = useMemo(() => {
@@ -82,8 +124,21 @@ export default function DashboardPage() {
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Dashboard</h1>
           </div>
           <div className="flex items-center gap-3">
-            <TimeRangeBadge />
-            <TimeRangeControl />
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+              style={{
+                borderColor: "var(--border)",
+                backgroundColor: "var(--surface)",
+                color: "var(--text)",
+              }}
+              aria-haspopup="dialog"
+              aria-expanded={pickerOpen}
+            >
+              <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+              <span className="max-w-[140px] truncate">{label}</span>
+              <Lucide.ChevronDown className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+            </button>
           </div>
         </div>
 
@@ -302,6 +357,16 @@ export default function DashboardPage() {
           </div>
         )}
       </SignedIn>
+
+      <TimeRangePickerModal
+        open={pickerOpen}
+        selection={selection}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(next) => {
+          setSelection(next);
+          setPickerOpen(false);
+        }}
+      />
 
       {/* Edit Modal */}
       {editingEntry && (

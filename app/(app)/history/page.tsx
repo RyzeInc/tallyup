@@ -11,6 +11,7 @@ import ActivityTable from "@/components/activity/ActivityTable";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { EntryType, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
@@ -23,7 +24,10 @@ export default function HistoryPage() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { open: openQuickLog } = useQuickLog();
 
-  const { startDate, endDate, timeRange } = useTimeRange();
+  const { resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const startDate = fromMs;
+  const endDate = toMs;
 
   const [type, setType] = useState<"all" | EntryType>(() => (searchParams.get("type") as any) ?? "all");
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
@@ -141,7 +145,8 @@ export default function HistoryPage() {
     type: type === "all" ? undefined : type,
     categories: selectedCategories.length > 0 ? selectedCategories : undefined,
     tags: selectedTags.length > 0 ? selectedTags : undefined,
-    timeRange,
+    startDate,
+    endDate,
     needsReview: reviewOnly ? true : undefined,
     search: q ? q : undefined,
     limit: 60,
@@ -323,7 +328,7 @@ export default function HistoryPage() {
         rightSlot={
           <div className="flex items-center gap-2">
             <TimeRangeBadge />
-            <TimeRangeControl showAllPresets />
+            <TimeRangeControl />
           </div>
         }
         compact

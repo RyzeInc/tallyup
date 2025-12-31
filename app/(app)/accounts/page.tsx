@@ -11,6 +11,9 @@ import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import { formatMoney } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
+import TimeRangeControl from "@/components/TimeRangeControl";
+import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 
 type AccountType =
   | "credit"
@@ -20,8 +23,6 @@ type AccountType =
   | "loan"
   | "business"
   | "other";
-
-type RangeKey = "1w" | "1m" | "3m" | "1y" | "ytd";
 
 interface AccountSnapshot {
   balance: number;
@@ -40,14 +41,6 @@ interface AccountRow {
   latestSnapshot?: AccountSnapshot | null;
   changePct?: number | null;
 }
-
-const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
-  { key: "1w", label: "1W" },
-  { key: "1m", label: "1M" },
-  { key: "3m", label: "3M" },
-  { key: "1y", label: "1Y" },
-  { key: "ytd", label: "YTD" },
-];
 
 const SECTION_ORDER: {
   key: AccountType;
@@ -74,41 +67,6 @@ const TYPE_LABELS: Record<AccountType, string> = {
   other: "Balance",
 };
 
-function startOfDay(ts: number) {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-function getRangeWindow(range: RangeKey) {
-  const now = Date.now();
-  const endDate = now;
-  const startDate = (() => {
-    const d = new Date(now);
-    switch (range) {
-      case "1w":
-        d.setDate(d.getDate() - 7);
-        break;
-      case "1m":
-        d.setMonth(d.getMonth() - 1);
-        break;
-      case "3m":
-        d.setMonth(d.getMonth() - 3);
-        break;
-      case "1y":
-        d.setFullYear(d.getFullYear() - 1);
-        break;
-      case "ytd":
-        d.setMonth(0, 1);
-        break;
-      default:
-        break;
-    }
-    return startOfDay(d.getTime());
-  })();
-  return { startDate, endDate };
-}
-
 function formatPercent(value?: number | null) {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   const pct = value * 100;
@@ -130,7 +88,8 @@ function getMonogram(name: string) {
 
 export default function AccountsPage() {
   const toast = useToast();
-  const [range, setRange] = useState<RangeKey>("1m");
+  const { resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
   const [openSections, setOpenSections] = useState<Record<AccountType, boolean>>({
     credit: true,
     checking: true,
@@ -142,11 +101,9 @@ export default function AccountsPage() {
   });
   const [showUpdateSheet, setShowUpdateSheet] = useState(false);
 
-  const { startDate, endDate } = useMemo(() => getRangeWindow(range), [range]);
-
   const overview = useQuery(api.accounts.getAccountsOverview, {
-    startDate,
-    endDate,
+    startDate: fromMs,
+    endDate: toMs,
   }) as { accounts: AccountRow[]; totals: any } | undefined;
 
   const accounts = overview?.accounts ?? [];
@@ -179,6 +136,7 @@ export default function AccountsPage() {
         subtitle="Balances stay manual-first and always in sync."
         rightSlot={
           <div className="flex items-center gap-2">
+            <TimeRangeControl />
             <button
               onClick={() => setShowUpdateSheet(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium"
@@ -231,22 +189,6 @@ export default function AccountsPage() {
               <div className="text-xs mt-1" style={{ color: "var(--text-tertiary)" }}>
                 As of {totals?.asOf ? new Date(totals.asOf).toLocaleString() : "—"}
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {RANGE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => setRange(opt.key)}
-                  className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-                  style={{
-                    backgroundColor: range === opt.key ? "var(--accent-subtle)" : "var(--surface-2)",
-                    color: range === opt.key ? "var(--accent)" : "var(--text-secondary)",
-                    border: range === opt.key ? "1px solid var(--accent)" : "1px solid transparent",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { ReactNode } from "react";
 import TopNav from "@/components/TopNav";
 import { TabContainer, TabPanel } from "@/components/PersistentTabs";
 import dynamic from "next/dynamic";
+import { TimeRangeProvider } from "@/components/TimeRangeProvider";
 
 // Dynamically import tab content to avoid circular dependencies
 const DashboardPage = dynamic(() => import("@/app/(app)/dashboard/page"), { ssr: false });
@@ -101,30 +102,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <TabPanel tabId="dashboard">
                 <DashboardPage />
               </TabPanel>
-              <TabPanel tabId="activity">
-                <ActivityPage />
-              </TabPanel>
-              <TabPanel tabId="budgeting">
-                <BudgetingPage />
-              </TabPanel>
-              <TabPanel tabId="recurring">
-                <RecurringPage />
-              </TabPanel>
-              <TabPanel tabId="goals">
-                <GoalsPage />
-              </TabPanel>
-              <TabPanel tabId="insights">
-                <InsightsPage />
-              </TabPanel>
-              <TabPanel tabId="help">
-                <HelpPage />
-              </TabPanel>
-              <TabPanel tabId="more">
-                <MorePage />
-              </TabPanel>
+              <TimeRangeProvider>
+                <TabPanel tabId="activity">
+                  <ActivityPage />
+                </TabPanel>
+                <TabPanel tabId="budgeting">
+                  <BudgetingPage />
+                </TabPanel>
+                <TabPanel tabId="recurring">
+                  <RecurringPage />
+                </TabPanel>
+                <TabPanel tabId="goals">
+                  <GoalsPage />
+                </TabPanel>
+                <TabPanel tabId="insights">
+                  <InsightsPage />
+                </TabPanel>
+                <TabPanel tabId="help">
+                  <HelpPage />
+                </TabPanel>
+                <TabPanel tabId="more">
+                  <MorePage />
+                </TabPanel>
+              </TimeRangeProvider>
             </TabContainer>
           ) : (
-            children
+            <TimeRangeProvider>{children}</TimeRangeProvider>
           )}
         </main>
       </div>

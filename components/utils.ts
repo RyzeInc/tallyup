@@ -220,40 +220,6 @@ export function startOfYearLocalTs(now = new Date()): number {
   return d.getTime();
 }
 
-export type DateRangePreset = "THIS_MONTH" | "LAST_30" | "CUSTOM";
-
-export interface DateRange {
-  startDate: number;
-  endDate: number;
-  label: string;
-}
-
-export function getDateRangeFromPreset(
-  preset: DateRangePreset,
-  customFrom?: string,
-  customTo?: string
-): DateRange {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-  switch (preset) {
-    case "THIS_MONTH":
-      return { startDate: startOfMonthLocalTs(now), endDate: Date.now() + 1, label: "This Month" };
-
-    case "LAST_30": {
-      const start = todayStart - 30 * 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: Date.now() + 1, label: "Last 30 Days" };
-    }
-
-    case "CUSTOM":
-    default: {
-      const s = yyyymmddToLocalMidnightTs(customFrom ?? todayYYYYMMDD());
-      const e = yyyymmddToLocalMidnightTs(customTo ?? todayYYYYMMDD()) + 24 * 60 * 60 * 1000;
-      return { startDate: Math.min(s, e), endDate: Math.max(s, e), label: `${customFrom} – ${customTo}` };
-    }
-  }
-}
-
 export function uniqCaseInsensitive(arr: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];

@@ -1,12 +1,12 @@
 "use client";
 
 import React from "react";
-import { useTimeRange } from "./TimeRangeProvider";
+import { useTimeRange } from "@/src/components/timeRange/useTimeRange";
 
 export default function TimeRangeBadge() {
-  const { preset, setPreset, label } = useTimeRange();
+  const { setSelection, label, isDefault } = useTimeRange();
 
-  if (preset === "THIS_MONTH") return null;
+  if (isDefault) return null;
 
   return (
     <div
@@ -15,7 +15,7 @@ export default function TimeRangeBadge() {
     >
       <span>Viewing: {label}</span>
       <button
-        onClick={() => setPreset("THIS_MONTH")}
+        onClick={() => setSelection({ kind: "preset", key: "this_month" })}
         className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
         style={{ backgroundColor: "var(--accent-subtle)", color: "var(--accent)" }}
       >

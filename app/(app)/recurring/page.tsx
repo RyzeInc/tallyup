@@ -9,6 +9,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import { useTabs } from "@/components/PersistentTabs";
 import { useToast } from "@/components/ToastProvider";
 import { formatMoney, centsToDollars } from "@/components/utils";
@@ -40,14 +41,16 @@ interface Entry {
 export default function RecurringPage() {
   const { setActiveTab } = useTabs();
   const toast = useToast();
-  const { timeRange } = useTimeRange();
+  const { resolvedRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
   const rules = useQuery((api as any).recurring.listRecurringRules as any) as any[] | undefined;
   const updateRule = useMutation((api as any).recurring.updateRecurringRule as any);
   const createRule = useMutation((api as any).recurring.createRecurringRule as any);
 
   // Recent entries for transaction-based creation
   const recentEntries = useQuery(api.entries.listEntries, { 
-    timeRange,
+    startDate: fromMs,
+    endDate: toMs,
     limit: 200,
   }) as Entry[] | undefined;
 

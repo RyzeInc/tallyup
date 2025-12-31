@@ -11,6 +11,7 @@ import { centsToDollars, CONTEXT_TAGS } from "@/components/utils";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTabs } from "@/components/PersistentTabs";
@@ -204,7 +205,11 @@ function KpiTooltip({
 export default function InsightsPage() {
   const router = useRouter();
   const { setActiveTab } = useTabs();
-  const { startDate, endDate, label, prevStartDate, prevEndDate, prevLabel, timeRange } = useTimeRange();
+  const { label, prevLabel, resolvedRange, previousRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const { fromMs: prevFromMs, toMs: prevToMs } = toQueryArgs(previousRange);
+  const startDate = fromMs;
+  const endDate = toMs;
   
   // Filters
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
@@ -233,8 +238,8 @@ export default function InsightsPage() {
   }, [router, setActiveTab]);
 
   // Data
-  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 2000 }) as Entry[] | undefined;
-  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 2000 }) as Entry[] | undefined;
+  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevFromMs, endDate: prevToMs, limit: 2000 }) as Entry[] | undefined;
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
 
   // Days in range
@@ -765,7 +770,7 @@ export default function InsightsPage() {
         rightSlot={
           <div className="flex items-center gap-2">
             <TimeRangeBadge />
-            <TimeRangeControl showAllPresets />
+            <TimeRangeControl />
           </div>
         }
         compact

@@ -8,6 +8,7 @@ import { centsToDollars } from "@/components/utils";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import TimeRangeBadge from "@/components/TimeRangeBadge";
 import { useTimeRange } from "@/components/TimeRangeProvider";
+import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import { useQuickLog } from "@/components/log/QuickLogProvider";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
@@ -19,11 +20,13 @@ export default function SummaryPage() {
   const { user } = useUser();
   const router = useRouter();
   const { open: openQuickLog } = useQuickLog();
-  const { label, prevStartDate, prevEndDate, prevLabel, timeRange } = useTimeRange();
+  const { label, prevLabel, resolvedRange, previousRange } = useTimeRange();
+  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const { fromMs: prevFromMs, toMs: prevToMs } = toQueryArgs(previousRange);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
 
-  const entries = useQuery(api.entries.listEntries, { timeRange, limit: 1200 }) as any[] | undefined;
-  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 1200 }) as any[] | undefined;
+  const entries = useQuery(api.entries.listEntries, { startDate: fromMs, endDate: toMs, limit: 1200 }) as any[] | undefined;
+  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevFromMs, endDate: prevToMs, limit: 1200 }) as any[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as any[] | undefined;
 
   // Get recent entries for mini-list (last 5)
