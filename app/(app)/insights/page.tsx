@@ -381,8 +381,12 @@ export default function InsightsPage() {
       needsReviewCount,
       recurringCount,
       transactionCount: all.length,
+      // Cash flow metrics
+      avgDailyInflow: daysInRange > 0 ? income / daysInRange : 0,
+      avgDailyOutflow: daysInRange > 0 ? expense / daysInRange : 0,
+      savingsRate: income > 0 ? ((income - expense) / income) * 100 : 0,
     };
-  }, [filteredEntries]);
+  }, [filteredEntries, daysInRange]);
 
   const prevComputed = useMemo(() => {
     const all = filteredPrevEntries;
@@ -1285,6 +1289,105 @@ export default function InsightsPage() {
                     )}
                   </div>
                 </>
+              )}
+            </div>
+
+            {/* ─────────────────────────────────────────────────────────────
+                B2. Cash Flow Summary
+            ───────────────────────────────────────────────────────────── */}
+            <div
+              className="rounded-xl border p-4"
+              style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Lucide.Waves className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  Cash Flow
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                {/* Inflows */}
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Lucide.ArrowDownLeft className="h-3.5 w-3.5" style={{ color: "var(--success)" }} />
+                    <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Inflows</span>
+                  </div>
+                  <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--success)" }}>
+                    {centsToDollars(computed.income)}
+                  </div>
+                  <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+                    {centsToDollars(Math.round(computed.avgDailyInflow))}/day
+                  </div>
+                </div>
+
+                {/* Outflows */}
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Lucide.ArrowUpRight className="h-3.5 w-3.5" style={{ color: "var(--danger)" }} />
+                    <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Outflows</span>
+                  </div>
+                  <div className="text-lg font-semibold tabular-nums" style={{ color: "var(--danger)" }}>
+                    {centsToDollars(computed.expense)}
+                  </div>
+                  <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+                    {centsToDollars(Math.round(computed.avgDailyOutflow))}/day
+                  </div>
+                </div>
+
+                {/* Savings Rate */}
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <Lucide.PiggyBank className="h-3.5 w-3.5" style={{ color: "var(--primary)" }} />
+                    <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Savings</span>
+                  </div>
+                  <div
+                    className="text-lg font-semibold tabular-nums"
+                    style={{ color: computed.savingsRate >= 0 ? "var(--primary)" : "var(--danger)" }}
+                  >
+                    {computed.savingsRate >= 0 ? "" : ""}{computed.savingsRate.toFixed(0)}%
+                  </div>
+                  <div className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
+                    of income
+                  </div>
+                </div>
+              </div>
+
+              {/* Cash flow bar visualization */}
+              {computed.income > 0 && (
+                <div className="mt-4 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+                  <div className="flex items-center gap-2 text-xs mb-2">
+                    <span style={{ color: "var(--text-secondary)" }}>Income allocation:</span>
+                  </div>
+                  <div className="flex h-3 rounded-full overflow-hidden" style={{ backgroundColor: "var(--surface-2)" }}>
+                    <div
+                      className="transition-all"
+                      style={{
+                        width: `${Math.min(100, (computed.expense / computed.income) * 100)}%`,
+                        backgroundColor: "var(--danger)",
+                      }}
+                    />
+                    {computed.net > 0 && (
+                      <div
+                        className="transition-all"
+                        style={{
+                          width: `${(computed.net / computed.income) * 100}%`,
+                          backgroundColor: "var(--success)",
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div className="flex justify-between text-[10px] mt-1">
+                    <span style={{ color: "var(--danger)" }}>
+                      Spent {((computed.expense / computed.income) * 100).toFixed(0)}%
+                    </span>
+                    {computed.net > 0 && (
+                      <span style={{ color: "var(--success)" }}>
+                        Saved {((computed.net / computed.income) * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 

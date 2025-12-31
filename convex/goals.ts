@@ -124,3 +124,45 @@ export const updateGoalProgress = mutation({
     return newAmount;
   },
 });
+
+/**
+ * Update goal details (name, target, status, etc.)
+ */
+export const updateGoal = mutation({
+  args: {
+    id: v.id("goals"),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    targetAmountCents: v.optional(v.number()),
+    targetDate: v.optional(v.number()),
+    status: v.optional(v.union(v.literal("active"), v.literal("paused"), v.literal("completed"), v.literal("abandoned"))),
+    priority: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const goal = await ctx.db.get(args.id);
+    if (!goal || goal.userId !== userId) {
+      throw new Error("Goal not found");
+    }
+
+    const { id, ...updates } = args;
+    // Filter out undefined values
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.description !== undefined) patch.description = updates.description;
+    if (updates.icon !== undefined) patch.icon = updates.icon;
+    if (updates.color !== undefined) patch.color = updates.color;
+    if (updates.targetAmountCents !== undefined) patch.targetAmountCents = updates.targetAmountCents;
+    if (updates.targetDate !== undefined) patch.targetDate = updates.targetDate;
+    if (updates.status !== undefined) patch.status = updates.status;
+    if (updates.priority !== undefined) patch.priority = updates.priority;
+
+    await ctx.db.patch(args.id, patch);
+    return args.id;
+  },
+});

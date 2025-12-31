@@ -245,8 +245,30 @@ export default function RecurringPage() {
                   <Lucide.Repeat className="h-5 w-5" style={{ color: r.type === "income" ? "var(--success)" : "var(--text-tertiary)" }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
-                    {r.displayName ?? r.name ?? r.category ?? "Unnamed"}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
+                      {r.displayName ?? r.name ?? r.category ?? "Unnamed"}
+                    </span>
+                    {/* Confidence indicator */}
+                    {r.confidence !== undefined && (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                        style={{
+                          backgroundColor: r.confidence >= 80
+                            ? "var(--success-subtle)"
+                            : r.confidence >= 50
+                            ? "var(--warning-subtle)"
+                            : "var(--surface-2)",
+                          color: r.confidence >= 80
+                            ? "var(--success)"
+                            : r.confidence >= 50
+                            ? "var(--warning)"
+                            : "var(--text-tertiary)",
+                        }}
+                      >
+                        {r.confidence}% match
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs mt-0.5" style={{ color: "var(--text-tertiary)" }}>
                     {r.cadenceType ?? r.intervalType ?? "Monthly"} · {r.autolinkEnabled ? "Auto-applied" : "Manual"}
@@ -288,6 +310,46 @@ export default function RecurringPage() {
             </div>
 
             <div className="space-y-4">
+              {/* Confidence display */}
+              {editingRule.confidence !== undefined && (
+                <div
+                  className="flex items-center gap-2 p-3 rounded-xl"
+                  style={{
+                    backgroundColor: editingRule.confidence >= 80
+                      ? "var(--success-subtle)"
+                      : editingRule.confidence >= 50
+                      ? "var(--warning-subtle)"
+                      : "var(--surface-2)",
+                  }}
+                >
+                  <Lucide.BarChart2 className="h-4 w-4" style={{
+                    color: editingRule.confidence >= 80
+                      ? "var(--success)"
+                      : editingRule.confidence >= 50
+                      ? "var(--warning)"
+                      : "var(--text-tertiary)",
+                  }} />
+                  <div className="flex-1">
+                    <div className="text-xs font-medium" style={{
+                      color: editingRule.confidence >= 80
+                        ? "var(--success)"
+                        : editingRule.confidence >= 50
+                        ? "var(--warning)"
+                        : "var(--text-secondary)",
+                    }}>
+                      {editingRule.confidence}% confidence
+                    </div>
+                    <div className="text-[10px]" style={{ color: "var(--text-tertiary)" }}>
+                      {editingRule.confidence >= 80
+                        ? "Strong pattern match"
+                        : editingRule.confidence >= 50
+                        ? "Moderate pattern match"
+                        : "Weak pattern - review recommended"}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-medium mb-1.5 block" style={{ color: "var(--text-tertiary)" }}>
                   Name

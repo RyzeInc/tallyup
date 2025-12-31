@@ -37,6 +37,9 @@ interface Entry {
   recurringRuleId?: Id<"recurringRules">;
   contextTags?: string[];
   intentTag?: string;
+  // Gig worker fields
+  hoursWorked?: number;
+  platformType?: string;
   // Scoped ignore options
   excludeFromTotals?: boolean;
   excludeFromBudgets?: boolean;
@@ -76,6 +79,7 @@ export default function EditEntryModal({
   });
   const [category, setCategory] = useState(entry.category ?? entry.bucket ?? "");
   const [note, setNote] = useState(entry.note ?? "");
+  const [merchant, setMerchant] = useState(entry.merchant ?? "");
   const [methodOrAccount, setMethodOrAccount] = useState(entry.methodOrAccount ?? "");
   const [tags, setTags] = useState<string[]>(entry.tags ?? []);
   const [needsReview, setNeedsReview] = useState(entry.needsReview ?? false);
@@ -96,6 +100,10 @@ export default function EditEntryModal({
   const [excludeFromBudgets, setExcludeFromBudgets] = useState(entry.excludeFromBudgets ?? false);
   const [excludeFromCashFlow, setExcludeFromCashFlow] = useState(entry.excludeFromCashFlow ?? false);
 
+  // Gig worker fields
+  const [hoursWorked, setHoursWorked] = useState<string>(entry.hoursWorked?.toString() ?? "");
+  const [platformType, setPlatformType] = useState(entry.platformType ?? "");
+
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +122,7 @@ export default function EditEntryModal({
       date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
       category: entry.category ?? entry.bucket ?? "",
       note: entry.note ?? "",
+      merchant: entry.merchant ?? "",
       methodOrAccount: entry.methodOrAccount ?? "",
       tags: entry.tags ?? [],
       needsReview: entry.needsReview ?? false,
@@ -135,6 +144,7 @@ export default function EditEntryModal({
     if (date !== originalValues.date) return true;
     if (category !== originalValues.category) return true;
     if (note !== originalValues.note) return true;
+    if (merchant !== originalValues.merchant) return true;
     if (methodOrAccount !== originalValues.methodOrAccount) return true;
     if (needsReview !== originalValues.needsReview) return true;
     if (intentTag !== originalValues.intentTag) return true;
@@ -201,6 +211,7 @@ export default function EditEntryModal({
         amountCents,
         date: dateTs,
         note: note.trim() || undefined,
+        merchant: merchant.trim() || undefined,
         methodOrAccount: methodOrAccount.trim() || undefined,
         tags: tags.length > 0 ? tags : undefined,
         needsReview,
@@ -210,6 +221,9 @@ export default function EditEntryModal({
         goalId: goalId || null,
         budgetCategoryId: budgetCategoryId || null,
         recurringRuleId: recurringRuleId || null,
+        // Gig worker fields
+        hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
+        platformType: platformType || undefined,
       });
 
       toast.success("Entry updated");
@@ -648,6 +662,28 @@ export default function EditEntryModal({
               className="block text-xs font-medium mb-1.5"
               style={{ color: "var(--text-secondary)" }}
             >
+              Merchant / Payee
+            </label>
+            <input
+              type="text"
+              value={merchant}
+              onChange={(e) => setMerchant(e.target.value)}
+              placeholder="e.g., Amazon, Starbucks..."
+              className="w-full rounded-lg border px-3 py-2.5 text-sm"
+              style={{
+                borderColor: "var(--border)",
+                backgroundColor: "var(--input)",
+                color: "var(--text)",
+              }}
+            />
+          </div>
+
+          {/* Payment Method / Account */}
+          <div className="mb-4">
+            <label
+              className="block text-xs font-medium mb-1.5"
+              style={{ color: "var(--text-secondary)" }}
+            >
               Payment Method / Account
             </label>
             <input
@@ -663,6 +699,65 @@ export default function EditEntryModal({
               }}
             />
           </div>
+
+          {/* Gig Worker Fields - Only for income */}
+          {type === "income" && (
+            <div className="mb-4 p-3 rounded-xl" style={{ backgroundColor: "var(--surface-2)" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Lucide.Clock className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                <span className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+                  Gig / Hourly Work
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>
+                    Hours Worked
+                  </label>
+                  <input
+                    type="number"
+                    step="0.25"
+                    value={hoursWorked}
+                    onChange={(e) => setHoursWorked(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--text)",
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>
+                    Platform Type
+                  </label>
+                  <select
+                    value={platformType}
+                    onChange={(e) => setPlatformType(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                    style={{
+                      borderColor: "var(--border)",
+                      backgroundColor: "var(--surface)",
+                      color: "var(--text)",
+                    }}
+                  >
+                    <option value="">Select...</option>
+                    <option value="rideshare">Rideshare</option>
+                    <option value="delivery">Delivery</option>
+                    <option value="freelance">Freelance</option>
+                    <option value="consulting">Consulting</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+              {hoursWorked && parseFloat(hoursWorked) > 0 && (
+                <div className="mt-2 text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Hourly rate: ${(parseFloat(amountStr) / parseFloat(hoursWorked)).toFixed(2)}/hr
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Needs Review toggle */}
           <div>

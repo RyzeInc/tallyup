@@ -2,7 +2,7 @@
 
 import { SignedIn, SignedOut, useUser, SignOutButton, SignInButton } from "@clerk/nextjs";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
@@ -874,29 +874,31 @@ export default function SettingsPage() {
  * Notifications Settings Section
  */
 function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> }) {
+  // Convex integration for preferences
+  const preferences = useQuery(api.preferences.getUserPreferences, {});
+  const upsertPreferences = useMutation(api.preferences.upsertUserPreferences);
+  
+  // Local state (initialized from Convex or defaults)
   const [enabled, setEnabled] = useState(false);
   const [day, setDay] = useState("Sunday");
   const [time, setTime] = useState("18:00");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [saving, setSaving] = useState(false);
 
-  // Load saved settings
+  // Sync state from Convex preferences
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(REVIEW_REMINDER_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setEnabled(parsed.enabled ?? false);
-        setDay(parsed.day ?? "Sunday");
-        setTime(parsed.time ?? "18:00");
-      }
-      // Check notification permission
-      if ("Notification" in window) {
-        setNotificationPermission(Notification.permission);
-      } else {
-        setNotificationPermission("unsupported");
-      }
-    } catch {}
-  }, []);
+    if (preferences) {
+      setEnabled(preferences.reviewReminderEnabled ?? false);
+      setDay(preferences.reviewReminderDay ?? "Sunday");
+      setTime(preferences.reviewReminderTime ?? "18:00");
+    }
+    // Check notification permission
+    if ("Notification" in window) {
+      setNotificationPermission(Notification.permission);
+    } else {
+      setNotificationPermission("unsupported");
+    }
+  }, [preferences]);
 
   async function requestPermission() {
     if (!("Notification" in window)) {
@@ -919,12 +921,23 @@ function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> })
     }
   }
 
-  function saveSettings() {
+  async function saveSettings() {
+    setSaving(true);
     try {
+      // Save to Convex
+      await upsertPreferences({
+        reviewReminderEnabled: enabled,
+        reviewReminderDay: day,
+        reviewReminderTime: time,
+        reviewReminderFrequency: "weekly",
+      });
+      
+      // Also save to localStorage as backup for service worker
       localStorage.setItem(REVIEW_REMINDER_KEY, JSON.stringify({ enabled, day, time }));
+      
       toast.success("Reminder settings saved");
       
-      // Schedule notification (in a real app, this would register with a service worker)
+      // Schedule notification via service worker
       if (enabled && notificationPermission === "granted" && "serviceWorker" in navigator) {
         navigator.serviceWorker.ready.then((reg) => {
           reg.active?.postMessage({
@@ -935,7 +948,18 @@ function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> })
       }
     } catch (e) {
       toast.error("Failed to save settings");
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function toggleEnabled() {
+    const next = !enabled;
+    setEnabled(next);
+    // Immediately save toggle state
+    try {
+      await upsertPreferences({ reviewReminderEnabled: next });
+    } catch {}
   }
 
   return (
@@ -994,7 +1018,7 @@ function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> })
             </div>
           </div>
           <button
-            onClick={() => setEnabled(!enabled)}
+            onClick={toggleEnabled}
             className="relative w-12 h-7 rounded-full transition-colors"
             style={{
               backgroundColor: enabled ? "var(--accent)" : "var(--border)",
@@ -1044,10 +1068,11 @@ function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> })
 
             <button
               onClick={saveSettings}
-              className="w-full text-sm font-medium py-2.5 rounded-lg"
+              disabled={saving}
+              className="w-full text-sm font-medium py-2.5 rounded-lg disabled:opacity-50"
               style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
             >
-              Save Reminder
+              {saving ? "Saving..." : "Save Reminder"}
             </button>
           </div>
         )}

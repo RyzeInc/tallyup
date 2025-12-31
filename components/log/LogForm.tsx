@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Id } from "convex/_generated/dataModel";
 import {
   todayYYYYMMDD,
   uniqCaseInsensitive,
@@ -89,7 +90,16 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
   const [category, setCategory] = useState<string>("");
   const [customCategory, setCustomCategory] = useState("");
   const [note, setNote] = useState("");
+  const [merchant, setMerchant] = useState("");
   const [methodOrAccount, setMethodOrAccount] = useState("");
+
+  // Gig worker fields
+  const [hoursWorked, setHoursWorked] = useState("");
+  const [platformType, setPlatformType] = useState("");
+
+  // Goal and Budget linking
+  const [linkedGoalId, setLinkedGoalId] = useState("");
+  const [linkedBudgetId, setLinkedBudgetId] = useState("");
 
   // Transfer-specific state
   const [fromAccount, setFromAccount] = useState("");
@@ -120,6 +130,10 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
 
   // Fetch accounts for dropdowns
   const accounts = useQuery(api.accounts.listAccounts, {}) as any[] | undefined;
+
+  // Fetch goals and budget categories for linking
+  const goals = useQuery(api.goals.listGoals, {}) as any[] | undefined;
+  const budgets = useQuery(api.budgets.listBudgetCategories, {}) as any[] | undefined;
 
   // Fetch recent entries for suggestions
   const recentEntries = useQuery(api.entries.listEntries, { limit: 50 }) as any[] | undefined;
@@ -262,10 +276,17 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
           type,
           category: effectiveCategory || undefined,
           note: note.trim() || undefined,
+          merchant: merchant.trim() || undefined,
           methodOrAccount: methodOrAccount.trim() || undefined,
           amountCents: amountCents!,
           date: ts,
           tags: allTags.length > 0 ? allTags : undefined,
+          // Gig worker fields
+          hoursWorked: hoursWorked ? parseFloat(hoursWorked) : undefined,
+          platformType: platformType || undefined,
+          // Goal and Budget linking
+          goalId: linkedGoalId ? (linkedGoalId as Id<"goals">) : undefined,
+          budgetCategoryId: linkedBudgetId ? (linkedBudgetId as Id<"budgetCategories">) : undefined,
         });
 
         undoId = (res as any)?.id as string | undefined;
@@ -289,6 +310,10 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
       setContextTags([]);
       setIntentTags([]);
       setShowNote(false);
+      setHoursWorked("");
+      setPlatformType("");
+      setLinkedGoalId("");
+      setLinkedBudgetId("");
       if (type === "transfer") {
         setFromAccount("");
         setToAccount("");
@@ -486,6 +511,40 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
         )}
       </div>
 
+      {/* Merchant/Payee - For expense/income */}
+      {type !== "transfer" && (
+        <div>
+          <label
+            style={{
+              display: "block",
+              fontSize: "var(--text-micro)",
+              fontWeight: 500,
+              color: "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              marginBottom: "var(--space-2)",
+            }}
+          >
+            Merchant / Payee (optional)
+          </label>
+          <input
+            value={merchant}
+            onChange={(e) => setMerchant(e.target.value)}
+            placeholder="e.g., Amazon, Starbucks, Employer..."
+            style={{
+              width: "100%",
+              backgroundColor: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--input-radius)",
+              padding: "10px 14px",
+              fontSize: "var(--text-body)",
+              color: "var(--text)",
+              outline: "none",
+            }}
+          />
+        </div>
+      )}
+
       {/* Account/Method - Always visible */}
       {type !== "transfer" ? (
         <div>
@@ -614,6 +673,79 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
               ))}
             </select>
           </div>
+        </div>
+      )}
+
+      {/* Gig Worker Fields - Only for income */}
+      {type === "income" && (
+        <div
+          style={{
+            padding: "var(--space-3)",
+            borderRadius: "var(--radius-lg)",
+            backgroundColor: "var(--surface-2)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+            <Lucide.Clock className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+            <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}>
+              Gig / Hourly Work (Optional)
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: "var(--space-1)" }}>
+                Hours Worked
+              </label>
+              <input
+                type="number"
+                step="0.25"
+                value={hoursWorked}
+                onChange={(e) => setHoursWorked(e.target.value)}
+                placeholder="0.0"
+                style={{
+                  width: "100%",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px 12px",
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: "var(--space-1)" }}>
+                Platform Type
+              </label>
+              <select
+                value={platformType}
+                onChange={(e) => setPlatformType(e.target.value)}
+                style={{
+                  width: "100%",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px 12px",
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                  outline: "none",
+                }}
+              >
+                <option value="">Select...</option>
+                <option value="rideshare">Rideshare</option>
+                <option value="delivery">Delivery</option>
+                <option value="freelance">Freelance</option>
+                <option value="consulting">Consulting</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          {hoursWorked && parseFloat(hoursWorked) > 0 && amountCents && (
+            <div style={{ marginTop: "var(--space-2)", fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+              Hourly rate: ${(parseFloat(centsToDollars(amountCents)) / parseFloat(hoursWorked)).toFixed(2)}/hr
+            </div>
+          )}
         </div>
       )}
 
@@ -1067,6 +1199,78 @@ export default function LogForm({ onDone }: { onDone?: (res: { id?: string }) =>
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link to Goal or Budget */}
+      {type !== "transfer" && (
+        <div
+          style={{
+            padding: "var(--space-3)",
+            borderRadius: "var(--radius-lg)",
+            backgroundColor: "var(--surface-2)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
+            <Lucide.Link className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+            <span style={{ fontSize: "var(--text-meta)", fontWeight: 500, color: "var(--text-secondary)" }}>
+              Link to Goal or Budget (Optional)
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: "var(--space-1)" }}>
+                Goal
+              </label>
+              <select
+                value={linkedGoalId}
+                onChange={(e) => setLinkedGoalId(e.target.value)}
+                style={{
+                  width: "100%",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px 12px",
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                  outline: "none",
+                }}
+              >
+                <option value="">None</option>
+                {goals?.map((g: any) => (
+                  <option key={g._id} value={g._id}>
+                    {g.name} ({g.status || "active"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "var(--text-micro)", color: "var(--text-tertiary)", marginBottom: "var(--space-1)" }}>
+                Budget Category
+              </label>
+              <select
+                value={linkedBudgetId}
+                onChange={(e) => setLinkedBudgetId(e.target.value)}
+                style={{
+                  width: "100%",
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-md)",
+                  padding: "10px 12px",
+                  fontSize: "var(--text-body)",
+                  color: "var(--text)",
+                  outline: "none",
+                }}
+              >
+                <option value="">None</option>
+                {budgets?.map((b: any) => (
+                  <option key={b._id} value={b._id}>
+                    {b.name || b.category} (${(b.amountCents / 100).toFixed(0)})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>

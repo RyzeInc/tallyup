@@ -39,12 +39,19 @@ export const addEntry = mutation({
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
+    merchant: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
     amountCents: v.number(),
     date: v.number(),
     // Optional Phase 1+ controls.
     needsReview: v.optional(v.boolean()),
     excludeFromTotals: v.optional(v.boolean()),
+    // Gig worker fields
+    hoursWorked: v.optional(v.number()),
+    platformType: v.optional(v.string()),
+    // Linking fields
+    goalId: v.optional(v.id("goals")),
+    budgetCategoryId: v.optional(v.id("budgetCategories")),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -62,6 +69,7 @@ export const addEntry = mutation({
     }
 
     const note = cleanStr(args.note);
+    const merchant = cleanStr(args.merchant);
     const methodOrAccount = cleanStr(args.methodOrAccount);
     const tags = cleanTags(args.tags);
 
@@ -77,6 +85,7 @@ export const addEntry = mutation({
       category,
       tags,
       note,
+      merchant,
       methodOrAccount,
       amountCents,
       date: args.date,
@@ -86,6 +95,12 @@ export const addEntry = mutation({
       enteredAt: now,
       createdAt: now,
       updatedAt: now,
+      // Gig worker fields
+      hoursWorked: args.hoursWorked,
+      platformType: args.platformType,
+      // Linking fields (stored as strings, validated on read)
+      goalId: args.goalId,
+      budgetCategoryId: args.budgetCategoryId,
     });
 
     // Autolink: if any active recurring rule matches this entry and autolinkEnabled is true,
@@ -157,11 +172,15 @@ export const updateEntry = mutation({
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
+    merchant: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
     amountCents: v.optional(v.number()),
     date: v.optional(v.number()),
     needsReview: v.optional(v.boolean()),
     excludeFromTotals: v.optional(v.boolean()),
+    // Gig worker fields
+    hoursWorked: v.optional(v.number()),
+    platformType: v.optional(v.string()),
     // Phase 1: New fields for goals, budgets, context, and intent
     goalId: v.optional(v.union(v.id("goals"), v.null())),
     budgetCategoryId: v.optional(v.union(v.id("budgetCategories"), v.null())),
@@ -188,6 +207,7 @@ export const updateEntry = mutation({
     }
     if (args.tags !== undefined) patch.tags = cleanTags(args.tags);
     if (args.note !== undefined) patch.note = cleanStr(args.note);
+    if (args.merchant !== undefined) patch.merchant = cleanStr(args.merchant);
     if (args.methodOrAccount !== undefined) patch.methodOrAccount = cleanStr(args.methodOrAccount);
 
     if (args.amountCents !== undefined) {
@@ -205,6 +225,10 @@ export const updateEntry = mutation({
     else if (args.category !== undefined) patch.needsReview = !cleanStr(args.category);
 
     if (args.excludeFromTotals !== undefined) patch.excludeFromTotals = args.excludeFromTotals;
+
+    // Gig worker fields
+    if (args.hoursWorked !== undefined) patch.hoursWorked = args.hoursWorked;
+    if (args.platformType !== undefined) patch.platformType = args.platformType;
 
     // Phase 1: Handle goal, budget, context, intent, recurring links
     if (args.goalId !== undefined) {
