@@ -37,6 +37,10 @@ interface Entry {
   recurringRuleId?: Id<"recurringRules">;
   contextTags?: string[];
   intentTag?: string;
+  // Scoped ignore options
+  excludeFromTotals?: boolean;
+  excludeFromBudgets?: boolean;
+  excludeFromCashFlow?: boolean;
 }
 
 interface EditEntryModalProps {
@@ -87,6 +91,11 @@ export default function EditEntryModal({
     entry.recurringRuleId ?? null
   );
 
+  // Scoped ignore options
+  const [excludeFromTotals, setExcludeFromTotals] = useState(entry.excludeFromTotals ?? false);
+  const [excludeFromBudgets, setExcludeFromBudgets] = useState(entry.excludeFromBudgets ?? false);
+  const [excludeFromCashFlow, setExcludeFromCashFlow] = useState(entry.excludeFromCashFlow ?? false);
+
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,6 +122,9 @@ export default function EditEntryModal({
       goalId: entry.goalId ?? null,
       budgetCategoryId: entry.budgetCategoryId ?? null,
       recurringRuleId: entry.recurringRuleId ?? null,
+      excludeFromTotals: entry.excludeFromTotals ?? false,
+      excludeFromBudgets: entry.excludeFromBudgets ?? false,
+      excludeFromCashFlow: entry.excludeFromCashFlow ?? false,
     };
   }, [entry]);
 
@@ -129,13 +141,17 @@ export default function EditEntryModal({
     if (goalId !== originalValues.goalId) return true;
     if (budgetCategoryId !== originalValues.budgetCategoryId) return true;
     if (recurringRuleId !== originalValues.recurringRuleId) return true;
+    if (excludeFromTotals !== originalValues.excludeFromTotals) return true;
+    if (excludeFromBudgets !== originalValues.excludeFromBudgets) return true;
+    if (excludeFromCashFlow !== originalValues.excludeFromCashFlow) return true;
     // Array comparison for tags
     if (JSON.stringify(tags.sort()) !== JSON.stringify([...originalValues.tags].sort())) return true;
     if (JSON.stringify(contextTags.sort()) !== JSON.stringify([...originalValues.contextTags].sort())) return true;
     return false;
   }, [
     type, amountStr, date, category, note, methodOrAccount, tags, needsReview,
-    contextTags, intentTag, goalId, budgetCategoryId, recurringRuleId, originalValues
+    contextTags, intentTag, goalId, budgetCategoryId, recurringRuleId,
+    excludeFromTotals, excludeFromBudgets, excludeFromCashFlow, originalValues
   ]);
 
   // Validation
