@@ -35,7 +35,7 @@ interface Entry {
   budgetCategoryId?: Id<"budgetCategories">;
   recurringRuleId?: Id<"recurringRules">;
   contextTags?: string[];
-  intentTag?: string;
+  intentTags?: string[];
 }
 
 interface EditEntryModalProps {
@@ -77,7 +77,7 @@ export default function EditEntryModal({
 
   // Phase 1: New form fields
   const [contextTags, setContextTags] = useState<string[]>(entry.contextTags ?? []);
-  const [intentTag, setIntentTag] = useState<string | null>(entry.intentTag ?? null);
+  const [intentTags, setIntentTags] = useState<string[]>(entry.intentTags ?? []);
   const [goalId, setGoalId] = useState<Id<"goals"> | null>(entry.goalId ?? null);
   const [budgetCategoryId, setBudgetCategoryId] = useState<Id<"budgetCategories"> | null>(
     entry.budgetCategoryId ?? null
@@ -108,7 +108,7 @@ export default function EditEntryModal({
       tags: entry.tags ?? [],
       needsReview: entry.needsReview ?? false,
       contextTags: entry.contextTags ?? [],
-      intentTag: entry.intentTag ?? null,
+      intentTags: entry.intentTags ?? [],
       goalId: entry.goalId ?? null,
       budgetCategoryId: entry.budgetCategoryId ?? null,
       recurringRuleId: entry.recurringRuleId ?? null,
@@ -124,17 +124,19 @@ export default function EditEntryModal({
     if (note !== originalValues.note) return true;
     if (methodOrAccount !== originalValues.methodOrAccount) return true;
     if (needsReview !== originalValues.needsReview) return true;
-    if (intentTag !== originalValues.intentTag) return true;
+    if (JSON.stringify([...intentTags].sort()) !== JSON.stringify([...originalValues.intentTags].sort())) {
+      return true;
+    }
     if (goalId !== originalValues.goalId) return true;
     if (budgetCategoryId !== originalValues.budgetCategoryId) return true;
     if (recurringRuleId !== originalValues.recurringRuleId) return true;
     // Array comparison for tags
-    if (JSON.stringify(tags.sort()) !== JSON.stringify([...originalValues.tags].sort())) return true;
-    if (JSON.stringify(contextTags.sort()) !== JSON.stringify([...originalValues.contextTags].sort())) return true;
+    if (JSON.stringify([...tags].sort()) !== JSON.stringify([...originalValues.tags].sort())) return true;
+    if (JSON.stringify([...contextTags].sort()) !== JSON.stringify([...originalValues.contextTags].sort())) return true;
     return false;
   }, [
     type, amountStr, date, category, note, methodOrAccount, tags, needsReview,
-    contextTags, intentTag, goalId, budgetCategoryId, recurringRuleId, originalValues
+    contextTags, intentTags, goalId, budgetCategoryId, recurringRuleId, originalValues
   ]);
 
   // Validation
@@ -189,7 +191,7 @@ export default function EditEntryModal({
         needsReview,
         // Phase 1: New fields
         contextTags: contextTags.length > 0 ? contextTags : [],
-        intentTag: intentTag || null,
+        intentTags: intentTags.length > 0 ? intentTags : undefined,
         goalId: goalId || null,
         budgetCategoryId: budgetCategoryId || null,
         recurringRuleId: recurringRuleId || null,
@@ -238,7 +240,7 @@ export default function EditEntryModal({
   }
 
   function cycleIntentTag(tag: IntentTag) {
-    setIntentTag((prev) => (prev === tag ? null : tag));
+    setIntentTags((prev) => (prev.includes(tag) ? [] : [tag]));
   }
 
   return (
@@ -463,7 +465,7 @@ export default function EditEntryModal({
             </label>
             <div className="flex flex-wrap gap-2">
               {INTENT_TAGS.map((tag) => {
-                const selected = intentTag === tag;
+                const selected = intentTags.includes(tag);
                 return (
                   <button
                     key={tag}
