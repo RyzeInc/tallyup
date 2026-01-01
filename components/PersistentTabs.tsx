@@ -2,6 +2,7 @@
 
 import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { flushSync } from "react-dom";
+import { usePathname } from "next/navigation";
 
 export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more";
 
@@ -32,6 +33,7 @@ export function useTabs() {
 }
 
 export function PersistentTabsProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   // Initialize tab based on current pathname, default to dashboard
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     if (typeof window === "undefined") return "dashboard";
@@ -73,6 +75,24 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!pathname) return;
+    const path = pathname;
+    let nextTab: TabId = "dashboard";
+    if (path.startsWith("/dashboard") || path === "/") nextTab = "dashboard";
+    else if (path.startsWith("/activity")) nextTab = "activity";
+    else if (path.startsWith("/budgeting")) nextTab = "budgeting";
+    else if (path.startsWith("/recurring")) nextTab = "recurring";
+    else if (path.startsWith("/goals")) nextTab = "goals";
+    else if (path.startsWith("/insights")) nextTab = "insights";
+    else if (path.startsWith("/help") || path.startsWith("/learn")) nextTab = "help";
+    else if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) nextTab = "more";
+
+    if (nextTab !== activeTab) {
+      setActiveTabWithHistory(nextTab);
+    }
+  }, [pathname, activeTab, setActiveTabWithHistory]);
 
   return (
     <TabsContext.Provider value={{ activeTab, setActiveTab: setActiveTabWithHistory, previousTab }}>
