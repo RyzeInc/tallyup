@@ -1,7 +1,8 @@
 import { mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 
-async function requireUserId(ctx: any): Promise<string> {
+async function requireUserId(ctx: MutationCtx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
   return identity.subject;

@@ -1,6 +1,3 @@
-import { resolveRange } from "@/src/lib/timeRange/resolve";
-import type { PresetSelectionKey } from "@/src/lib/timeRange/types";
-
 export type EntryType = "expense" | "income";
 
 export const DEFAULT_BUCKETS = ["Personal", "Work", "Household", "Side/Hustle", "Other"] as const;
@@ -242,26 +239,86 @@ export function cacheKey(userId: string, type: EntryType, bucket?: string) {
   return `tallyup_categories_${userId}_${type}_${b}`;
 }
 
-export type DateRangePreset = PresetSelectionKey;
+export type DateRangePreset =
+  | "today"
+  | "yesterday"
+  | "week"
+  | "last-week"
+  | "month"
+  | "last-month"
+  | "year"
+  | "last-year"
+  | "custom";
 
-function formatYYYYMMDD(date: Date): string {
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+function formatRangeLabel(startMs: number, endMsExclusive: number): string {
+  const endInclusive = endMsExclusive - 86400000;
+  const startLabel = formatDateLabel(startMs, { relative: false, format: "short" });
+  const endLabel = formatDateLabel(endInclusive, { relative: false, format: "short" });
+  return `${startLabel}–${endLabel}`;
 }
 
 export function getDateRangeFromPreset(
   preset: DateRangePreset,
-  now: Date = new Date()
-): { from: string; to: string; fromMs: number; toMs: number } {
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const range = resolveRange({ kind: "preset", key: preset }, now, timezone);
-  const inclusiveTo = new Date(range.to.getTime() - 86400000);
-  return {
-    from: formatYYYYMMDD(range.from),
-    to: formatYYYYMMDD(inclusiveTo),
-    fromMs: range.from.getTime(),
-    toMs: range.to.getTime(),
-  };
+  customFrom?: string,
+  customTo?: string
+): { startDate: number; endDate: number; label: string } {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  switch (preset) {
+    case "today": {
+      const startDate = todayStart;
+      const endDate = startDate + oneDay;
+      return { startDate, endDate, label: "Today" };
+    }
+    case "yesterday": {
+      const endDate = todayStart;
+      const startDate = endDate - oneDay;
+      return { startDate, endDate, label: "Yesterday" };
+    }
+    case "week": {
+      const startDate = startOfWeekLocalTs(now);
+      const endDate = startDate + 7 * oneDay;
+      return { startDate, endDate, label: "This Week" };
+    }
+    case "last-week": {
+      const endDate = startOfWeekLocalTs(now);
+      const startDate = endDate - 7 * oneDay;
+      return { startDate, endDate, label: "Last Week" };
+    }
+    case "month": {
+      const startDate = startOfMonthLocalTs(now);
+      const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime();
+      return { startDate, endDate, label: "This Month" };
+    }
+    case "last-month": {
+      const endDate = startOfMonthLocalTs(now);
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+      return { startDate, endDate, label: "Last Month" };
+    }
+    case "year": {
+      const startDate = startOfYearLocalTs(now);
+      const endDate = new Date(now.getFullYear() + 1, 0, 1).getTime();
+      return { startDate, endDate, label: "This Year" };
+    }
+    case "last-year": {
+      const endDate = startOfYearLocalTs(now);
+      const startDate = new Date(now.getFullYear() - 1, 0, 1).getTime();
+      return { startDate, endDate, label: "Last Year" };
+    }
+    case "custom":
+    default: {
+      const fallback = todayYYYYMMDD();
+      const from = customFrom ?? fallback;
+      const to = customTo ?? fallback;
+      const fromMs = yyyymmddToLocalMidnightTs(from);
+      const toMs = yyyymmddToLocalMidnightTs(to);
+      const startBase = Math.min(fromMs, toMs);
+      const endBase = Math.max(fromMs, toMs);
+      const startDate = startBase;
+      const endDate = endBase + oneDay;
+      return { startDate, endDate, label: `Custom: ${formatRangeLabel(startDate, endDate)}` };
+    }
+  }
 }

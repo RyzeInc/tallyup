@@ -204,7 +204,7 @@ export default function InsightsPage() {
   
   // Filters
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTags] = useState<string[]>([]);
   const [showNetOnly, setShowNetOnly] = useState(false);
   
   // Tooltip state

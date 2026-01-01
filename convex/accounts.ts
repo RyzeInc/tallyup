@@ -1,25 +1,24 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
-type AccountType =
-  | "credit"
-  | "checking"
-  | "savings"
-  | "investment"
-  | "loan"
-  | "business"
-  | "other";
+type Ctx = QueryCtx | MutationCtx;
 
-async function requireUserId(ctx: any): Promise<string> {
+async function requireUserId(ctx: Ctx): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
   return identity.subject;
 }
 
-async function getLatestSnapshot(ctx: any, accountId: string, endExclusive: number) {
+async function getLatestSnapshot(
+  ctx: QueryCtx,
+  accountId: Id<"accounts">,
+  endExclusive: number
+) {
   const rows = await ctx.db
     .query("accountSnapshots")
-    .withIndex("by_account_asOf", (q: any) =>
+    .withIndex("by_account_asOf", (q) =>
       q.eq("accountId", accountId).lt("asOf", endExclusive)
     )
     .order("desc")
@@ -28,15 +27,15 @@ async function getLatestSnapshot(ctx: any, accountId: string, endExclusive: numb
 }
 
 async function getSnapshotInRange(
-  ctx: any,
-  accountId: string,
+  ctx: QueryCtx,
+  accountId: Id<"accounts">,
   start: number,
   endExclusive: number,
   direction: "asc" | "desc"
 ) {
   const rows = await ctx.db
     .query("accountSnapshots")
-    .withIndex("by_account_asOf", (q: any) =>
+    .withIndex("by_account_asOf", (q) =>
       q.eq("accountId", accountId).gte("asOf", start).lt("asOf", endExclusive)
     )
     .order(direction)
@@ -44,10 +43,10 @@ async function getSnapshotInRange(
   return rows[0] ?? null;
 }
 
-async function getSnapshotBefore(ctx: any, accountId: string, before: number) {
+async function getSnapshotBefore(ctx: QueryCtx, accountId: Id<"accounts">, before: number) {
   const rows = await ctx.db
     .query("accountSnapshots")
-    .withIndex("by_account_asOf", (q: any) =>
+    .withIndex("by_account_asOf", (q) =>
       q.eq("accountId", accountId).lt("asOf", before)
     )
     .order("desc")

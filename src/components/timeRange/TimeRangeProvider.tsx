@@ -176,17 +176,14 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
   }, [selection]);
 
-  const now = new Date();
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
   const resolvedRange = useMemo(
-    () => resolveRange(selection, now, timezone),
-    [selection, now, timezone]
+    () => resolveRange(selection, new Date()),
+    [selection]
   );
 
   const previousRange = useMemo(
-    () => getPreviousRange(selection, now),
-    [selection, now]
+    () => getPreviousRange(selection, new Date()),
+    [selection]
   );
 
   const label = useMemo(() => getSelectionLabel(selection), [selection]);

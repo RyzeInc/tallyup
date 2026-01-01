@@ -114,8 +114,9 @@ export default function AddAccountPage() {
       });
       toast.success("Account created");
       router.push("/accounts");
-    } catch (e: any) {
-      toast.error("Failed to create account", { description: e?.message });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Failed to create account", { description: message });
     } finally {
       setSaving(false);
     }

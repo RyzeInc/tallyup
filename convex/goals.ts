@@ -150,7 +150,7 @@ export const updateGoal = mutation({
       throw new Error("Goal not found");
     }
 
-    const { id: _id, ...updates } = args;
+    const { id, ...updates } = args;
     // Filter out undefined values
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (updates.name !== undefined) patch.name = updates.name;
@@ -162,7 +162,7 @@ export const updateGoal = mutation({
     if (updates.status !== undefined) patch.status = updates.status;
     if (updates.priority !== undefined) patch.priority = updates.priority;
 
-    await ctx.db.patch(args.id, patch);
-    return args.id;
+    await ctx.db.patch(id, patch);
+    return id;
   },
 });

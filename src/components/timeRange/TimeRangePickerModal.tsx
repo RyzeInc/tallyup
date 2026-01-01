@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import * as Lucide from "lucide-react";
 import { PresetSelectionKey, TimeRangeSelection } from "@/src/lib/timeRange/types";
 
@@ -40,6 +40,28 @@ export function TimeRangePickerModal({
   onSelect,
   onClose,
 }: TimeRangePickerModalProps) {
+  if (!open) return null;
+
+  const key =
+    selection.kind === "custom"
+      ? `custom:${selection.from}:${selection.to}`
+      : `preset:${selection.key}`;
+
+  return (
+    <TimeRangePickerModalContent
+      key={key}
+      selection={selection}
+      onSelect={onSelect}
+      onClose={onClose}
+    />
+  );
+}
+
+function TimeRangePickerModalContent({
+  selection,
+  onSelect,
+  onClose,
+}: Omit<TimeRangePickerModalProps, "open">) {
   const [showCustom, setShowCustom] = useState(false);
   const defaultDate = useMemo(() => todayYYYYMMDD(), []);
 
@@ -49,15 +71,6 @@ export function TimeRangePickerModal({
   const [tempTo, setTempTo] = useState(
     selection.kind === "custom" ? selection.to : defaultDate
   );
-
-  useEffect(() => {
-    if (!open) return;
-    setShowCustom(false);
-    setTempFrom(selection.kind === "custom" ? selection.from : defaultDate);
-    setTempTo(selection.kind === "custom" ? selection.to : defaultDate);
-  }, [open, selection, defaultDate]);
-
-  if (!open) return null;
 
   const isCustomSelected = selection.kind === "custom";
 

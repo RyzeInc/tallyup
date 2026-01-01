@@ -4,7 +4,7 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import { formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
@@ -25,6 +25,8 @@ import { useToast } from "@/components/ToastProvider";
 type AccountType = "checking" | "savings" | "credit_card" | "investment" | "loan" | "cash" | "manual";
 type AccountStatus = "active" | "hidden" | "closed";
 type Ownership = "personal" | "shared" | "business";
+type BackendAccount = Doc<"accounts">;
+type BackendAccountType = BackendAccount["type"];
 
 interface Account {
   _id: Id<"accounts">;
@@ -61,6 +63,47 @@ const OWNERSHIP_OPTIONS: { value: Ownership; label: string }[] = [
   { value: "business", label: "Business" },
 ];
 
+const ACCOUNT_TYPE_TO_BACKEND: Record<AccountType, BackendAccountType> = {
+  checking: "checking",
+  savings: "savings",
+  credit_card: "credit",
+  investment: "investment",
+  loan: "loan",
+  cash: "other",
+  manual: "other",
+};
+
+const BACKEND_TO_ACCOUNT_TYPE: Record<BackendAccountType, AccountType> = {
+  checking: "checking",
+  savings: "savings",
+  credit: "credit_card",
+  investment: "investment",
+  loan: "loan",
+  business: "manual",
+  other: "manual",
+};
+
+function mapBackendAccount(account: BackendAccount): Account {
+  return {
+    _id: account._id,
+    name: account.name,
+    accountType: BACKEND_TO_ACCOUNT_TYPE[account.type],
+    institution: account.institutionName,
+    balanceCurrentCents: undefined,
+    balanceAvailableCents: undefined,
+    balanceAsOf: undefined,
+    currency: undefined,
+    ownership: "personal",
+    status: account.isArchived ? "closed" : "active",
+    creditLimitCents: account.creditLimit,
+    interestRatePercent: account.interestRate,
+    icon: undefined,
+    color: undefined,
+    displayOrder: undefined,
+    excludeFromNetWorth: false,
+  };
+}
+
 export default function AccountsPage() {
   const toast = useToast();
   const [showHidden, setShowHidden] = useState(false);
@@ -69,14 +112,19 @@ export default function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
   // Queries
-  const accounts = useQuery(api.accounts.listAccounts, {
-    includeHidden: showHidden,
-    includeClosed: showClosed,
-  }) as Account[] | undefined;
+  const rawAccounts = useQuery(api.accounts.listAccounts, {
+    includeArchived: showHidden || showClosed,
+  }) as BackendAccount[] | undefined;
+
+  const accounts = useMemo(
+    () => (rawAccounts ?? []).map(mapBackendAccount),
+    [rawAccounts]
+  );
 
   // Mutations
   const createAccount = useMutation(api.accounts.createAccount);
   const updateAccount = useMutation(api.accounts.updateAccount);
+  const addSnapshot = useMutation(api.accounts.addAccountSnapshot);
 
   function errorMessage(error: unknown): string | undefined {
     if (error instanceof Error) return error.message;
@@ -165,15 +213,14 @@ export default function AccountsPage() {
     }
     setCreating(true);
     try {
-      const balanceCents = createBalance ? Math.round(parseFloat(createBalance) * 100) : undefined;
+      const balanceCents = createBalance ? Math.round(parseFloat(createBalance) * 100) : 0;
       const creditLimitCents = createCreditLimit ? Math.round(parseFloat(createCreditLimit) * 100) : undefined;
       await createAccount({
         name: createName.trim(),
-        accountType: createType,
-        institution: createInstitution.trim() || undefined,
-        balanceCurrentCents: balanceCents,
-        ownership: createOwnership,
-        creditLimitCents,
+        type: ACCOUNT_TYPE_TO_BACKEND[createType],
+        institutionName: createInstitution.trim() || undefined,
+        creditLimit: creditLimitCents,
+        initialBalance: balanceCents,
       });
       toast.success("Account created");
       setShowCreate(false);
@@ -194,13 +241,13 @@ export default function AccountsPage() {
       await updateAccount({
         id: editingAccount._id,
         name: editName.trim() || undefined,
-        institution: editInstitution.trim() || undefined,
-        balanceCurrentCents: balanceCents,
-        ownership: editOwnership,
-        status: editStatus,
-        creditLimitCents,
-        excludeFromNetWorth: editExcludeFromNetWorth,
+        institutionName: editInstitution.trim() || undefined,
+        creditLimit: creditLimitCents,
+        isArchived: editStatus !== "active",
       });
+      if (balanceCents !== undefined) {
+        await addSnapshot({ accountId: editingAccount._id, balance: balanceCents });
+      }
       toast.success("Account updated");
       setEditingAccount(null);
     } catch (e: unknown) {

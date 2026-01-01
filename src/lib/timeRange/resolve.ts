@@ -77,11 +77,7 @@ function resolvePresetRange(key: PresetSelectionKey, now: Date): ResolvedRange {
   }
 }
 
-export function resolveRange(
-  selection: TimeRangeSelection,
-  now: Date,
-  _timezone: string
-): ResolvedRange {
+export function resolveRange(selection: TimeRangeSelection, now: Date): ResolvedRange {
   if (selection.kind === "preset") {
     return resolvePresetRange(selection.key, now);
   }
@@ -137,7 +133,7 @@ export function getPreviousRange(selection: TimeRangeSelection, now: Date): Reso
     }
   }
 
-  const current = resolveRange(selection, now, "");
+  const current = resolveRange(selection, now);
   const duration = current.to.getTime() - current.from.getTime();
   const prevTo = new Date(current.from.getTime());
   const prevFrom = new Date(prevTo.getTime() - duration);

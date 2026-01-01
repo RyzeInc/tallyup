@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Id } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import {
   centsToDollars,
@@ -62,8 +62,10 @@ export default function TransactionSheet({
   const deleteEntry = useMutation(api.entries.deleteEntry);
   const createTransfer = useMutation(api.transfers.createTransfer);
   const logEvent = useMutation(api.analytics.logEvent);
-  const accounts = useQuery(api.accounts.listAccounts, {}) as any[] | undefined;
-  const recentEntries = useQuery(api.entries.listEntries, { limit: 80 }) as any[] | undefined;
+  const accounts = useQuery(api.accounts.listAccounts, {}) as Doc<"accounts">[] | undefined;
+  const recentEntries = useQuery(api.entries.listEntries, { limit: 80 }) as
+    | Doc<"entries">[]
+    | undefined;
 
   const [type, setType] = useState<TransactionType>("expense");
   const [amountStr, setAmountStr] = useState("");
@@ -157,7 +159,7 @@ export default function TransactionSheet({
   }, [recentEntries, type]);
 
   const accountOptions = useMemo(() => {
-    return (accounts ?? []).map((acc) => ({ id: acc._id as Id<"accounts">, name: acc.name as string }));
+    return (accounts ?? []).map((acc) => ({ id: acc._id, name: acc.name }));
   }, [accounts]);
 
   const amountCents = dollarsToCents(amountStr);
@@ -217,7 +219,7 @@ export default function TransactionSheet({
             },
           });
         } catch {}
-        onSaved?.((transferRes as any)?.id);
+        onSaved?.(transferRes.id);
         onClose();
         return;
       }
@@ -317,10 +319,11 @@ export default function TransactionSheet({
         });
       } catch {}
 
-      onSaved?.((res as any)?.id);
+      onSaved?.(res.id);
       onClose();
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to save");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to save";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -335,8 +338,9 @@ export default function TransactionSheet({
       toast.success("Transaction deleted");
       onDeleted?.();
       onClose();
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to delete");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to delete";
+      setError(message);
     } finally {
       setSaving(false);
     }

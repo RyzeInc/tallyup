@@ -11,7 +11,6 @@ import { formatMoney } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
 import TimeRangeControl from "@/components/TimeRangeControl";
 import { useTimeRange } from "@/components/TimeRangeProvider";
-import { toQueryArgs } from "@/src/lib/timeRange/toQueryArgs";
 import {
   LineChart,
   Line,
@@ -49,8 +48,7 @@ export default function AccountDetailPage() {
   const toast = useToast();
   const accountId = params?.id as Id<"accounts">;
 
-  const { resolvedRange } = useTimeRange();
-  const { fromMs, toMs } = toQueryArgs(resolvedRange);
+  const { startDate, endDate } = useTimeRange();
   const [showUpdate, setShowUpdate] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
 
@@ -69,8 +67,8 @@ export default function AccountDetailPage() {
 
   const data = useQuery(api.accounts.getAccountWithSnapshots, {
     accountId,
-    startDate: fromMs,
-    endDate: toMs,
+    startDate,
+    endDate,
     limit: 600,
   }) as
     | {
@@ -123,8 +121,9 @@ export default function AccountDetailPage() {
       toast.success("Balance updated");
       setShowUpdate(false);
       setBalanceInput("");
-    } catch (e: any) {
-      toast.error("Failed to update balance", { description: e?.message });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Failed to update balance", { description: message });
     }
   };
 
@@ -157,8 +156,9 @@ export default function AccountDetailPage() {
       });
       toast.success("Account updated");
       setShowEdit(false);
-    } catch (e: any) {
-      toast.error("Failed to update account", { description: e?.message });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Failed to update account", { description: message });
     }
   };
 
@@ -168,8 +168,9 @@ export default function AccountDetailPage() {
       await updateAccount({ id: account._id, isArchived: true });
       toast.success("Account archived");
       router.push("/accounts");
-    } catch (e: any) {
-      toast.error("Failed to archive account", { description: e?.message });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+      toast.error("Failed to archive account", { description: message });
     }
   };
 
