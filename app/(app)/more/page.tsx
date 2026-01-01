@@ -44,6 +44,13 @@ export default function MorePage() {
       iconBg: "var(--success-subtle)",
     },
     {
+      href: "/accounts",
+      label: "Accounts",
+      description: "Banks, cards, and balances",
+      icon: <Lucide.CreditCard className="h-6 w-6" style={{ color: "var(--primary)" }} />,
+      iconBg: "var(--accent-subtle)",
+    },
+    {
       href: "/settings",
       label: "Settings",
       description: "Appearance & preferences",
@@ -59,8 +66,8 @@ export default function MorePage() {
     },
     {
       href: "/help",
-      label: "Help",
-      description: "FAQs & documentation",
+      label: "Learn",
+      description: "FAQs & practical guides",
       icon: <Lucide.HelpCircle className="h-6 w-6" style={{ color: "var(--text-secondary)" }} />,
       iconBg: "var(--surface-2)",
     },

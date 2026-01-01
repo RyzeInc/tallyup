@@ -36,7 +36,6 @@ const iconMap = {
   RefreshCw: Lucide.RefreshCw,
   Target: Lucide.Target,
   TrendingUp: Lucide.TrendingUp,
-  HelpCircle: Lucide.HelpCircle,
   Menu: Lucide.Menu,
   Plus: Lucide.Plus,
 };
@@ -59,7 +58,6 @@ export default function TopNav() {
     { id: "recurring", label: "Recurring", iconName: "RefreshCw", tabId: "recurring" },
     { id: "goals", label: "Goals", iconName: "Target", tabId: "goals" },
     { id: "insights", label: "Insights", iconName: "TrendingUp", tabId: "insights" },
-    { id: "help", label: "Learn", iconName: "HelpCircle", tabId: "help" },
     { id: "more", label: "Menu", iconName: "Menu", tabId: "more" },
   ];
 
