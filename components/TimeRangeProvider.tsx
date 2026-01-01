@@ -9,7 +9,6 @@ import React, {
   useMemo,
   useEffect,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DateRangePreset, getDateRangeFromPreset, todayYYYYMMDD } from "./utils";
 
 interface TimeRangeContextValue {
@@ -34,9 +33,15 @@ const TimeRangeContext = createContext<TimeRangeContextValue | null>(null);
 
 const STORAGE_KEY = "tallyup.timeRange";
 const DEFAULT_TIMEZONE = "America/New_York";
-
-// Pages where time range should NOT sync to URL (independent time range)
-const INDEPENDENT_TIME_PAGES = ["/dashboard", "/home"];
+const GLOBAL_PRESETS: DateRangePreset[] = [
+  "custom",
+  "month",
+  "last-month",
+  "week",
+  "last-week",
+  "year",
+  "last-year",
+];
 
 export function useTimeRange() {
   const ctx = useContext(TimeRangeContext);
@@ -54,22 +59,6 @@ function getPreviousPeriod(
   const now = new Date();
 
   switch (preset) {
-    case "today": {
-      const yest = new Date(now);
-      yest.setDate(yest.getDate() - 1);
-      const start = new Date(yest.getFullYear(), yest.getMonth(), yest.getDate()).getTime();
-      const end = start + 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "Yesterday" };
-    }
-
-    case "yesterday": {
-      const dayBefore = new Date(now);
-      dayBefore.setDate(dayBefore.getDate() - 2);
-      const start = new Date(dayBefore.getFullYear(), dayBefore.getMonth(), dayBefore.getDate()).getTime();
-      const end = start + 24 * 60 * 60 * 1000;
-      return { startDate: start, endDate: end, label: "Day before" };
-    }
-
     case "week": {
       const range = getDateRangeFromPreset("last-week");
       return { ...range, label: "Last Week" };
@@ -131,46 +120,24 @@ function getPreviousPeriod(
 }
 
 export function TimeRangeProvider({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  
-  // Check if current page should use independent time range
-  const isIndependentPage = INDEPENDENT_TIME_PAGES.some(p => pathname?.startsWith(p));
-  const urlPreset = searchParams?.get("range");
-  const urlFrom = searchParams?.get("from");
-  const urlTo = searchParams?.get("to");
-  
-  // Initialize from URL params, then localStorage, then default
+  // Initialize from localStorage, then default
   const [preset, setPresetState] = useState<DateRangePreset>(() => {
-    if (typeof window === "undefined") return "week";
-    
-    // Try URL first (for shareable links)
-    const urlPreset = searchParams?.get("range") as DateRangePreset | null;
-    if (urlPreset && isValidPreset(urlPreset)) {
-      return urlPreset;
-    }
-    
-    // Then localStorage
+    if (typeof window === "undefined") return "month";
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return parsed.preset || "week";
+        const storedPreset = parsed?.preset;
+        if (storedPreset && isValidPreset(storedPreset)) {
+          return storedPreset;
+        }
       }
     } catch {}
-    return "week";
+    return "month";
   });
 
   const [customFrom, setCustomFrom] = useState(() => {
     if (typeof window === "undefined") return todayYYYYMMDD();
-    
-    // Try URL first
-    const urlFrom = searchParams?.get("from");
-    if (urlFrom && isValidDateString(urlFrom)) {
-      return urlFrom;
-    }
-    
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -183,13 +150,6 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
 
   const [customTo, setCustomTo] = useState(() => {
     if (typeof window === "undefined") return todayYYYYMMDD();
-    
-    // Try URL first
-    const urlTo = searchParams?.get("to");
-    if (urlTo && isValidDateString(urlTo)) {
-      return urlTo;
-    }
-    
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -212,21 +172,6 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
     return DEFAULT_TIMEZONE;
   });
 
-  const effectivePreset = useMemo(() => {
-    if (urlPreset && isValidPreset(urlPreset)) return urlPreset;
-    return preset;
-  }, [urlPreset, preset]);
-
-  const effectiveFrom = useMemo(() => {
-    if (urlPreset === "custom" && urlFrom && isValidDateString(urlFrom)) return urlFrom;
-    return customFrom;
-  }, [urlPreset, urlFrom, customFrom]);
-
-  const effectiveTo = useMemo(() => {
-    if (urlPreset === "custom" && urlTo && isValidDateString(urlTo)) return urlTo;
-    return customTo;
-  }, [urlPreset, urlTo, customTo]);
-
   // Persist to localStorage on change
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -237,33 +182,8 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
     }
   }, [preset, customFrom, customTo, timezone]);
 
-  // Sync to URL when time range changes (except on independent pages)
-  const prevUrlRef = React.useRef<string>("");
-  useEffect(() => {
-    if (typeof window === "undefined" || isIndependentPage) return;
-
-    const params = new URLSearchParams(searchParams?.toString() || "");
-
-    // Set range params
-    params.set("range", effectivePreset);
-    if (effectivePreset === "custom") {
-      params.set("from", effectiveFrom);
-      params.set("to", effectiveTo);
-    } else {
-      params.delete("from");
-      params.delete("to");
-    }
-
-    const newUrl = `${pathname}?${params.toString()}`;
-
-    // Avoid infinite loops
-    if (newUrl !== prevUrlRef.current) {
-      prevUrlRef.current = newUrl;
-      router.replace(newUrl, { scroll: false });
-    }
-  }, [effectivePreset, effectiveFrom, effectiveTo, pathname, isIndependentPage, router, searchParams]);
-
   const setPreset = useCallback((p: DateRangePreset) => {
+    if (!isValidPreset(p)) return;
     setPresetState(p);
   }, []);
 
@@ -279,19 +199,19 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const currentRange = useMemo(() => {
-    return getDateRangeFromPreset(effectivePreset, effectiveFrom, effectiveTo);
-  }, [effectivePreset, effectiveFrom, effectiveTo]);
+    return getDateRangeFromPreset(preset, customFrom, customTo);
+  }, [preset, customFrom, customTo]);
 
   const previousPeriod = useMemo(() => {
-    return getPreviousPeriod(effectivePreset, effectiveFrom, effectiveTo);
-  }, [effectivePreset, effectiveFrom, effectiveTo]);
+    return getPreviousPeriod(preset, customFrom, customTo);
+  }, [preset, customFrom, customTo]);
 
   const value: TimeRangeContextValue = useMemo(
     () => ({
-      preset: effectivePreset,
+      preset,
       setPreset,
-      customFrom: effectiveFrom,
-      customTo: effectiveTo,
+      customFrom,
+      customTo,
       setCustomRange,
       startDate: currentRange.startDate,
       endDate: currentRange.endDate,
@@ -302,7 +222,7 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
       timezone,
       setTimezone,
     }),
-    [effectivePreset, setPreset, effectiveFrom, effectiveTo, setCustomRange, currentRange, previousPeriod, timezone]
+    [preset, setPreset, customFrom, customTo, setCustomRange, currentRange, previousPeriod, timezone]
   );
 
   return (
@@ -314,13 +234,5 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
 
 // Helper: validate preset value
 function isValidPreset(value: string): value is DateRangePreset {
-  return [
-    "today", "yesterday", "week", "last-week", 
-    "month", "last-month", "year", "last-year", "custom"
-  ].includes(value);
-}
-
-// Helper: validate date string (YYYY-MM-DD)
-function isValidDateString(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return GLOBAL_PRESETS.includes(value as DateRangePreset);
 }

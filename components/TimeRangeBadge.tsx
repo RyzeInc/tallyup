@@ -6,7 +6,7 @@ import { useTimeRange } from "@/components/TimeRangeProvider";
 export default function TimeRangeBadge() {
   const { preset, setPreset, label } = useTimeRange();
 
-  if (preset === "week") return null;
+  if (preset === "month") return null;
 
   return (
     <div
@@ -15,7 +15,7 @@ export default function TimeRangeBadge() {
     >
       <span>Viewing: {label}</span>
       <button
-        onClick={() => setPreset("week")}
+        onClick={() => setPreset("month")}
         className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
         style={{ backgroundColor: "var(--accent-subtle)", color: "var(--accent)" }}
       >

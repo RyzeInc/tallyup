@@ -84,7 +84,7 @@ export default function BudgetingPage() {
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
   const timezoneOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
-  const asOfDate = Date.now();
+  const asOfDate = useMemo(() => Date.now(), []);
   const budgetStatus = useQuery(api.budgetEngine.getBudgetStatus, {
     rangeStart: startDate,
     rangeEnd: endDate,

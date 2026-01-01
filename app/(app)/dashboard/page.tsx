@@ -1,7 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
@@ -9,6 +9,7 @@ import { centsToDollars, formatMoney, getDateRangeFromPreset, DateRangePreset } 
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
+import LocalDateRangePicker from "@/components/LocalDateRangePicker";
 
 /**
  * Dashboard - Financial overview at a glance
@@ -33,8 +34,34 @@ export default function DashboardPage() {
   
   // Dashboard has its own independent time range (not linked to global)
   // Default to "This Month" for a snapshot of current financial situation
-  const [dashboardPreset, setDashboardPreset] = useState<DateRangePreset>("month");
-  const [showPresetPicker, setShowPresetPicker] = useState(false);
+  const [dashboardPreset, setDashboardPreset] = useState<DateRangePreset>(() => {
+    if (typeof window === "undefined") return "month";
+    try {
+      const stored = localStorage.getItem("tallyup.dashboardTimeRange");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const preset = parsed?.preset as DateRangePreset | undefined;
+        if (
+          preset === "today" ||
+          preset === "yesterday" ||
+          preset === "week" ||
+          preset === "last-week" ||
+          preset === "month" ||
+          preset === "last-month"
+        ) {
+          return preset;
+        }
+      }
+    } catch {}
+    return "month";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("tallyup.dashboardTimeRange", JSON.stringify({ preset: dashboardPreset }));
+    } catch {}
+  }, [dashboardPreset]);
   
   // Compute date range from dashboard's own preset
   const { startDate, endDate, label } = useMemo(() => {
@@ -84,62 +111,19 @@ export default function DashboardPage() {
             <h1 className="text-h1" style={{ color: "var(--text)" }}>Dashboard</h1>
           </div>
           {/* Dashboard-specific time range picker (independent from global) */}
-          <div className="relative">
-            <button
-              onClick={() => setShowPresetPicker(!showPresetPicker)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
-            >
-              <Lucide.Calendar className="h-4 w-4" style={{ color: "var(--text-secondary)" }} />
-              <span>{label}</span>
-              <Lucide.ChevronDown className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
-            </button>
-            
-            {showPresetPicker && (
-              <>
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setShowPresetPicker(false)} 
-                />
-                <div
-                  className="absolute right-0 top-full mt-2 z-50 rounded-xl p-2 shadow-lg min-w-[160px]"
-                  style={{
-                    backgroundColor: "var(--surface)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {(
-                    [
-                      { value: "today", label: "Today" },
-                      { value: "week", label: "This Week" },
-                      { value: "month", label: "This Month" },
-                      { value: "year", label: "This Year" },
-                    ] as { value: DateRangePreset; label: string }[]
-                  ).map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        setDashboardPreset(option.value);
-                        setShowPresetPicker(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
-                      style={{
-                        backgroundColor: dashboardPreset === option.value ? "var(--accent-subtle)" : "transparent",
-                        color: dashboardPreset === option.value ? "var(--primary)" : "var(--text)",
-                        fontWeight: dashboardPreset === option.value ? 600 : 400,
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <LocalDateRangePicker
+            preset={dashboardPreset}
+            label={label}
+            onChange={setDashboardPreset}
+            options={[
+              { value: "today", label: "Today" },
+              { value: "yesterday", label: "Yesterday" },
+              { value: "week", label: "This Week" },
+              { value: "last-week", label: "Last Week" },
+              { value: "month", label: "This Month" },
+              { value: "last-month", label: "Last Month" },
+            ]}
+          />
         </div>
 
         <SignedOut>

@@ -11,7 +11,6 @@ const PRESET_ROWS: { label?: string; presets: { key: DateRangePreset; label: str
   { label: "Month", presets: [{ key: "month", label: "This Month" }, { key: "last-month", label: "Last Month" }] },
   { label: "Week", presets: [{ key: "week", label: "This Week" }, { key: "last-week", label: "Last Week" }] },
   { label: "Year", presets: [{ key: "year", label: "This Year" }, { key: "last-year", label: "Last Year" }] },
-  { presets: [{ key: "today", label: "Today" }, { key: "yesterday", label: "Yesterday" }] },
 ];
 
 // Quick presets for compact display
@@ -19,6 +18,7 @@ const QUICK_PRESETS: { key: DateRangePreset; label: string }[] = [
   { key: "month", label: "This Month" },
   { key: "last-month", label: "Last Month" },
   { key: "week", label: "This Week" },
+  { key: "last-week", label: "Last Week" },
   { key: "custom", label: "Custom Range" },
 ];
 
