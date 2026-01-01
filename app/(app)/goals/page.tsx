@@ -8,7 +8,6 @@ import type { Id } from "convex/_generated/dataModel";
 import { formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
-import PageHeader from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ToastProvider";
 
 /**
@@ -198,16 +197,12 @@ export default function GoalsPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      <PageHeader
-        title="Goals"
-        subtitle="Track your savings progress"
-        rightSlot={
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}>
-            <Lucide.Plus className="h-4 w-4" />
-            Add Goal
-          </button>
-        }
-      />
+      <div className="flex items-center justify-end">
+        <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}>
+          <Lucide.Plus className="h-4 w-4" />
+          Add Goal
+        </button>
+      </div>
 
       <SignedOut>
         <EmptyState icon={<Lucide.Target className="h-7 w-7" style={{ color: "var(--text-tertiary)" }} />} title="Sign in to set goals" subtitle="Track savings, debt payoff, and sinking funds." action={<SignInButton mode="modal"><button className="px-4 py-2 rounded-xl text-sm font-medium" style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}>Sign in</button></SignInButton>} />

@@ -37,7 +37,7 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     if (typeof window === "undefined") return "dashboard";
     const path = window.location.pathname;
     if (path.startsWith("/dashboard") || path === "/") return "dashboard";
-    if (path.startsWith("/activity") || path.startsWith("/history")) return "activity";
+    if (path.startsWith("/activity")) return "activity";
     if (path.startsWith("/budgeting")) return "budgeting";
     if (path.startsWith("/recurring")) return "recurring";
     if (path.startsWith("/goals")) return "goals";

@@ -5,7 +5,6 @@ import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
-import PageHeader from "@/components/ui/PageHeader";
 import { centsToDollars } from "@/components/utils";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
@@ -741,13 +740,9 @@ export default function InsightsPage() {
   // ─────────────────────────────────────────────────────────────
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", paddingBottom: "96px" }}>
-      {/* Header */}
-      <PageHeader
-        title="Insights"
-        subtitle={`${label} at a glance`}
-        rightSlot={<GlobalDateRangePicker showAllPresets />}
-        compact
-      />
+      <div className="flex items-center justify-end" style={{ marginBottom: "var(--space-4)" }}>
+        <GlobalDateRangePicker showAllPresets />
+      </div>
 
       <SignedOut>
         <div
@@ -1944,7 +1939,6 @@ export default function InsightsPage() {
                   { href: "/activity", icon: Lucide.List, label: "All Transactions" },
                   { href: "/recurring", icon: Lucide.Repeat, label: "Recurring Patterns" },
                   { href: "/inbox", icon: Lucide.Inbox, label: "Needs Review" },
-                  { href: "/summary", icon: Lucide.PieChart, label: "Category Summary" },
                 ].map(({ href, icon: Icon, label: linkLabel }) => (
                   <Link
                     key={href}

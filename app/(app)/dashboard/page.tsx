@@ -10,6 +10,7 @@ import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
 import LocalDateRangePicker from "@/components/LocalDateRangePicker";
+import Link from "next/link";
 
 /**
  * Dashboard - Financial overview at a glance
@@ -24,6 +25,8 @@ import LocalDateRangePicker from "@/components/LocalDateRangePicker";
 type Entry = Doc<"entries">;
 type EditableEntry = Entry & { type: "expense" | "income" };
 
+const COLORS = ["#2F6F85", "#10B981", "#F59E0B", "#6F9EA8", "#EC4899", "#C87A5A"];
+
 function isEditableEntry(entry: Entry): entry is EditableEntry {
   return entry.type === "expense" || entry.type === "income";
 }
@@ -31,6 +34,7 @@ function isEditableEntry(entry: Entry): entry is EditableEntry {
 export default function DashboardPage() {
   const { setActiveTab } = useTabs();
   const [editingEntry, setEditingEntry] = useState<EditableEntry | null>(null);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   
   // Dashboard has its own independent time range (not linked to global)
   // Default to "This Month" for a snapshot of current financial situation
@@ -83,6 +87,8 @@ export default function DashboardPage() {
     const all = entries ?? [];
     let income = 0;
     let expense = 0;
+    const bucketSpend = new Map<string, number>();
+    const categorySpend = new Map<string, number>();
 
     for (const e of all) {
       if (e.excludeFromTotals) continue;
@@ -91,10 +97,20 @@ export default function DashboardPage() {
       } else if (e.type === "expense") {
         expense += e.amountCents;
       }
+      if (e.type === "expense") {
+        const b = (e.bucket ?? "Other").trim() || "Other";
+        bucketSpend.set(b, (bucketSpend.get(b) ?? 0) + e.amountCents);
+        const c = (e.category ?? "Uncategorized").trim() || "Uncategorized";
+        categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
+      }
     }
 
     const net = income - expense;
-    return { income, expense, net };
+    const bucketRows = [...bucketSpend.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const otherTotal = [...bucketSpend.entries()].sort((a, b) => b[1] - a[1]).slice(5).reduce((s, [, v]) => s + v, 0);
+    const bucketFinal = otherTotal > 0 ? [...bucketRows, ["Other", otherTotal] as const] : bucketRows;
+    const topCategory = [...categorySpend.entries()].sort((a, b) => b[1] - a[1])[0];
+    return { income, expense, net, bucketFinal, topCategory };
   }, [entries]);
 
   const reviewCount = inbox?.length ?? 0;
@@ -106,10 +122,7 @@ export default function DashboardPage() {
         className="rounded-2xl p-5"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-h1" style={{ color: "var(--text)" }}>Dashboard</h1>
-          </div>
+        <div className="flex items-center justify-end mb-4">
           {/* Dashboard-specific time range picker (independent from global) */}
           <LocalDateRangePicker
             preset={dashboardPreset}
@@ -328,6 +341,89 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
+          </div>
+        )}
+      </SignedIn>
+
+      {/* Category Breakdown */}
+      <SignedIn>
+        {entries && (
+          <div
+            className="rounded-2xl overflow-hidden"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <button
+              onClick={() => setBreakdownOpen(!breakdownOpen)}
+              className="w-full flex items-center justify-between p-4 transition-colors hover:bg-[var(--surface-subtle)]"
+            >
+              <div className="text-left">
+                <span className="text-h2 block" style={{ color: "var(--text)" }}>
+                  Spending by Category
+                </span>
+                {computed.topCategory && !breakdownOpen && (
+                  <span className="text-meta" style={{ color: "var(--text-secondary)" }}>
+                    Top: {computed.topCategory[0]} — {centsToDollars(computed.topCategory[1])}
+                  </span>
+                )}
+              </div>
+              {breakdownOpen ? (
+                <Lucide.ChevronDown className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+              ) : (
+                <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+              )}
+            </button>
+
+            {breakdownOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t" style={{ borderColor: "var(--border)" }}>
+                {computed.bucketFinal.length === 0 ? (
+                  <div className="pt-4 text-meta">No spending yet.</div>
+                ) : (
+                  <div className="pt-3 space-y-3">
+                    {computed.bucketFinal.map(([name, v], i) => {
+                      const total = computed.bucketFinal.reduce((s, [, val]) => s + val, 0) || 1;
+                      const pct = Math.round((v / total) * 100);
+                      return (
+                        <Link
+                          key={name}
+                          href={`/activity?category=${encodeURIComponent(String(name))}`}
+                          className="block space-y-1.5 transition-opacity hover:opacity-80"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="inline-block h-2.5 w-2.5 rounded-full"
+                                style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                              />
+                              <span className="text-body" style={{ color: "var(--text)" }}>{name}</span>
+                            </div>
+                            <span className="text-body tabular-nums font-semibold" style={{ color: "var(--text)" }}>
+                              {centsToDollars(v)}
+                            </span>
+                          </div>
+                          <div
+                            className="h-1.5 rounded-full overflow-hidden"
+                            style={{ backgroundColor: "var(--surface-subtle)" }}
+                          >
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }}
+                            />
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Link
+                  href="/insights"
+                  className="block text-center text-meta font-semibold pt-2"
+                  style={{ color: "var(--accent)" }}
+                >
+                  View all insights →
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </SignedIn>

@@ -6,7 +6,6 @@ import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
-import PageHeader from "@/components/ui/PageHeader";
 import { useTabs } from "@/components/PersistentTabs";
 import { useToast } from "@/components/ToastProvider";
 import { formatMoney } from "@/components/utils";
@@ -197,23 +196,19 @@ export default function RecurringPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Patterns"
-        subtitle="Saved patterns you've confirmed"
-        rightSlot={
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
-            style={{
-              backgroundColor: "var(--primary)",
-              color: "var(--on-primary)",
-            }}
-          >
-            <Lucide.Plus className="h-4 w-4" />
-            Add
-          </button>
-        }
-      />
+      <div className="flex items-center justify-end">
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium"
+          style={{
+            backgroundColor: "var(--primary)",
+            color: "var(--on-primary)",
+          }}
+        >
+          <Lucide.Plus className="h-4 w-4" />
+          Add
+        </button>
+      </div>
 
       {!rules ? (
         <div className="text-sm" style={{ color: "var(--text-tertiary)" }}>Loading…</div>

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import * as Lucide from "lucide-react";
-import PageHeader from "@/components/ui/PageHeader";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
@@ -37,13 +36,6 @@ export default function MorePage() {
       badge: reviewCount,
     },
     {
-      href: "/summary",
-      label: "Summary",
-      description: "Category breakdown",
-      icon: <Lucide.PieChart className="h-6 w-6" style={{ color: "var(--success)" }} />,
-      iconBg: "var(--success-subtle)",
-    },
-    {
       href: "/accounts",
       label: "Accounts",
       description: "Banks, cards, and balances",
@@ -75,12 +67,6 @@ export default function MorePage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-      <PageHeader
-        title="More"
-        subtitle="Settings & tools"
-        compact
-      />
-
       {/* Menu Grid */}
       <div
         style={{

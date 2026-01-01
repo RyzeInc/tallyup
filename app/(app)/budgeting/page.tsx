@@ -8,7 +8,6 @@ import type { Doc, Id } from "convex/_generated/dataModel";
 import { formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
-import PageHeader from "@/components/ui/PageHeader";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useToast } from "@/components/ToastProvider";
@@ -226,18 +225,11 @@ export default function BudgetingPage() {
 
   return (
     <div className="space-y-4 pb-4">
-      <PageHeader
-        title="Budgeting"
-        subtitle="Track spending against your goals"
-        rightSlot={
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}>
-            <Lucide.Plus className="h-4 w-4" />
-            Add Budget
-          </button>
-        }
-      />
-
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}>
+          <Lucide.Plus className="h-4 w-4" />
+          Add Budget
+        </button>
         <GlobalDateRangePicker />
       </div>
 
