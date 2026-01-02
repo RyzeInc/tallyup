@@ -51,7 +51,18 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
   
   const [previousTab, setPreviousTab] = useState<TabId | null>(null);
 
-  // Update URL without navigation when tab changes
+  // Helper to update URL without navigation
+  const updateUrl = useCallback((tab: TabId) => {
+    if (typeof window !== "undefined") {
+      const tabPath = `/${tab}`;
+      if (window.location.pathname !== tabPath) {
+        const newUrl = tabPath + window.location.search;
+        window.history.replaceState(null, "", newUrl);
+      }
+    }
+  }, []);
+
+  // User-triggered tab change (uses flushSync for immediate feedback)
   const setActiveTabWithHistory = useCallback((tab: TabId) => {
     // Save current scroll position before switching
     if (typeof window !== "undefined") {
@@ -60,22 +71,15 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     
     setPreviousTab(activeTab);
     
-    // Use flushSync to make tab switch HIGH priority
-    // This forces immediate synchronous rendering, bypassing any pending work
+    // Use flushSync for immediate synchronous rendering
     flushSync(() => {
       setActiveTab(tab);
     });
     
-    // Update URL to reflect the active tab, preserving search params
-    if (typeof window !== "undefined") {
-      const tabPath = `/${tab}`;
-      if (window.location.pathname !== tabPath) {
-        const newUrl = tabPath + window.location.search;
-        window.history.replaceState(null, "", newUrl);
-      }
-    }
-  }, [activeTab]);
+    updateUrl(tab);
+  }, [activeTab, updateUrl]);
 
+  // Sync tab state from pathname (effect-triggered, no flushSync)
   useEffect(() => {
     if (!pathname) return;
     const path = pathname;
@@ -90,9 +94,15 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     else if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) nextTab = "more";
 
     if (nextTab !== activeTab) {
-      setActiveTabWithHistory(nextTab);
+      // Save scroll position
+      if (typeof window !== "undefined") {
+        scrollPositions[activeTab] = window.scrollY;
+      }
+      setPreviousTab(activeTab);
+      setActiveTab(nextTab);
     }
-  }, [pathname, activeTab, setActiveTabWithHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   return (
     <TabsContext.Provider value={{ activeTab, setActiveTab: setActiveTabWithHistory, previousTab }}>
