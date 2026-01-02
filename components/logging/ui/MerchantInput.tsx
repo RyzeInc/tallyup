@@ -21,7 +21,7 @@ export const MerchantInput = React.forwardRef<
       <input
         ref={ref}
         type="text"
-        placeholder="Optional..."
+        placeholder="ex. Uber, Walmart, Spotify, AMC..."
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {

@@ -10,7 +10,7 @@ export function CategoryField({
   onChange,
   required,
   showError,
-  placeholder = "Optional...",
+  placeholder = "Select category",
 }: {
   value?: string;
   categories: CategoryOption[];
