@@ -357,6 +357,14 @@ export default function ActivityTable({
                 {/* Secondary: Category · Context tags */}
                 <div className="flex items-center gap-1.5 text-meta truncate" style={{ color: "var(--text-secondary)" }}>
                   <span>{categoryLabel}</span>
+                  {r.recurringRuleId && (
+                    <span
+                      className="shrink-0 rounded px-1.5 py-0.5 text-micro font-semibold"
+                      style={{ backgroundColor: "var(--surface-2)", color: "var(--text-tertiary)" }}
+                    >
+                      Recurring rule
+                    </span>
+                  )}
                   {tagLabels.length > 0 && (
                     <>
                       <span style={{ color: "var(--text-tertiary)" }}>·</span>
@@ -403,7 +411,7 @@ export default function ActivityTable({
                   <button
                     onClick={() => onSavePattern?.(r)}
                     className="rounded-lg p-2 transition-colors hover:bg-[var(--surface-subtle)]"
-                    title="Save as pattern"
+                    title="Save as recurring rule"
                   >
                     <Lucide.Bookmark className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                   </button>

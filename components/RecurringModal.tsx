@@ -68,7 +68,7 @@ export default function RecurringModal({
       if (id) {
         // optimistic local UI update
         add(entry._id);
-        toast.success("Pattern saved", { description: `${displayName || "Pattern"} — saved` });
+        toast.success("Recurring rule saved", { description: `${displayName || "Recurring rule"} — saved` });
 
         // link current entry
         await link({ ruleId: id, entryIds: [entry._id] });
@@ -90,7 +90,7 @@ export default function RecurringModal({
       onClose();
     } catch (e: unknown) {
       setErr(errorMessage(e) ?? "Failed to create");
-      toast.error("Failed to save pattern", { description: errorMessage(e) ?? "Unknown error" });
+      toast.error("Failed to save recurring rule", { description: errorMessage(e) ?? "Unknown error" });
     } finally {
       setBusy(false);
     }
@@ -108,11 +108,11 @@ export default function RecurringModal({
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         role="dialog"
         aria-modal="true"
-        aria-label="Save pattern"
+        aria-label="Save recurring rule"
       >
-        <div className="text-lg font-semibold" style={{ color: "var(--text)" }}>Save pattern</div>
+        <div className="text-lg font-semibold" style={{ color: "var(--text)" }}>Save recurring rule</div>
         <div className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
-          Save a pattern to recognize similar future entries. Auto-apply is off by default and requires explicit confirmation.
+          Save a recurring rule to recognize similar future entries. Auto-apply is off by default and requires explicit confirmation.
         </div>
 
         <div className="mt-4 space-y-4">
@@ -196,7 +196,7 @@ export default function RecurringModal({
               >
                 <div className="font-medium text-sm" style={{ color: "var(--warning)" }}>Auto-apply confirmation</div>
                 <div className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                  Auto-apply will automatically fill this pattern on future entries. It&apos;s best for stable, regular payments (e.g., rent, salary). Please confirm:
+                  Auto-apply will automatically fill this recurring rule on future entries. It&apos;s best for stable, regular payments (e.g., rent, salary). Please confirm:
                 </div>
                 <label className="mt-3 flex items-center gap-2.5">
                   <input 
@@ -236,7 +236,7 @@ export default function RecurringModal({
             className="ml-auto rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
             style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
           >
-            {busy ? "Saving…" : "Save pattern"}
+            {busy ? "Saving…" : "Save recurring rule"}
           </button>
         </div>
       </div>

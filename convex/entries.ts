@@ -4,11 +4,12 @@ import type { Doc, Id } from "./_generated/dataModel";
 import type { Entry as DetectorEntry, Candidate as DetectorCandidate } from "./detector";
 import { v } from "convex/values";
 import { getReviewReason } from "../lib/constants";
+import { internal } from "./_generated/api";
+import { normalizeMerchant } from "./merchant";
 
 type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
 type EntryDoc = Doc<"entries">;
 type BudgetCategoryId = Id<"budgetCategories">;
-type RecurringRuleDoc = Doc<"recurringRules">;
 
 function isDetectorEntry(entry: EntryDoc): entry is EntryDoc & { type: "expense" | "income" } {
   return entry.type === "expense" || entry.type === "income";
@@ -138,6 +139,7 @@ export const addEntry = mutation({
     const note = cleanStr(args.note);
     const merchant = cleanStr(args.merchant);
     const methodOrAccount = cleanStr(args.methodOrAccount);
+    const merchantNormalized = normalizeMerchant(merchant);
     const tags = cleanTags(args.tags);
     const contextTags = cleanTags(args.contextTags);
     const intentTags = cleanTags(args.intentTags);
@@ -164,6 +166,8 @@ export const addEntry = mutation({
       tags,
       note,
       merchant,
+      merchantRaw: merchant,
+      merchantNormalized,
       methodOrAccount,
       accountId: args.accountId,
       contextTags,
@@ -195,59 +199,9 @@ export const addEntry = mutation({
       await enqueueBudgetDirty(ctx, userId, args.date, args.budgetCategoryId, "entry_created");
     }
 
-    // Autolink: if any active recurring rule matches this entry and autolinkEnabled is true,
-    // link the entry to the best matching rule and update lastMatchedAt.
+    // Autolink: delegate to deterministic recurring matcher.
     try {
-      const activeRules = await ctx.db
-        .query("recurringRules")
-        .withIndex("by_user_active", q => q.eq("userId", userId).eq("active", true))
-        .order("desc")
-        .take(200);
-
-      const categoryLower = (category ?? "").toLowerCase();
-      const bucketLower = (bucket ?? "").toLowerCase();
-
-      let bestRule: RecurringRuleDoc | null = null;
-      let bestScore = 0;
-
-      for (const r of activeRules) {
-        if (r.type !== args.type) continue;
-        if (!r.autolinkEnabled) continue;
-
-        // Filter by bucket/category if present
-        if (r.bucket && (r.bucket ?? "").trim().toLowerCase() !== bucketLower) continue;
-        if (r.category && (r.category ?? "").trim().toLowerCase() !== categoryLower) continue;
-
-        // Amount matching
-        let amountMatchScore = 0;
-        if (r.amountCents !== undefined && r.amountCents !== null) {
-          const tol = r.amountTolerancePercent ?? 0;
-          const diff = Math.abs(amountCents - r.amountCents);
-          const ok = tol > 0 ? diff <= Math.max(1, Math.round((r.amountCents * tol) / 100)) : diff === 0;
-          amountMatchScore = ok ? 1 : 0;
-        } else if (r.minAmountCents !== undefined || r.maxAmountCents !== undefined) {
-          const min = r.minAmountCents ?? -Infinity;
-          const max = r.maxAmountCents ?? Infinity;
-          amountMatchScore = amountCents >= min && amountCents <= max ? 1 : 0;
-        } else {
-          // no amount constraint
-          amountMatchScore = 1;
-        }
-
-        if (!amountMatchScore) continue;
-
-        // Basic scoring: use rule.confidence as primary score
-        const score = (r.confidence ?? 0) + (r.autolinkEnabled ? 5 : 0);
-        if (score > bestScore) {
-          bestScore = score;
-          bestRule = r;
-        }
-      }
-
-      if (bestRule) {
-        await ctx.db.patch(insertedId, { recurringRuleId: bestRule._id, updatedAt: Date.now() });
-        await ctx.db.patch(bestRule._id, { lastMatchedAt: Date.now(), updatedAt: Date.now() });
-      }
+      await ctx.runMutation(internal.recurring.matchEntryToRecurring, { entryId: insertedId });
     } catch (e) {
       // Do not block insert on autolink failures
       console.error("Autolink error:", e);
@@ -316,7 +270,12 @@ export const updateEntry = mutation({
     }
     if (args.tags !== undefined) patch.tags = cleanTags(args.tags);
     if (args.note !== undefined) patch.note = cleanStr(args.note);
-    if (args.merchant !== undefined) patch.merchant = cleanStr(args.merchant);
+    if (args.merchant !== undefined) {
+      const nextMerchant = cleanStr(args.merchant);
+      patch.merchant = nextMerchant;
+      patch.merchantRaw = nextMerchant;
+      patch.merchantNormalized = normalizeMerchant(nextMerchant);
+    }
     if (args.methodOrAccount !== undefined) patch.methodOrAccount = cleanStr(args.methodOrAccount);
     if (args.accountId !== undefined) patch.accountId = args.accountId ?? undefined;
 

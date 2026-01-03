@@ -20,6 +20,7 @@ import type * as entries from "../entries.js";
 import type * as gigs from "../gigs.js";
 import type * as goals from "../goals.js";
 import type * as investments from "../investments.js";
+import type * as merchant from "../merchant.js";
 import type * as migrations from "../migrations.js";
 import type * as preferences from "../preferences.js";
 import type * as recurring from "../recurring.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   gigs: typeof gigs;
   goals: typeof goals;
   investments: typeof investments;
+  merchant: typeof merchant;
   migrations: typeof migrations;
   preferences: typeof preferences;
   recurring: typeof recurring;

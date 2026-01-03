@@ -69,6 +69,15 @@ export default defineSchema({
 
     // optional: a link to a detected or user-created recurring series/rule (typed id)
     recurringRuleId: v.optional(v.id("recurringRules")),
+    // Recurring match metadata
+    recurringMatch: v.optional(v.object({
+      ruleId: v.optional(v.id("recurringRules")),
+      expectedChargeId: v.optional(v.id("expectedCharges")),
+      matchType: v.union(v.literal("auto"), v.literal("user")),
+      score: v.optional(v.number()),
+      explain: v.optional(v.any()),
+    })),
+    excludeFromRecurring: v.optional(v.boolean()),
 
     // Goal tracking - link entry to a goal for contribution tracking
     goalId: v.optional(v.id("goals")),
@@ -145,6 +154,42 @@ export default defineSchema({
     cadenceAnchor: v.optional(v.string()), // e.g., day-of-month or 'last-day'
     timingFlexDays: v.optional(v.number()),
 
+    status: v.optional(v.union(
+      v.literal("suggested"),
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("cancelled"),
+      v.literal("archived")
+    )),
+    merchantKeys: v.optional(v.array(v.string())),
+    accountScope: v.optional(v.object({
+      kind: v.union(v.literal("any"), v.literal("only")),
+      accountIds: v.optional(v.array(v.id("accounts"))),
+    })),
+    amountPolicy: v.optional(v.object({
+      kind: v.union(v.literal("fixed"), v.literal("range"), v.literal("variable")),
+      amountCents: v.optional(v.number()),
+      minCents: v.optional(v.number()),
+      maxCents: v.optional(v.number()),
+      toleranceBps: v.optional(v.number()),
+    })),
+    cadence: v.optional(v.object({
+      kind: v.union(
+        v.literal("weekly"),
+        v.literal("biweekly"),
+        v.literal("monthly"),
+        v.literal("quarterly"),
+        v.literal("yearly"),
+        v.literal("custom_days")
+      ),
+      intervalDays: v.optional(v.number()),
+      anchorDate: v.optional(v.number()),
+    })),
+    budgetBehavior: v.optional(v.object({
+      committed: v.boolean(),
+      rollupKey: v.optional(v.string()),
+    })),
+
     autolinkEnabled: v.optional(v.boolean()),
     lastMatchedAt: v.optional(v.number()),
     active: v.boolean(),
@@ -157,7 +202,51 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user_active", ["userId", "active"])
-    .index("by_user_confidence", ["userId", "confidence"]),
+    .index("by_user_confidence", ["userId", "confidence"])
+    .index("by_user_status", ["userId", "status"]),
+
+  expectedCharges: defineTable({
+    userId: v.string(),
+    ruleId: v.id("recurringRules"),
+    expectedDate: v.number(),
+    expectedAmountCents: v.optional(v.number()),
+    state: v.union(
+      v.literal("upcoming"),
+      v.literal("due"),
+      v.literal("matched"),
+      v.literal("missed"),
+      v.literal("skipped")
+    ),
+    matchedEntryId: v.optional(v.id("entries")),
+    resolvedAt: v.optional(v.number()),
+    resolutionNote: v.optional(v.string()),
+    generatedAt: v.number(),
+    generatedWindow: v.optional(v.string()),
+  })
+    .index("by_user_date", ["userId", "expectedDate"])
+    .index("by_user_rule", ["userId", "ruleId"])
+    .index("by_user_state", ["userId", "state"]),
+
+  recurringInbox: defineTable({
+    userId: v.string(),
+    status: v.union(v.literal("open"), v.literal("resolved"), v.literal("dismissed")),
+    type: v.union(
+      v.literal("confirm_match"),
+      v.literal("price_changed"),
+      v.literal("missed_payment"),
+      v.literal("cadence_drift"),
+      v.literal("needs_details")
+    ),
+    ruleId: v.optional(v.id("recurringRules")),
+    expectedChargeId: v.optional(v.id("expectedCharges")),
+    entryId: v.optional(v.id("entries")),
+    payload: v.optional(v.any()),
+    createdAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_user_status", ["userId", "status"])
+    .index("by_user_type", ["userId", "type"])
+    .index("by_user_created", ["userId", "createdAt"]),
 
   analyticsEvents: defineTable({
     userId: v.string(),

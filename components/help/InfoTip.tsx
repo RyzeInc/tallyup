@@ -106,7 +106,7 @@ export const COMMON_TIPS = {
     body: "Flagged items need a quick check—maybe a missing category or an unusual amount.",
   },
   recurring: {
-    title: "Recurring patterns",
+    title: "Recurring rules",
     body: "These are expenses or income that happen regularly. Tracking them helps predict future cash flow.",
   },
   hourlyRate: {
