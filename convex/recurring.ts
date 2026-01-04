@@ -205,6 +205,7 @@ export const createRecurringRule = mutation({
 export const updateRecurringRule = mutation({
   args: {
     id: v.id("recurringRules"),
+    type: v.optional(v.union(v.literal("expense"), v.literal("income"))),
     displayName: v.optional(v.string()),
     name: v.optional(v.string()),
     bucket: v.optional(v.string()),
@@ -265,6 +266,7 @@ export const updateRecurringRule = mutation({
     if (!existing || existing.userId !== userId) throw new Error("Not found");
 
     const patch: Partial<RecurringRuleDoc> & { updatedAt: number } = { updatedAt: Date.now() };
+    if (args.type !== undefined) patch.type = args.type;
     if (args.displayName !== undefined) patch.displayName = cleanStr(args.displayName);
     if (args.name !== undefined) patch.name = cleanStr(args.name);
     if (args.bucket !== undefined) patch.bucket = cleanStr(args.bucket);
