@@ -49,7 +49,7 @@ export function QuickLogDialog({
 
       {/* Dialog Content */}
       <div
-        className="relative w-full sm:max-w-md h-full sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-200 flex flex-col"
+        className="relative w-full sm:max-w-md h-[100dvh] sm:h-auto sm:max-h-[90vh] rounded-none sm:rounded-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-200 flex flex-col"
         style={{
           backgroundColor: "var(--surface)",
         }}

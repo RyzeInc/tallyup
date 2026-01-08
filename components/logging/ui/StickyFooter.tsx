@@ -26,13 +26,13 @@ export function StickyFooter({
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 border-t backdrop-blur-sm z-40"
+      className="flex-shrink-0 border-t"
       style={{
         backgroundColor: "var(--surface)",
         borderColor: "var(--border)",
       }}
     >
-      <div className="mx-auto w-full max-w-md px-4 py-3 pb-safe">
+      <div className="w-full px-4 pt-3 pb-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
         {error && (
           <div
             className="mb-2 p-3 rounded-lg text-sm flex items-center gap-2"

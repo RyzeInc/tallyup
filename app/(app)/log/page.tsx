@@ -165,7 +165,7 @@ export default function LogPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <>
       <SignedOut>
         <div className="p-4">
           <PageHeader title="Log" subtitle="Just the basics — review anytime" compact />
@@ -195,15 +195,25 @@ export default function LogPage() {
       </SignedOut>
 
       <SignedIn>
-        <QuickLogForm
-          mode="create"
-          nowDateISO={todayISO()}
-          accounts={accounts}
-          tagsCatalog={tagsCatalog}
-          goals={goals}
-          onSubmit={handleSubmit}
-        />
+        {/* Container with fixed height for proper scroll behavior */}
+        <div 
+          className="flex flex-col overflow-hidden rounded-2xl"
+          style={{
+            height: "calc(100dvh - 120px)", /* Account for top nav and page padding */
+            backgroundColor: "var(--surface)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <QuickLogForm
+            mode="create"
+            nowDateISO={todayISO()}
+            accounts={accounts}
+            tagsCatalog={tagsCatalog}
+            goals={goals}
+            onSubmit={handleSubmit}
+          />
+        </div>
       </SignedIn>
-    </div>
+    </>
   );
 }

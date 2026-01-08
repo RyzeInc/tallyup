@@ -178,9 +178,9 @@ export function QuickLogForm(props: QuickLogFormProps) {
   };
 
   return (
-    <div className="w-full flex flex-col min-h-full">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 px-4 pt-4">
+    <div className="w-full flex flex-col h-full overflow-hidden">
+      {/* Header - Fixed, non-scrolling */}
+      <div className="flex-shrink-0 flex items-start justify-between gap-4 px-4 pt-4 pb-2">
         <div>
           <div
             className="text-lg font-semibold"
@@ -212,8 +212,8 @@ export function QuickLogForm(props: QuickLogFormProps) {
         )}
       </div>
 
-      {/* Body */}
-      <div className="flex-1 px-4 pb-28 pt-4 space-y-4">
+      {/* Body - Scrollable region */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pt-2 pb-4 space-y-4">
         {/* Type Toggle */}
         <TypeToggle
           value={state.draft.type}
@@ -306,9 +306,12 @@ export function QuickLogForm(props: QuickLogFormProps) {
           accounts={props.accounts}
           goals={props.goals}
         />
+        
+        {/* Spacer for any remaining content to clear footer */}
+        <div className="h-4" aria-hidden="true" />
       </div>
 
-      {/* Sticky CTA */}
+      {/* Footer CTA - Fixed at bottom, non-scrolling */}
       <StickyFooter
         mode={props.mode}
         status={state.status}
