@@ -780,7 +780,7 @@ export default function InsightsPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gridTemplateColumns: "1fr 1fr",
                   gap: "4px",
                   padding: "4px",
                   backgroundColor: "var(--surface)",
@@ -788,13 +788,14 @@ export default function InsightsPage() {
                   border: "1px solid var(--border)",
                 }}
               >
-                {(["all", "income", "expense"] as TypeFilter[]).map((t) => {
+                {/* Expense first, then Income - tapping selected deselects to all */}
+                {(["expense", "income"] as const).map((t) => {
                   const isActive = typeFilter === t;
-                  const Icon = t === "income" ? Lucide.ArrowDownLeft : t === "expense" ? Lucide.ArrowUpRight : Lucide.LayoutGrid;
+                  const Icon = t === "expense" ? Lucide.ArrowUpRight : Lucide.ArrowDownLeft;
                   return (
                     <button
                       key={t}
-                      onClick={() => setTypeFilter(t)}
+                      onClick={() => setTypeFilter(isActive ? "all" : t)}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -803,7 +804,7 @@ export default function InsightsPage() {
                         padding: "10px 12px",
                         borderRadius: "calc(var(--input-radius) - 4px)",
                         fontSize: "var(--text-meta)",
-                        fontWeight: 500,
+                        fontWeight: isActive ? 700 : 500,
                         cursor: "pointer",
                         border: "none",
                         transition: "all 150ms ease",
@@ -811,7 +812,7 @@ export default function InsightsPage() {
                         color: isActive ? "var(--primary-foreground)" : "var(--text)",
                       }}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="h-4 w-4" style={{ strokeWidth: isActive ? 2.5 : 2 }} />
                       {t.charAt(0).toUpperCase() + t.slice(1)}
                     </button>
                   );

@@ -392,15 +392,15 @@ export default function ActivityPage() {
 
         {/* Compact Filter Row */}
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
-          {/* Type chips */}
-          {(["all", "expense", "income"] as const).map((t) => {
+          {/* Type chips - Spent/Received only, tapping selected deselects back to all */}
+          {(["expense", "income"] as const).map((t) => {
             const isActive = type === t;
-            const label = t === "all" ? "All" : t === "expense" ? "Spent" : "Received";
-            const Icon = t === "expense" ? Lucide.ArrowUpRight : t === "income" ? Lucide.ArrowDownLeft : null;
+            const label = t === "expense" ? "Spent" : "Received";
+            const Icon = t === "expense" ? Lucide.ArrowUpRight : Lucide.ArrowDownLeft;
             return (
               <button
                 key={t}
-                onClick={() => setType(t)}
+                onClick={() => setType(isActive ? "all" : t)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -416,7 +416,7 @@ export default function ActivityPage() {
                   border: isActive ? "1px solid var(--primary)" : "1px solid var(--border)",
                 }}
               >
-                {Icon && <Icon className="h-4 w-4" />}
+                <Icon className="h-4 w-4" />
                 {label}
               </button>
             );

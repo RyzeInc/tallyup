@@ -707,25 +707,13 @@ export function DetailsExpander(props: DetailsExpanderProps) {
       <ExpandableSection isExpanded={expandedSection === "recurring"}>
         <SectionLabel>Cadence</SectionLabel>
         <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => onSetRecurring(undefined)}
-            className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: !recurring?.cadence ? "var(--primary)" : "var(--surface)",
-              color: !recurring?.cadence ? "var(--primary-foreground)" : "var(--text-secondary)",
-              border: !recurring?.cadence ? "none" : "1px solid var(--border)",
-            }}
-          >
-            None
-          </button>
           {CADENCE_OPTIONS.map((opt) => {
             const isSelected = recurring?.cadence === opt.value;
             return (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => onSetRecurring({ ...recurring, cadence: opt.value })}
+                onClick={() => onSetRecurring(isSelected ? undefined : { ...recurring, cadence: opt.value })}
                 className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
                 style={{
                   backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
@@ -749,38 +737,24 @@ export function DetailsExpander(props: DetailsExpanderProps) {
               No goals yet
             </span>
           ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => onSetGoal(undefined)}
-                className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-                style={{
-                  backgroundColor: !goalId ? "var(--primary)" : "var(--surface)",
-                  color: !goalId ? "var(--primary-foreground)" : "var(--text-secondary)",
-                  border: !goalId ? "none" : "1px solid var(--border)",
-                }}
-              >
-                None
-              </button>
-              {goals.map((goal) => {
-                const isSelected = goalId === goal.id;
-                return (
-                  <button
-                    key={goal.id}
-                    type="button"
-                    onClick={() => onSetGoal(isSelected ? undefined : goal.id)}
-                    className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-                    style={{
-                      backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
-                      color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
-                      border: isSelected ? "none" : "1px solid var(--border)",
-                    }}
-                  >
-                    {goal.name}
-                  </button>
-                );
-              })}
-            </>
+            goals.map((goal) => {
+              const isSelected = goalId === goal.id;
+              return (
+                <button
+                  key={goal.id}
+                  type="button"
+                  onClick={() => onSetGoal(isSelected ? undefined : goal.id)}
+                  className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                    color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
+                    border: isSelected ? "none" : "1px solid var(--border)",
+                  }}
+                >
+                  {goal.name}
+                </button>
+              );
+            })
           )}
         </div>
       </ExpandableSection>
