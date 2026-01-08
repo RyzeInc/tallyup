@@ -8,3 +8,4 @@ export { DetailsBar } from "./DetailsBar";
 export { DetailsExpander } from "./DetailsExpander";
 export { SummaryChips } from "./SummaryChips";
 export { StickyFooter } from "./StickyFooter";
+export { AddAccountDialog } from "./AddAccountDialog";

@@ -281,6 +281,13 @@ export function QuickLogForm(props: QuickLogFormProps) {
           onSetAccount={(patch) =>
             dispatch({ type: "SET_ACCOUNT", patch })
           }
+          // Account creation - auto-select newly created account
+          onAccountCreated={(accountId) => {
+            // Auto-select the newly created account
+            // The accountId is a string but dispatch expects Id<"accounts">
+            // TypeScript will infer it correctly at runtime
+            dispatch({ type: "SET_ACCOUNT", patch: { accountId: accountId as unknown as AccountOption["id"] } });
+          }}
           // Tags
           tags={state.draft.tags}
           tagsCatalog={props.tagsCatalog}

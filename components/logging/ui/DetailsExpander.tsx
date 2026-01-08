@@ -17,6 +17,7 @@ import type {
 } from "../types";
 import type { TxType } from "../types";
 import * as Lucide from "lucide-react";
+import { AddAccountDialog } from "./AddAccountDialog";
 
 // ============================================
 // Types
@@ -62,6 +63,9 @@ type DetailsExpanderProps = {
   goalId?: GoalOption["id"];
   goals: GoalOption[];
   onSetGoal: (goalId?: GoalOption["id"]) => void;
+
+  // Account creation callback (optional)
+  onAccountCreated?: (accountId: string, accountName: string) => void;
 };
 
 // ============================================
@@ -264,9 +268,11 @@ export function DetailsExpander(props: DetailsExpanderProps) {
     goalId,
     goals,
     onSetGoal,
+    onAccountCreated,
   } = props;
 
   const [tagSearch, setTagSearch] = React.useState("");
+  const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false);
 
   // Filter tags catalog
   const filteredTags = React.useMemo(() => {
@@ -470,6 +476,20 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                     </button>
                   );
                 })}
+                {/* Add Account Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddAccountDialog(true)}
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: "var(--primary)",
+                    border: "1px dashed var(--primary)",
+                  }}
+                >
+                  <Lucide.Plus className="h-3 w-3" />
+                  Add
+                </button>
               </div>
             </div>
             <div>
@@ -493,6 +513,20 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                     </button>
                   );
                 })}
+                {/* Add Account Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddAccountDialog(true)}
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: "var(--primary)",
+                    border: "1px dashed var(--primary)",
+                  }}
+                >
+                  <Lucide.Plus className="h-3 w-3" />
+                  Add
+                </button>
               </div>
             </div>
           </div>
@@ -501,30 +535,38 @@ export function DetailsExpander(props: DetailsExpanderProps) {
             <div>
               <SectionLabel>Account</SectionLabel>
               <div className="flex flex-wrap gap-1.5">
-                {accounts.length === 0 ? (
-                  <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-                    No accounts yet
-                  </span>
-                ) : (
-                  accounts.map((acc) => {
-                    const isSelected = account.accountId === acc.id;
-                    return (
-                      <button
-                        key={acc.id}
-                        type="button"
-                        onClick={() => onSetAccount({ accountId: isSelected ? undefined : acc.id })}
-                        className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-                        style={{
-                          backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
-                          color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
-                          border: isSelected ? "none" : "1px solid var(--border)",
-                        }}
-                      >
-                        {acc.name}
-                      </button>
-                    );
-                  })
-                )}
+                {accounts.map((acc) => {
+                  const isSelected = account.accountId === acc.id;
+                  return (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => onSetAccount({ accountId: isSelected ? undefined : acc.id })}
+                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                      style={{
+                        backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                        color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
+                        border: isSelected ? "none" : "1px solid var(--border)",
+                      }}
+                    >
+                      {acc.name}
+                    </button>
+                  );
+                })}
+                {/* Add Account Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddAccountDialog(true)}
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: "transparent",
+                    color: "var(--primary)",
+                    border: "1px dashed var(--primary)",
+                  }}
+                >
+                  <Lucide.Plus className="h-3 w-3" />
+                  Add
+                </button>
               </div>
             </div>
             <div>
@@ -738,6 +780,13 @@ export function DetailsExpander(props: DetailsExpanderProps) {
           )}
         </div>
       </ExpandableSection>
+
+      {/* Add Account Dialog */}
+      <AddAccountDialog
+        open={showAddAccountDialog}
+        onOpenChange={setShowAddAccountDialog}
+        onAccountCreated={onAccountCreated}
+      />
     </div>
   );
 }
