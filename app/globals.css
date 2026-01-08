@@ -424,6 +424,11 @@ body {
   background: var(--text-tertiary);
 }
 
+/* Hide scrollbar utility class */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* ============================================
    ANIMATIONS
    ============================================ */

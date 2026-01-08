@@ -457,15 +457,17 @@ export function DetailsExpander(props: DetailsExpanderProps) {
           <div className="space-y-3">
             <div>
               <SectionLabel>From</SectionLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {accounts.map((acc) => {
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-3 px-3" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                {accounts
+                  .filter((acc) => acc.id !== account.toAccountId)
+                  .map((acc) => {
                   const isSelected = account.fromAccountId === acc.id;
                   return (
                     <button
                       key={acc.id}
                       type="button"
                       onClick={() => onSetAccount({ fromAccountId: isSelected ? undefined : acc.id })}
-                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
                       style={{
                         backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
                         color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
@@ -480,7 +482,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                 <button
                   type="button"
                   onClick={() => setShowAddAccountDialog(true)}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
                   style={{
                     backgroundColor: "transparent",
                     color: "var(--primary)",
@@ -494,15 +496,17 @@ export function DetailsExpander(props: DetailsExpanderProps) {
             </div>
             <div>
               <SectionLabel>To</SectionLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {accounts.map((acc) => {
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-3 px-3" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+                {accounts
+                  .filter((acc) => acc.id !== account.fromAccountId)
+                  .map((acc) => {
                   const isSelected = account.toAccountId === acc.id;
                   return (
                     <button
                       key={acc.id}
                       type="button"
                       onClick={() => onSetAccount({ toAccountId: isSelected ? undefined : acc.id })}
-                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
                       style={{
                         backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
                         color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
@@ -517,7 +521,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                 <button
                   type="button"
                   onClick={() => setShowAddAccountDialog(true)}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
                   style={{
                     backgroundColor: "transparent",
                     color: "var(--primary)",
@@ -534,7 +538,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
           <div className="space-y-3">
             <div>
               <SectionLabel>Account</SectionLabel>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-none -mx-3 px-3" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
                 {accounts.map((acc) => {
                   const isSelected = account.accountId === acc.id;
                   return (
@@ -542,7 +546,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                       key={acc.id}
                       type="button"
                       onClick={() => onSetAccount({ accountId: isSelected ? undefined : acc.id })}
-                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                      className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
                       style={{
                         backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
                         color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
@@ -557,7 +561,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                 <button
                   type="button"
                   onClick={() => setShowAddAccountDialog(true)}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
                   style={{
                     backgroundColor: "transparent",
                     color: "var(--primary)",
