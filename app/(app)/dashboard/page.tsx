@@ -173,7 +173,7 @@ export default function DashboardPage() {
                 </div>
                 <div
                   className="text-kpi tabular-nums"
-                  style={{ color: computed.net >= 0 ? "var(--success)" : "var(--danger)" }}
+                  style={{ color: computed.net >= 0 ? "var(--net)" : "var(--danger)" }}
                 >
                   {formatMoney(computed.net, { signMode: "always" })}
                 </div>

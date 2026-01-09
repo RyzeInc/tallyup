@@ -55,11 +55,13 @@ function monthKey(year: number, month: number): string {
 function MoneyValue({ 
   cents, 
   colorize = false,
-  size = "normal"
+  size = "normal",
+  isNet = false,
 }: { 
   cents: number; 
   colorize?: boolean;
   size?: "normal" | "large";
+  isNet?: boolean; // Use --net color instead of --success for positive values
 }) {
   const isNegative = cents < 0;
   const formatted = centsToDollars(Math.abs(cents));
@@ -70,7 +72,8 @@ function MoneyValue({
     if (isNegative) {
       colorStyle = { color: "var(--danger)" };
     } else if (cents > 0) {
-      colorStyle = { color: "var(--success)" };
+      // Use --net for net values, --success for income
+      colorStyle = { color: isNet ? "var(--net)" : "var(--success)" };
     }
   }
   
@@ -274,7 +277,7 @@ function SingleMonthCard({
           <span style={{ fontSize: "0.875rem", color: "var(--text-secondary)", fontWeight: 500 }}>
             Net
           </span>
-          <MoneyValue cents={data.net} colorize size="large" />
+          <MoneyValue cents={data.net} colorize size="large" isNet />
         </div>
       </div>
     </div>
@@ -502,7 +505,7 @@ function MultiMonthView({
                       fontWeight: 500,
                     }}
                   >
-                    <MoneyValue cents={m.net} colorize />
+                    <MoneyValue cents={m.net} colorize isNet />
                   </div>
                 ))}
               </div>
@@ -545,7 +548,7 @@ function MultiMonthView({
           <span style={{ fontWeight: 600, color: "var(--text)", fontSize: "0.9375rem" }}>
             Net Income ({viewMonths} mo)
           </span>
-          <MoneyValue cents={totals.net} colorize size="large" />
+          <MoneyValue cents={totals.net} colorize size="large" isNet />
         </div>
       </div>
     </div>

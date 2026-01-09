@@ -7,6 +7,7 @@ import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import { useTabs } from "./PersistentTabs";
 import { useQuickLog } from "./log/QuickLogProvider";
+import { useTheme, type CustomizableNavItem } from "./ThemeProvider";
 
 /**
  * TopNav - Horizontally scrollable top navigation
@@ -17,6 +18,7 @@ import { useQuickLog } from "./log/QuickLogProvider";
  * - No hamburger menus for primary navigation
  * - All critical paths visible
  * - Tap targets ≥ 44px
+ * - Respects user's navigation customization preferences
  */
 
 interface NavTab {
@@ -25,9 +27,10 @@ interface NavTab {
   iconName: keyof typeof iconMap;
   tabId: TabId;
   badge?: number;
+  customizableId?: CustomizableNavItem; // If set, this tab can be hidden by user
 }
 
-type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more";
+type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts";
 
 const iconMap = {
   LayoutDashboard: Lucide.LayoutDashboard,
@@ -38,11 +41,15 @@ const iconMap = {
   TrendingUp: Lucide.TrendingUp,
   Menu: Lucide.Menu,
   Plus: Lucide.Plus,
+  Calendar: Lucide.Calendar,
+  ClipboardCheck: Lucide.ClipboardCheck,
+  Building2: Lucide.Building2,
 };
 
 export default function TopNav() {
   const { activeTab, setActiveTab } = useTabs();
   const { open: openQuickLog } = useQuickLog();
+  const { visibleNavItems } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
   const [showRightFade, setShowRightFade] = useState(true);
@@ -51,15 +58,27 @@ export default function TopNav() {
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
 
-  const tabs: NavTab[] = [
+  // All possible tabs (order matters)
+  const allTabs: NavTab[] = [
     { id: "dashboard", label: "Dashboard", iconName: "LayoutDashboard", tabId: "dashboard" },
-    { id: "activity", label: "Activity", iconName: "Activity", tabId: "activity", badge: reviewCount > 0 ? reviewCount : undefined },
-    { id: "budgeting", label: "Budgeting", iconName: "Wallet", tabId: "budgeting" },
-    { id: "recurring", label: "Recurring", iconName: "RefreshCw", tabId: "recurring" },
-    { id: "goals", label: "Goals", iconName: "Target", tabId: "goals" },
-    { id: "insights", label: "Insights", iconName: "TrendingUp", tabId: "insights" },
+    { id: "activity", label: "Activity", iconName: "Activity", tabId: "activity", badge: reviewCount > 0 ? reviewCount : undefined, customizableId: "activity" },
+    { id: "budgeting", label: "Budgeting", iconName: "Wallet", tabId: "budgeting", customizableId: "budgeting" },
+    { id: "recurring", label: "Recurring", iconName: "RefreshCw", tabId: "recurring", customizableId: "recurring" },
+    { id: "goals", label: "Goals", iconName: "Target", tabId: "goals", customizableId: "goals" },
+    { id: "insights", label: "Insights", iconName: "TrendingUp", tabId: "insights", customizableId: "insights" },
+    { id: "calendar", label: "Calendar", iconName: "Calendar", tabId: "calendar", customizableId: "calendar" },
+    { id: "review", label: "Review", iconName: "ClipboardCheck", tabId: "review", customizableId: "review" },
+    { id: "accounts", label: "Accounts", iconName: "Building2", tabId: "accounts", customizableId: "accounts" },
     { id: "more", label: "Menu", iconName: "Menu", tabId: "more" },
   ];
+
+  // Filter tabs based on user preferences
+  const tabs = allTabs.filter((tab) => {
+    // Dashboard and Menu are always visible
+    if (!tab.customizableId) return true;
+    // Check if user wants this tab visible
+    return visibleNavItems.includes(tab.customizableId);
+  });
 
   // Handle scroll fade indicators
   useEffect(() => {

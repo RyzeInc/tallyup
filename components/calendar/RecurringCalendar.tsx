@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { centsToDollars } from "@/components/utils";
 import * as Lucide from "lucide-react";
+import RuleEditorDialog from "@/app/(app)/recurring/_components/rules/RuleEditorDialog";
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -304,13 +305,33 @@ function formatPreviewName(name: string, maxLen = 20) {
   return out + "…";
 }
 
-function EventItem({ rule, isMobile, isDesktop }: { rule: RecurringRule; isMobile?: boolean; isDesktop?: boolean }) {
+function EventItem({ 
+  rule, 
+  isMobile, 
+  isDesktop,
+  onClick,
+}: { 
+  rule: RecurringRule; 
+  isMobile?: boolean; 
+  isDesktop?: boolean;
+  onClick?: () => void;
+}) {
   const isIncome = rule.type === "income";
   const name = rule.displayName || rule.name || rule.category || "Recurring";
   const preview = formatPreviewName(name, isDesktop ? 28 : isMobile ? 18 : 20);
   
+  // Build tooltip with name and amount
+  const amountStr = rule.amountCents 
+    ? `${rule.type === "expense" ? "-" : "+"}${centsToDollars(rule.amountCents)}`
+    : "";
+  const tooltip = amountStr ? `${name}\n${amountStr}` : name;
+  
   return (
     <div
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick?.();
+      }}
       style={{
         display: "block",
         padding: isDesktop ? "8px 10px" : isMobile ? "6px 8px" : "4px 6px",
@@ -320,8 +341,11 @@ function EventItem({ rule, isMobile, isDesktop }: { rule: RecurringRule; isMobil
         fontSize: isDesktop ? "0.875rem" : "0.75rem",
         lineHeight: 1.08,
         overflow: "hidden",
+        cursor: onClick ? "pointer" : "default",
+        transition: "background 150ms ease",
       }}
-      title={name}
+      title={tooltip}
+      className={onClick ? "hover:opacity-80" : ""}
     >
       <span
         style={{
@@ -421,14 +445,16 @@ function DayCell({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Day Detail Modal/Sheet
+// Day Detail Dialog (centered modal instead of bottom sheet)
 // ─────────────────────────────────────────────────────────────
-function DayDetailSheet({ 
+function DayDetailDialog({ 
   day, 
-  onClose 
+  onClose,
+  onEditRule,
 }: { 
   day: CalendarDay; 
   onClose: () => void;
+  onEditRule: (rule: RecurringRule) => void;
 }) {
   const dateStr = day.date.toLocaleDateString("en-US", {
     weekday: "long",
@@ -443,8 +469,9 @@ function DayDetailSheet({
         inset: 0,
         zIndex: 100,
         display: "flex",
-        alignItems: "flex-end",
+        alignItems: "center",
         justifyContent: "center",
+        padding: 16,
       }}
     >
       {/* Backdrop */}
@@ -457,38 +484,27 @@ function DayDetailSheet({
         }}
       />
       
-      {/* Sheet */}
+      {/* Dialog */}
       <div
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: 500,
-          maxHeight: "70vh",
+          maxWidth: 420,
+          maxHeight: "80vh",
           backgroundColor: "var(--surface)",
-          borderRadius: "var(--card-radius, 16px) var(--card-radius, 16px) 0 0",
-          padding: "var(--space-4, 16px)",
-          paddingBottom: "calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px))",
+          borderRadius: "var(--card-radius, 16px)",
+          padding: "var(--space-5, 20px)",
           overflowY: "auto",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
         }}
       >
-        {/* Handle */}
-        <div
-          style={{
-            width: 36,
-            height: 4,
-            backgroundColor: "var(--border)",
-            borderRadius: 2,
-            margin: "0 auto 16px",
-          }}
-        />
-        
         {/* Header */}
         <div 
           style={{ 
             display: "flex", 
             justifyContent: "space-between", 
             alignItems: "center",
-            marginBottom: 16,
+            marginBottom: 20,
           }}
         >
           <h3 style={{ fontSize: "1.125rem", fontWeight: 600, color: "var(--text)" }}>
@@ -513,31 +529,37 @@ function DayDetailSheet({
         </div>
         
         {/* Events List */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {day.events.map((rule, i) => (
-            <div
+            <button
               key={i}
+              onClick={() => onEditRule(rule)}
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                padding: "12px",
+                padding: "14px 16px",
                 backgroundColor: "var(--surface-2)",
-                borderRadius: "var(--radius-sm, 8px)",
+                borderRadius: "var(--radius-sm, 10px)",
                 border: "1px solid var(--border)",
+                cursor: "pointer",
+                transition: "all 150ms ease",
+                textAlign: "left",
+                width: "100%",
               }}
+              className="hover:bg-[var(--surface-subtle)]"
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div
                   style={{
-                    width: 8,
-                    height: 8,
+                    width: 10,
+                    height: 10,
                     borderRadius: "50%",
                     backgroundColor: rule.type === "income" ? "var(--success)" : "var(--danger)",
                   }}
                 />
                 <div>
-                  <div style={{ fontWeight: 500, color: "var(--text)", fontSize: "0.9375rem" }}>
+                  <div style={{ fontWeight: 600, color: "var(--text)", fontSize: "0.9375rem" }}>
                     {rule.displayName || rule.name || rule.category || "Recurring"}
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "var(--text-tertiary)", textTransform: "capitalize" }}>
@@ -546,21 +568,34 @@ function DayDetailSheet({
                 </div>
               </div>
               
-              {rule.amountCents && (
-                <span
-                  style={{
-                    fontWeight: 600,
-                    fontSize: "0.9375rem",
-                    color: rule.type === "income" ? "var(--success)" : "var(--danger)",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {rule.type === "expense" ? "-" : "+"}{centsToDollars(rule.amountCents)}
-                </span>
-              )}
-            </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {rule.amountCents && (
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      fontSize: "0.9375rem",
+                      color: rule.type === "income" ? "var(--success)" : "var(--danger)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {rule.type === "expense" ? "-" : "+"}{centsToDollars(rule.amountCents)}
+                  </span>
+                )}
+                <Lucide.ChevronRight className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+              </div>
+            </button>
           ))}
         </div>
+        
+        {/* Hint */}
+        <p style={{ 
+          fontSize: "0.75rem", 
+          color: "var(--text-tertiary)", 
+          textAlign: "center",
+          marginTop: 16,
+        }}>
+          Click a transaction to edit
+        </p>
       </div>
     </div>
   );
@@ -574,6 +609,7 @@ export function RecurringCalendar() {
   const [month, setMonth] = React.useState(today.getMonth());
   const [year, setYear] = React.useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = React.useState<CalendarDay | null>(null);
+  const [selectedRule, setSelectedRule] = React.useState<RecurringRule | null>(null);
   const [viewMode, setViewMode] = React.useState<string>("month");
   const [isMobile, setIsMobile] = React.useState(false);
   const [isDesktop, setIsDesktop] = React.useState(false);
@@ -929,7 +965,7 @@ export function RecurringCalendar() {
             style={{ 
               fontSize: "0.9375rem", 
               fontWeight: 600, 
-              color: monthlyTotals.net >= 0 ? "var(--success)" : "var(--danger)",
+              color: monthlyTotals.net >= 0 ? "var(--net)" : "var(--danger)",
               fontVariantNumeric: "tabular-nums",
             }}
           >
@@ -938,13 +974,24 @@ export function RecurringCalendar() {
         </div>
       </div>
       
-      {/* Day detail sheet */}
+      {/* Day detail dialog */}
       {selectedDay && (
-        <DayDetailSheet
+        <DayDetailDialog
           day={selectedDay}
           onClose={() => setSelectedDay(null)}
+          onEditRule={(rule) => {
+            setSelectedDay(null);
+            setSelectedRule(rule);
+          }}
         />
       )}
+      
+      {/* Rule editor dialog */}
+      <RuleEditorDialog
+        open={!!selectedRule}
+        onClose={() => setSelectedRule(null)}
+        rule={selectedRule as import("convex/_generated/dataModel").Doc<"recurringRules"> | undefined}
+      />
     </div>
   );
 }

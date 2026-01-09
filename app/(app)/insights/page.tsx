@@ -1006,7 +1006,7 @@ export default function InsightsPage() {
                       marginTop: "4px",
                       fontSize: "var(--text-xl)",
                       fontWeight: 600,
-                      color: computed.net >= 0 ? "var(--success)" : "var(--danger)",
+                      color: computed.net >= 0 ? "var(--net)" : "var(--danger)",
                       fontFeatureSettings: "'tnum' 1",
                     }}
                   >
@@ -1020,7 +1020,7 @@ export default function InsightsPage() {
                         gap: "4px",
                         fontSize: "var(--text-micro)",
                         marginTop: "4px",
-                        color: deltas.net.direction === "up" ? "var(--success)" : deltas.net.direction === "down" ? "var(--danger)" : "var(--text-tertiary)",
+                        color: deltas.net.direction === "up" ? "var(--net)" : deltas.net.direction === "down" ? "var(--danger)" : "var(--text-tertiary)",
                       }}
                     >
                       {deltas.net.direction === "up" && <Lucide.TrendingUp className="h-3 w-3" />}
@@ -1243,7 +1243,7 @@ export default function InsightsPage() {
                         <Line
                           type="monotone"
                           dataKey="net"
-                          stroke="var(--accent)"
+                          stroke="var(--net)"
                           strokeWidth={showNetOnly ? 3 : 2}
                           dot={false}
                           activeDot={{ r: 4 }}

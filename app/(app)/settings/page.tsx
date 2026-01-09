@@ -7,7 +7,7 @@ import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
-import { useTheme, APPEARANCE_OPTIONS } from "@/components/ThemeProvider";
+import { useTheme, APPEARANCE_OPTIONS, NAV_ITEM_CONFIG } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
 
@@ -38,7 +38,7 @@ const REVIEW_REMINDER_KEY = "tallyup.reviewReminder";
 
 export default function SettingsPage() {
   const { user } = useUser();
-  const { theme, setTheme: changeTheme } = useTheme();
+  const { theme, setTheme: changeTheme, visibleNavItems, toggleNavItem } = useTheme();
   const toast = useToast();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
@@ -657,7 +657,11 @@ export default function SettingsPage() {
             >
               <div className="grid grid-cols-2 gap-3">
                 {APPEARANCE_OPTIONS.map(({ value, label, description }) => {
-                  const Icon = value === "light" ? Lucide.Sun : Lucide.Moon;
+                  // Pick icon based on theme type
+                  let Icon = Lucide.Sun;
+                  if (value === "dim") Icon = Lucide.Moon;
+                  else if (value === "estate") Icon = Lucide.TrendingUp;
+                  else if (value === "clarity") Icon = Lucide.Sparkles;
                   return (
                     <button
                       key={value}
@@ -678,6 +682,64 @@ export default function SettingsPage() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* Navigation Customization */}
+            <div
+              className="rounded-2xl p-5 mt-6"
+              style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <h2 className="text-lg font-semibold mb-1" style={{ color: "var(--text)" }}>Navigation Bar</h2>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                Choose which pages appear in the navigation bar. Hidden pages are still accessible from the Menu.
+              </p>
+            </div>
+
+            <div
+              className="rounded-xl p-4"
+              style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <div className="space-y-2">
+                {NAV_ITEM_CONFIG.map(({ id, label, description }) => {
+                  const isVisible = visibleNavItems.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => toggleNavItem(id)}
+                      className="w-full flex items-center justify-between py-3 px-3 rounded-lg transition-colors"
+                      style={{
+                        backgroundColor: isVisible ? "var(--accent-subtle)" : "var(--surface-subtle)",
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-5 h-5 rounded flex items-center justify-center"
+                          style={{
+                            backgroundColor: isVisible ? "var(--accent)" : "var(--border)",
+                          }}
+                        >
+                          {isVisible && (
+                            <Lucide.Check className="h-3 w-3" style={{ color: "var(--accent-foreground)" }} />
+                          )}
+                        </div>
+                        <div style={{ textAlign: "left" }}>
+                          <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{label}</div>
+                          <div className="text-xs" style={{ color: "var(--text-secondary)" }}>{description}</div>
+                        </div>
+                      </div>
+                      <span className="text-xs px-2 py-1 rounded-full" style={{
+                        backgroundColor: isVisible ? "var(--success-subtle)" : "var(--surface-subtle)",
+                        color: isVisible ? "var(--success)" : "var(--text-tertiary)",
+                      }}>
+                        {isVisible ? "In Nav" : "In Menu"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs mt-4" style={{ color: "var(--text-tertiary)" }}>
+                Dashboard and Menu are always visible in the navigation bar.
+              </p>
             </div>
           </div>
         )}
@@ -831,7 +893,7 @@ export default function SettingsPage() {
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Theme</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                {theme === "light" ? "Light" : "Dim (Beta)"}
+                {APPEARANCE_OPTIONS.find((o) => o.value === theme)?.label ?? "Light"}
               </div>
             </div>
             <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />

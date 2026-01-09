@@ -5,6 +5,7 @@ import * as Lucide from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
+import { useTheme, type CustomizableNavItem } from "@/components/ThemeProvider";
 
 interface MenuItem {
   href: string;
@@ -13,42 +14,113 @@ interface MenuItem {
   icon: React.ReactNode;
   iconBg: string;
   badge?: number;
+  navId?: CustomizableNavItem; // If set, only show when hidden from nav bar
 }
+
+// Icon mapping for customizable nav items
+const navIconMap: Record<CustomizableNavItem, { icon: React.ReactNode; iconBg: string }> = {
+  activity: {
+    icon: <Lucide.Activity className="h-6 w-6" style={{ color: "var(--primary)" }} />,
+    iconBg: "var(--accent-subtle)",
+  },
+  budgeting: {
+    icon: <Lucide.Wallet className="h-6 w-6" style={{ color: "var(--primary)" }} />,
+    iconBg: "var(--accent-subtle)",
+  },
+  recurring: {
+    icon: <Lucide.RefreshCw className="h-6 w-6" style={{ color: "var(--primary)" }} />,
+    iconBg: "var(--accent-subtle)",
+  },
+  goals: {
+    icon: <Lucide.Target className="h-6 w-6" style={{ color: "var(--success)" }} />,
+    iconBg: "var(--success-subtle)",
+  },
+  insights: {
+    icon: <Lucide.TrendingUp className="h-6 w-6" style={{ color: "var(--success)" }} />,
+    iconBg: "var(--success-subtle)",
+  },
+  calendar: {
+    icon: <Lucide.Calendar className="h-6 w-6" style={{ color: "var(--success)" }} />,
+    iconBg: "var(--success-subtle)",
+  },
+  review: {
+    icon: <Lucide.Inbox className="h-6 w-6" style={{ color: "var(--warning)" }} />,
+    iconBg: "var(--warning-subtle)",
+  },
+  accounts: {
+    icon: <Lucide.CreditCard className="h-6 w-6" style={{ color: "var(--primary)" }} />,
+    iconBg: "var(--accent-subtle)",
+  },
+};
 
 export default function MorePage() {
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
+  const { visibleNavItems, isNavItemVisible } = useTheme();
 
-  const menuItems: MenuItem[] = [
+  // Items that can be hidden from nav bar - only show here when hidden
+  const hiddenNavItems: MenuItem[] = [
+    {
+      href: "/activity",
+      label: "Activity",
+      description: "Transaction history",
+      ...navIconMap.activity,
+      navId: "activity",
+    },
+    {
+      href: "/budgeting",
+      label: "Budgeting",
+      description: "Budgets & spending",
+      ...navIconMap.budgeting,
+      navId: "budgeting",
+    },
+    {
+      href: "/recurring",
+      label: "Recurring",
+      description: "Subscriptions & bills",
+      ...navIconMap.recurring,
+      navId: "recurring",
+    },
+    {
+      href: "/goals",
+      label: "Goals",
+      description: "Savings goals",
+      ...navIconMap.goals,
+      navId: "goals",
+    },
+    {
+      href: "/insights",
+      label: "Insights",
+      description: "Financial trends",
+      ...navIconMap.insights,
+      navId: "insights",
+    },
     {
       href: "/calendar",
       label: "Calendar",
       description: "Net income & recurring view",
-      icon: <Lucide.Calendar className="h-6 w-6" style={{ color: "var(--success)" }} />,
-      iconBg: "var(--success-subtle)",
+      ...navIconMap.calendar,
+      navId: "calendar",
     },
     {
-      href: "/recurring",
-      label: "Patterns",
-      description: "Track subscriptions & bills",
-      icon: <Lucide.RefreshCw className="h-6 w-6" style={{ color: "var(--primary)" }} />,
-      iconBg: "var(--accent-subtle)",
-    },
-    {
-      href: "/inbox",
+      href: "/review",
       label: "Review",
       description: "Categorize transactions",
-      icon: <Lucide.Inbox className="h-6 w-6" style={{ color: "var(--warning)" }} />,
-      iconBg: "var(--warning-subtle)",
+      ...navIconMap.review,
       badge: reviewCount,
+      navId: "review",
     },
     {
       href: "/accounts",
       label: "Accounts",
       description: "Banks, cards, and balances",
-      icon: <Lucide.CreditCard className="h-6 w-6" style={{ color: "var(--primary)" }} />,
-      iconBg: "var(--accent-subtle)",
+      ...navIconMap.accounts,
+      navId: "accounts",
     },
+  ].filter((item) => item.navId && !isNavItemVisible(item.navId));
+
+  // Always-visible menu items
+  const alwaysVisibleItems: MenuItem[] = [
     {
       href: "/settings",
       label: "Settings",
@@ -71,6 +143,9 @@ export default function MorePage() {
       iconBg: "var(--surface-2)",
     },
   ];
+
+  // Combine: hidden nav items first, then always-visible items
+  const menuItems = [...hiddenNavItems, ...alwaysVisibleItems];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>

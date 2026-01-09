@@ -4,7 +4,7 @@ import { ReactNode, createContext, useContext, useState, useCallback, useRef, us
 import { flushSync } from "react-dom";
 import { usePathname } from "next/navigation";
 
-export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more";
+export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts";
 
 interface TabsContextValue {
   activeTab: TabId;
@@ -24,6 +24,9 @@ const scrollPositions: Record<TabId, number> = {
   insights: 0,
   help: 0,
   more: 0,
+  calendar: 0,
+  review: 0,
+  accounts: 0,
 };
 
 export function useTabs() {
@@ -44,6 +47,9 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     if (path.startsWith("/recurring")) return "recurring";
     if (path.startsWith("/goals")) return "goals";
     if (path.startsWith("/insights")) return "insights";
+    if (path.startsWith("/calendar")) return "calendar";
+    if (path.startsWith("/review")) return "review";
+    if (path.startsWith("/accounts")) return "accounts";
     if (path.startsWith("/help") || path.startsWith("/learn")) return "help";
     if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) return "more";
     return "dashboard"; // default to dashboard
@@ -90,6 +96,9 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     else if (path.startsWith("/recurring")) nextTab = "recurring";
     else if (path.startsWith("/goals")) nextTab = "goals";
     else if (path.startsWith("/insights")) nextTab = "insights";
+    else if (path.startsWith("/calendar")) nextTab = "calendar";
+    else if (path.startsWith("/review")) nextTab = "review";
+    else if (path.startsWith("/accounts")) nextTab = "accounts";
     else if (path.startsWith("/help") || path.startsWith("/learn")) nextTab = "help";
     else if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) nextTab = "more";
 

@@ -133,6 +133,10 @@
   --income: var(--success);
   --expense: var(--muted);
   
+  /* Net (positive) - distinct from income */
+  --net: var(--primary);
+  --net-subtle: var(--accent-subtle);
+  
   /* -------- Chart Colors -------- */
   --chart-1: #2F6F85;
   --chart-2: #3D8B6E;
@@ -186,7 +190,7 @@
 }
 
 /* -------- Dim Theme (Beta) -------- */
-.dim {
+html.dim {
   --bg: #1A1612;
   --bg-gradient-a: #1A1612;
   --bg-gradient-b: #12100D;
@@ -226,6 +230,10 @@
   --income: var(--success);
   --expense: var(--muted);
   
+  /* Net (positive) - distinct from income */
+  --net: var(--primary);
+  --net-subtle: var(--accent-subtle);
+  
   --shadow-card: var(--shadow);
   --shadow-fab: 0 4px 16px -2px rgba(127, 209, 194, 0.3);
   
@@ -240,6 +248,144 @@
   --sidebar-bg: var(--surface);
   --sidebar-active: var(--accent-subtle);
   --sidebar-active-text: var(--accent);
+}
+
+/* -------- Estate Theme (Black + Green Fintech) -------- */
+html.estate {
+  --bg: #0A0A0A;
+  --bg-gradient-a: #0A0A0A;
+  --bg-gradient-b: #111111;
+  --surface: #161616;
+  --surface-2: #1E1E1E;
+  --text: #F0F0F0;
+  --muted: #9CA3AF;
+  --border: #2A2A2A;
+  --primary: #00D26A;
+  --primary-hover: #00B85C;
+  --primary-foreground: #000000;
+  --success: #00D26A;
+  --success-subtle: rgba(0, 210, 106, 0.12);
+  --danger: #FF6B6B;
+  --danger-subtle: rgba(255, 107, 107, 0.12);
+  --shadow: 0px 1px 3px rgba(0, 0, 0, 0.4), 0px 4px 12px rgba(0, 0, 0, 0.5);
+  
+  --canvas: var(--bg);
+  --surface-elevated: #1E1E1E;
+  --surface-subtle: var(--surface-2);
+  --border-subtle: #2A2A2A;
+  --text-secondary: var(--muted);
+  --text-tertiary: #6B7280;
+  --text-placeholder: #4B5563;
+  
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-foreground: var(--primary-foreground);
+  --accent-subtle: rgba(0, 210, 106, 0.12);
+  
+  --success-foreground: #A7F3D0;
+  --warning: #FBBF24;
+  --warning-subtle: rgba(251, 191, 36, 0.12);
+  --warning-foreground: #FEF3C7;
+  --danger-foreground: #FECACA;
+  
+  --income: var(--success);
+  --expense: var(--muted);
+  
+  /* Net (positive) - cyan to distinguish from green income */
+  --net: #22D3EE;
+  --net-subtle: rgba(34, 211, 238, 0.12);
+  
+  --shadow-card: var(--shadow);
+  --shadow-fab: 0 4px 16px -2px rgba(0, 210, 106, 0.35);
+  
+  --background: var(--canvas);
+  --bg-full: linear-gradient(168deg, var(--bg-gradient-a) 0%, var(--bg-gradient-b) 100%);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text);
+  --input: var(--surface);
+  
+  --sidebar-bg: var(--surface);
+  --sidebar-active: var(--accent-subtle);
+  --sidebar-active-text: var(--accent);
+  
+  /* Chart colors - green palette */
+  --chart-1: #00D26A;
+  --chart-2: #00B85C;
+  --chart-3: #38BDF8;
+  --chart-4: #4ADE80;
+  --chart-5: #22D3EE;
+  --chart-6: #34D399;
+}
+
+/* -------- Clarity Theme (White + Blue Fintech) -------- */
+html.clarity {
+  --bg: #F8FAFC;
+  --bg-gradient-a: #F8FAFC;
+  --bg-gradient-b: #EFF6FF;
+  --surface: #FFFFFF;
+  --surface-2: #F1F5F9;
+  --text: #0F172A;
+  --muted: #64748B;
+  --border: #E2E8F0;
+  --primary: #2563EB;
+  --primary-hover: #1D4ED8;
+  --primary-foreground: #FFFFFF;
+  --success: #16A34A;
+  --success-subtle: rgba(22, 163, 74, 0.08);
+  --danger: #DC2626;
+  --danger-subtle: rgba(220, 38, 38, 0.08);
+  --shadow: 0px 1px 3px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.06);
+  
+  --canvas: var(--bg);
+  --surface-elevated: var(--surface);
+  --surface-subtle: var(--surface-2);
+  --border-subtle: #F1F5F9;
+  --text-secondary: var(--muted);
+  --text-tertiary: #94A3B8;
+  --text-placeholder: #CBD5E1;
+  
+  --accent: var(--primary);
+  --accent-hover: var(--primary-hover);
+  --accent-foreground: var(--primary-foreground);
+  --accent-subtle: rgba(37, 99, 235, 0.08);
+  
+  --success-foreground: #15803D;
+  --warning: #D97706;
+  --warning-subtle: rgba(217, 119, 6, 0.08);
+  --warning-foreground: #B45309;
+  --danger-foreground: #B91C1C;
+  
+  --income: var(--success);
+  --expense: var(--muted);
+  
+  /* Net (positive) - distinct from income */
+  --net: var(--primary);
+  --net-subtle: var(--accent-subtle);
+  
+  --shadow-card: var(--shadow);
+  --shadow-fab: 0 4px 16px -2px rgba(37, 99, 235, 0.25);
+  
+  --background: var(--canvas);
+  --bg-full: linear-gradient(168deg, var(--bg-gradient-a) 0%, var(--bg-gradient-b) 100%);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --input: var(--surface);
+  
+  --sidebar-bg: var(--surface);
+  --sidebar-active: var(--accent-subtle);
+  --sidebar-active-text: var(--accent);
+  
+  /* Chart colors - blue palette */
+  --chart-1: #2563EB;
+  --chart-2: #3B82F6;
+  --chart-3: #0EA5E9;
+  --chart-4: #06B6D4;
+  --chart-5: #14B8A6;
+  --chart-6: #6366F1;
 }
 
 /* ============================================
