@@ -56,51 +56,51 @@ const navIconMap: Record<CustomizableNavItem, { icon: React.ReactNode; iconBg: s
 export default function MorePage() {
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
-  const { visibleNavItems, isNavItemVisible } = useTheme();
+  const { isNavItemVisible } = useTheme();
 
   // Items that can be hidden from nav bar - only show here when hidden
-  const hiddenNavItems: MenuItem[] = [
+  const hiddenNavItems: MenuItem[] = ([
     {
       href: "/activity",
       label: "Activity",
       description: "Transaction history",
       ...navIconMap.activity,
-      navId: "activity",
+      navId: "activity" as const,
     },
     {
       href: "/budgeting",
       label: "Budgeting",
       description: "Budgets & spending",
       ...navIconMap.budgeting,
-      navId: "budgeting",
+      navId: "budgeting" as const,
     },
     {
       href: "/recurring",
       label: "Recurring",
       description: "Subscriptions & bills",
       ...navIconMap.recurring,
-      navId: "recurring",
+      navId: "recurring" as const,
     },
     {
       href: "/goals",
       label: "Goals",
       description: "Savings goals",
       ...navIconMap.goals,
-      navId: "goals",
+      navId: "goals" as const,
     },
     {
       href: "/insights",
       label: "Insights",
       description: "Financial trends",
       ...navIconMap.insights,
-      navId: "insights",
+      navId: "insights" as const,
     },
     {
       href: "/calendar",
       label: "Calendar",
       description: "Net income & recurring view",
       ...navIconMap.calendar,
-      navId: "calendar",
+      navId: "calendar" as const,
     },
     {
       href: "/review",
@@ -108,16 +108,16 @@ export default function MorePage() {
       description: "Categorize transactions",
       ...navIconMap.review,
       badge: reviewCount,
-      navId: "review",
+      navId: "review" as const,
     },
     {
       href: "/accounts",
       label: "Accounts",
       description: "Banks, cards, and balances",
       ...navIconMap.accounts,
-      navId: "accounts",
+      navId: "accounts" as const,
     },
-  ].filter((item) => item.navId && !isNavItemVisible(item.navId));
+  ] as MenuItem[]).filter((item) => item.navId && !isNavItemVisible(item.navId));
 
   // Always-visible menu items
   const alwaysVisibleItems: MenuItem[] = [
