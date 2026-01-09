@@ -21,6 +21,13 @@ export default function MorePage() {
 
   const menuItems: MenuItem[] = [
     {
+      href: "/calendar",
+      label: "Calendar",
+      description: "Net income & recurring view",
+      icon: <Lucide.Calendar className="h-6 w-6" style={{ color: "var(--success)" }} />,
+      iconBg: "var(--success-subtle)",
+    },
+    {
       href: "/recurring",
       label: "Patterns",
       description: "Track subscriptions & bills",
