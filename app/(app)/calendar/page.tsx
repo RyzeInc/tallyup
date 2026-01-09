@@ -2,7 +2,7 @@
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NetIncomeCalendar } from "@/components/calendar/NetIncomeCalendar";
 import { RecurringCalendar } from "@/components/calendar/RecurringCalendar";
 
@@ -10,6 +10,15 @@ type CalendarTab = "net-income" | "recurring";
 
 export default function CalendarPage() {
   const [activeTab, setActiveTab] = useState<CalendarTab>("net-income");
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  // Detect desktop
+  useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth >= 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   const tabs = [
     { id: "net-income" as const, label: "Net Income", icon: Lucide.DollarSign },
@@ -17,7 +26,21 @@ export default function CalendarPage() {
   ];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4, 16px)" }}>
+    <div 
+      style={{ 
+        display: "flex", 
+        flexDirection: "column", 
+        gap: "var(--space-4, 16px)",
+        // On desktop, break out of the narrow content container to use full width
+        ...(isDesktop && {
+          marginLeft: "calc(-1 * (50vw - 50%))",
+          marginRight: "calc(-1 * (50vw - 50%))",
+          paddingLeft: "max(24px, calc(50vw - 720px))",
+          paddingRight: "max(24px, calc(50vw - 720px))",
+          width: "100vw",
+        }),
+      }}
+    >
       {/* Page Header */}
       <div 
         style={{ 
@@ -135,17 +158,25 @@ export default function CalendarPage() {
           )}
 
           {activeTab === "recurring" && (
-            <div>
+            <div style={{ 
+              display: "flex", 
+              flexDirection: "column",
+              height: isDesktop ? "calc(100vh - 280px)" : "auto",
+              minHeight: isDesktop ? 400 : undefined,
+            }}>
               <p 
                 style={{ 
                   fontSize: "0.8125rem", 
                   color: "var(--text-secondary)", 
                   marginBottom: "var(--space-3, 12px)",
+                  flexShrink: 0,
                 }}
               >
                 See when your recurring transactions are expected each month.
               </p>
-              <RecurringCalendar />
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <RecurringCalendar />
+              </div>
             </div>
           )}
         </div>

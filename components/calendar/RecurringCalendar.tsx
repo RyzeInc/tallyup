@@ -283,98 +283,140 @@ function MonthYearSelector({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Event Dot/Pill
+// Event Item (shows name and amount in cell)
 // ─────────────────────────────────────────────────────────────
-function EventDot({ rule }: { rule: RecurringRule }) {
+function formatPreviewName(name: string, maxLen = 20) {
+  if (!name) return "";
+  if (name.length <= maxLen) return name;
+  const words = name.split(/\s+/);
+  // try to include as many words as fit within maxLen, but at least one whole word
+  let out = words[0];
+  if (out.length >= maxLen) {
+    // first word too long — truncate the word
+    return out.slice(0, Math.max(8, maxLen - 1)) + "…";
+  }
+  for (let i = 1; i < words.length; i++) {
+    const candidate = out + " " + words[i];
+    if (candidate.length <= maxLen) out = candidate;
+    else break;
+  }
+  if (out.length === name.length) return out;
+  return out + "…";
+}
+
+function EventItem({ rule, isMobile, isDesktop }: { rule: RecurringRule; isMobile?: boolean; isDesktop?: boolean }) {
   const isIncome = rule.type === "income";
+  const name = rule.displayName || rule.name || rule.category || "Recurring";
+  const preview = formatPreviewName(name, isDesktop ? 28 : isMobile ? 18 : 20);
   
   return (
     <div
-      title={rule.displayName || rule.name || rule.category || "Recurring"}
       style={{
-        width: 6,
-        height: 6,
-        borderRadius: "50%",
-        backgroundColor: isIncome ? "var(--success)" : "var(--danger)",
-        flexShrink: 0,
+        display: "block",
+        padding: isDesktop ? "8px 10px" : isMobile ? "6px 8px" : "4px 6px",
+        borderRadius: 8,
+        backgroundColor: isIncome ? "rgba(34, 197, 94, 0.04)" : "rgba(239, 68, 68, 0.04)",
+        borderLeft: `2px solid ${isIncome ? "var(--success)" : "var(--danger)"}`,
+        fontSize: isDesktop ? "0.875rem" : "0.75rem",
+        lineHeight: 1.08,
+        overflow: "hidden",
       }}
-    />
+      title={name}
+    >
+      <span
+        style={{
+          color: "var(--text)",
+          fontWeight: 600,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          display: "block",
+        }}
+      >
+        {preview}
+      </span>
+    </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-// Day Cell
+// Day Cell (shows transaction details)
 // ─────────────────────────────────────────────────────────────
 function DayCell({ 
   calendarDay, 
-  onSelect 
+  onSelect,
+  isMobile,
+  isDesktop,
 }: { 
   calendarDay: CalendarDay;
   onSelect: (day: CalendarDay) => void;
+  isMobile?: boolean;
+  isDesktop?: boolean;
 }) {
   const { day, isCurrentMonth, isToday, events } = calendarDay;
+  const cellPad = isDesktop ? 10 : isMobile ? 4 : 6;
   
   return (
-    <button
+    <div
       onClick={() => events.length > 0 && onSelect(calendarDay)}
-      disabled={events.length === 0}
       style={{
         display: "flex",
         flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "flex-start",
-        padding: "4px 2px",
-        minHeight: 48,
+        padding: cellPad,
+        minHeight: 0,
+        height: "100%",
         backgroundColor: isToday ? "var(--accent-subtle)" : "transparent",
-        border: "none",
+        border: isToday ? "2px solid var(--primary)" : "1px solid var(--border)",
         borderRadius: "var(--radius-sm, 8px)",
         cursor: events.length > 0 ? "pointer" : "default",
-        transition: "background 150ms ease",
+        transition: "all 150ms ease",
         opacity: isCurrentMonth ? 1 : 0.35,
+        overflow: "hidden",
       }}
       className={events.length > 0 ? "hover:bg-[var(--surface-2)]" : ""}
     >
+      {/* Day number */}
       <span
         style={{
-          fontSize: "0.8125rem",
-          fontWeight: isToday ? 700 : 500,
-          color: isToday ? "var(--primary)" : "var(--text)",
-          width: 24,
-          height: 24,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: "50%",
-          backgroundColor: isToday ? "var(--primary)" : "transparent",
-          ...(isToday && { color: "var(--primary-foreground)" }),
+          fontSize: isDesktop ? "0.95rem" : "0.6875rem",
+          fontWeight: isToday ? 800 : 600,
+          color: isToday ? "var(--primary)" : "var(--text-secondary)",
+          marginBottom: isDesktop ? 10 : 6,
+          alignSelf: "flex-start",
         }}
       >
         {day}
       </span>
       
-      {/* Event dots */}
+      {/* Event items */}
       {events.length > 0 && (
         <div 
           style={{ 
             display: "flex", 
-            gap: 2, 
-            marginTop: 2,
-            flexWrap: "wrap",
-            justifyContent: "center",
-            maxWidth: "100%",
+            flexDirection: "column",
+            gap: isDesktop ? 8 : isMobile ? 4 : 5,
+            flex: 1,
+            overflow: "hidden",
           }}
         >
-          {events.slice(0, 3).map((rule, i) => (
-            <EventDot key={i} rule={rule} />
+          {events.slice(0, isDesktop ? 4 : 2).map((rule, i) => (
+            <EventItem key={i} rule={rule} isMobile={isMobile} isDesktop={isDesktop} />
           ))}
-          {events.length > 3 && (
-            <span style={{ fontSize: "0.5rem", color: "var(--text-tertiary)" }}>
-              +{events.length - 3}
+          {events.length > (isDesktop ? 4 : 2) && (
+            <span 
+              style={{ 
+                fontSize: "0.625rem", 
+                color: "var(--text-tertiary)",
+                fontWeight: 500,
+                paddingLeft: 6,
+              }}
+            >
+              +{events.length - (isDesktop ? 4 : 2)} more
             </span>
           )}
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -532,9 +574,24 @@ export function RecurringCalendar() {
   const [month, setMonth] = React.useState(today.getMonth());
   const [year, setYear] = React.useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = React.useState<CalendarDay | null>(null);
+  const [viewMode, setViewMode] = React.useState<string>("month");
+  const [isMobile, setIsMobile] = React.useState(false);
+  const [isDesktop, setIsDesktop] = React.useState(false);
   
   // Fetch active recurring rules
   const rules = useQuery(api.recurring.listRecurringRules, {}) as RecurringRule[] | undefined;
+
+  // detect mobile
+  React.useEffect(() => {
+    const check = () => {
+      const w = window.innerWidth;
+      setIsMobile(w <= 640);
+      setIsDesktop(w >= 1024);
+    };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   
   // Build calendar with events placed on appropriate days
   const calendarDays = React.useMemo(() => {
@@ -582,72 +639,260 @@ export function RecurringCalendar() {
     <div 
       style={{ 
         backgroundColor: "var(--surface)",
-        borderRadius: "var(--card-radius, 12px)",
-        border: "1px solid var(--border)",
+        borderRadius: isDesktop ? 0 : "var(--card-radius, 12px)",
+        border: isDesktop ? "none" : "1px solid var(--border)",
         overflow: "hidden",
-        boxShadow: "var(--shadow-card)",
+        boxShadow: isDesktop ? "none" : "var(--shadow-card)",
+        width: "100%",
+        height: isDesktop ? "100%" : "auto",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       {/* Header with month selector */}
       <div 
         style={{ 
-          padding: "12px 16px",
+          padding: isDesktop ? "16px 24px" : "12px 16px",
           borderBottom: "1px solid var(--border)",
         }}
       >
-        <MonthYearSelector
-          month={month}
-          year={year}
-          onChange={(m, y) => {
-            setMonth(m);
-            setYear(y);
-          }}
-        />
+        <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
+          <MonthYearSelector
+            month={month}
+            year={year}
+            onChange={(m, y) => {
+              setMonth(m);
+              setYear(y);
+            }}
+          />
+
+          {/* View selector - responsive */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {(isMobile ? ["agenda", "day", "3-day", "month"] : ["day", "week", "month"]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setViewMode(v)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: viewMode === v ? "1px solid var(--primary)" : "1px solid var(--border)",
+                  background: viewMode === v ? "var(--primary)" : "var(--surface)",
+                  color: viewMode === v ? "var(--primary-foreground)" : "var(--text)",
+                  fontSize: "0.8125rem",
+                  cursor: "pointer",
+                }}
+              >
+                {v === "3-day" ? "3-Day" : v.charAt(0).toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       
-      {/* Weekday headers */}
-      <div 
-        style={{ 
-          display: "grid", 
-          gridTemplateColumns: "repeat(7, 1fr)",
-          padding: "8px 8px 4px",
-          borderBottom: "1px solid var(--border)",
-        }}
-      >
-        {WEEKDAYS.map((day) => (
-          <div
-            key={day}
-            style={{
-              textAlign: "center",
-              fontSize: "0.6875rem",
-              fontWeight: 600,
-              color: "var(--text-tertiary)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
+      {/* Weekday headers - hide for day/agenda view */}
+      {(viewMode === "month" || viewMode === "week" || viewMode === "3-day") && (
+        <div 
+          style={{ 
+            display: "grid", 
+            gridTemplateColumns: viewMode === "week" || viewMode === "3-day" 
+              ? `repeat(${viewMode === "3-day" ? 3 : 7}, 1fr)` 
+              : "repeat(7, 1fr)",
+            padding: isDesktop ? "12px 12px 8px" : "8px 8px 4px",
+            borderBottom: "1px solid var(--border)",
+          }}
+        >
+          {(viewMode === "3-day" ? WEEKDAYS.slice(0, 3) : WEEKDAYS).map((day) => (
+            <div
+              key={day}
+              style={{
+                textAlign: "center",
+                fontSize: isDesktop ? "0.8125rem" : "0.6875rem",
+                fontWeight: 600,
+                color: "var(--text-tertiary)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Calendar views */}
+      {(() => {
+        // Agenda view (mobile)
+        if (viewMode === "agenda") {
+          return (
+            <div style={{ padding: isDesktop ? 16 : 12 }}>
+              {calendarDays.filter(d => d.isCurrentMonth && d.events.length > 0).map((d, idx) => (
+                <div key={idx} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: isDesktop ? "1rem" : "0.875rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
+                    {d.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {d.events.map((rule, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          padding: isDesktop ? '12px 16px' : '10px 12px',
+                          borderRadius: 10,
+                          background: 'var(--surface-2)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 12,
+                          borderLeft: `3px solid ${rule.type === 'income' ? 'var(--success)' : 'var(--danger)'}`,
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, fontSize: isDesktop ? '1rem' : '0.9375rem' }}>
+                          {rule.displayName || rule.name || rule.category}
+                        </div>
+                        {rule.amountCents && (
+                          <div style={{ color: rule.type === 'income' ? 'var(--success)' : 'var(--danger)', fontWeight: 700, fontSize: isDesktop ? '1rem' : '0.9375rem' }}>
+                            {rule.type === 'expense' ? '-' : '+'}{centsToDollars(rule.amountCents)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {calendarDays.filter(d => d.isCurrentMonth && d.events.length > 0).length === 0 && (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 24 }}>
+                  No recurring transactions this month
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Day view (single day - today or selected)
+        if (viewMode === "day") {
+          const todayCell = calendarDays.find(d => d.isToday) || calendarDays.find(d => d.isCurrentMonth);
+          if (!todayCell) return null;
+          return (
+            <div style={{ padding: isDesktop ? 20 : 12 }}>
+              <div style={{ fontSize: isDesktop ? "1.125rem" : "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>
+                {todayCell.date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+              </div>
+              {todayCell.events.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {todayCell.events.map((rule, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        padding: isDesktop ? '14px 18px' : '12px 14px',
+                        borderRadius: 10,
+                        background: 'var(--surface-2)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 12,
+                        borderLeft: `4px solid ${rule.type === 'income' ? 'var(--success)' : 'var(--danger)'}`,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: isDesktop ? '1.0625rem' : '1rem' }}>
+                        {rule.displayName || rule.name || rule.category}
+                      </div>
+                      {rule.amountCents && (
+                        <div style={{ color: rule.type === 'income' ? 'var(--success)' : 'var(--danger)', fontWeight: 700, fontSize: isDesktop ? '1.0625rem' : '1rem' }}>
+                          {rule.type === 'expense' ? '-' : '+'}{centsToDollars(rule.amountCents)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: 24 }}>
+                  No recurring transactions today
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Week view (7 days starting from Sunday of current week)
+        if (viewMode === "week") {
+          const todayIdx = calendarDays.findIndex(d => d.isToday);
+          const startIdx = todayIdx >= 0 ? todayIdx - (today.getDay()) : 0;
+          const weekDays = calendarDays.slice(Math.max(0, startIdx), Math.max(0, startIdx) + 7);
+          return (
+            <div 
+              style={{ 
+                display: "grid", 
+                gridTemplateColumns: "repeat(7, 1fr)",
+                gap: isDesktop ? 8 : 4,
+                padding: isDesktop ? 16 : 8,
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              {weekDays.map((day, i) => (
+                <DayCell
+                  key={i}
+                  calendarDay={day}
+                  onSelect={setSelectedDay}
+                  isMobile={isMobile}
+                  isDesktop={isDesktop}
+                />
+              ))}
+            </div>
+          );
+        }
+
+        // 3-Day view (mobile: today + 2 days)
+        if (viewMode === "3-day") {
+          const todayIdx = calendarDays.findIndex(d => d.isToday);
+          const startIdx = todayIdx >= 0 ? todayIdx : 0;
+          const threeDays = calendarDays.slice(startIdx, startIdx + 3);
+          return (
+            <div 
+              style={{ 
+                display: "grid", 
+                gridTemplateColumns: "repeat(3, 1fr)",
+                gap: 4,
+                padding: 8,
+              }}
+            >
+              {threeDays.map((day, i) => (
+                <DayCell
+                  key={i}
+                  calendarDay={day}
+                  onSelect={setSelectedDay}
+                  isMobile={isMobile}
+                  isDesktop={isDesktop}
+                />
+              ))}
+            </div>
+          );
+        }
+
+        // Month view (default)
+        return (
+          <div 
+            style={{ 
+              display: "grid", 
+              gridTemplateColumns: "repeat(7, 1fr)",
+              gridTemplateRows: isDesktop ? "repeat(6, 1fr)" : undefined,
+              gap: isDesktop ? 8 : 4,
+              padding: isDesktop ? 16 : 8,
+              flex: 1,
+              minHeight: 0,
             }}
           >
-            {day}
+            {calendarDays.map((day, i) => (
+              <DayCell
+                key={i}
+                calendarDay={day}
+                onSelect={setSelectedDay}
+                isMobile={isMobile}
+                isDesktop={isDesktop}
+              />
+            ))}
           </div>
-        ))}
-      </div>
-      
-      {/* Calendar grid */}
-      <div 
-        style={{ 
-          display: "grid", 
-          gridTemplateColumns: "repeat(7, 1fr)",
-          gap: 2,
-          padding: "8px",
-        }}
-      >
-        {calendarDays.map((day, i) => (
-          <DayCell
-            key={i}
-            calendarDay={day}
-            onSelect={setSelectedDay}
-          />
-        ))}
-      </div>
+        );
+      })()}
       
       {/* Monthly summary */}
       <div 
