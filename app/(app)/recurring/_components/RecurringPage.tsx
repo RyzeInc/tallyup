@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import RecurringHeaderBar from "./RecurringHeaderBar";
 import RecurringRangeBar from "./RecurringRangeBar";
 import RecurringTabs, { RecurringTabId } from "./RecurringTabs";
@@ -90,7 +91,7 @@ export default function RecurringPage() {
       <RuleEditorDialog
         open={isEditorOpen}
         onClose={() => setIsEditorOpen(false)}
-        rule={rules?.find((r) => r._id === editingRuleId)}
+        rule={rules?.find((r: Doc<"recurringRules">) => r._id === editingRuleId)}
       />
     </div>
   );

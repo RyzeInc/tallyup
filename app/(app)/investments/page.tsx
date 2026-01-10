@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { Id, Doc } from "@/convex/_generated/dataModel";
 import { SignedIn } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
@@ -164,7 +164,7 @@ export default function InvestmentsPage() {
                     Allocation
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(summary.allocationByType).map(([type, value]) => {
+                    {(Object.entries(summary.allocationByType) as [string, number][]).map(([type, value]) => {
                       const assetType = getAssetType(type);
                       const pct = value / summary.totalValueCents;
                       return (
@@ -202,7 +202,7 @@ export default function InvestmentsPage() {
               </div>
             </div>
           ) : (
-            investments.map((inv) => {
+            investments.map((inv: Doc<"investments">) => {
               const assetType = getAssetType(inv.assetType);
               const Icon = assetType.icon;
               const gain = inv.unrealizedGainCents ?? 0;

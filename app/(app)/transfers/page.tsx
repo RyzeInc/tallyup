@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { Id, Doc } from "@/convex/_generated/dataModel";
 import { SignedIn } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
@@ -90,7 +90,7 @@ export default function TransfersPage() {
 
   const getAccountName = (id?: Id<"accounts">) => {
     if (!id || !accounts) return "External";
-    const account = accounts.find((a) => a._id === id);
+    const account = accounts.find((a: Doc<"accounts">) => a._id === id);
     return account?.name || "Unknown";
   };
 
@@ -128,7 +128,7 @@ export default function TransfersPage() {
               </div>
             </div>
           ) : (
-            transfers.map((transfer) => {
+            transfers.map((transfer: Doc<"transfers">) => {
               const typeInfo = getTransferType(transfer.transferType);
               const Icon = typeInfo.icon;
 
@@ -282,7 +282,7 @@ export default function TransfersPage() {
                     style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
                   >
                     <option value="">External / Not Specified</option>
-                    {accounts?.map((acc) => (
+                    {accounts?.map((acc: Doc<"accounts">) => (
                       <option key={acc._id} value={acc._id}>{acc.name}</option>
                     ))}
                   </select>
@@ -300,7 +300,7 @@ export default function TransfersPage() {
                     style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }}
                   >
                     <option value="">External / Not Specified</option>
-                    {accounts?.filter((acc) => acc._id !== fromAccount).map((acc) => (
+                    {accounts?.filter((acc: Doc<"accounts">) => acc._id !== fromAccount).map((acc: Doc<"accounts">) => (
                       <option key={acc._id} value={acc._id}>{acc.name}</option>
                     ))}
                   </select>

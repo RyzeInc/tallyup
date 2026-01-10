@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Doc } from "convex/_generated/dataModel";
 import ObligationsHeader from "./ObligationsHeader";
 import ObligationsTabs, { type ObligationsTabId } from "./ObligationsTabs";
 import ObligationsTab from "./obligations/ObligationsTab";
@@ -104,7 +105,7 @@ export default function RecurringPageRedesigned() {
       <RuleEditorDialog
         open={isEditorOpen}
         onClose={handleCloseRuleEditor}
-        rule={rules?.find((r) => r._id === editingRuleId)}
+        rule={rules?.find((r: Doc<"recurringRules">) => r._id === editingRuleId)}
       />
     </div>
   );

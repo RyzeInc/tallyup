@@ -22,6 +22,8 @@ import type * as goals from "../goals.js";
 import type * as investments from "../investments.js";
 import type * as merchant from "../merchant.js";
 import type * as migrations from "../migrations.js";
+import type * as plaid from "../plaid.js";
+import type * as plaidActions from "../plaidActions.js";
 import type * as preferences from "../preferences.js";
 import type * as recurring from "../recurring.js";
 import type * as rules from "../rules.js";
@@ -48,6 +50,8 @@ declare const fullApi: ApiFromModules<{
   investments: typeof investments;
   merchant: typeof merchant;
   migrations: typeof migrations;
+  plaid: typeof plaid;
+  plaidActions: typeof plaidActions;
   preferences: typeof preferences;
   recurring: typeof recurring;
   rules: typeof rules;

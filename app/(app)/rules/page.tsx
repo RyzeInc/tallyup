@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { Id, Doc } from "@/convex/_generated/dataModel";
 import { SignedIn } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
@@ -172,7 +172,7 @@ export default function RulesPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {categoryRules.map((rule) => (
+                  {categoryRules.map((rule: Doc<"categoryRules">) => (
                     <div key={rule._id} className="p-4 rounded-xl" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
@@ -266,7 +266,7 @@ export default function RulesPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {merchantRules.map((rule) => (
+                  {merchantRules.map((rule: Doc<"merchantRules">) => (
                     <div key={rule._id} className="p-4 rounded-xl" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
                       <div className="flex items-center gap-3">
                         <div className="flex-1 min-w-0">

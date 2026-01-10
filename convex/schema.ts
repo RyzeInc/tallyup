@@ -707,6 +707,11 @@ export default defineSchema({
     // Transaction selector toggle
     showInTransactionSelector: v.optional(v.boolean()),
 
+    // Plaid link status
+    isLinked: v.optional(v.boolean()), // true if connected via Plaid
+    plaidAccountId: v.optional(v.string()), // Plaid's account ID for linking
+    lastPlaidSync: v.optional(v.number()), // Last time balances were synced
+
     // Soft-delete
     isArchived: v.optional(v.boolean()),
 
@@ -940,4 +945,173 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_account", ["accountId"]),
+
+  // ============================================
+  // PLAID INTEGRATION - Financial Aggregation
+  // ============================================
+  
+  // Plaid Items (linked institutions)
+  plaidItems: defineTable({
+    userId: v.string(),
+    
+    // Plaid identifiers
+    itemId: v.string(),
+    accessToken: v.string(), // Should be encrypted in production
+    
+    // Institution details
+    institutionId: v.optional(v.string()),
+    institutionName: v.optional(v.string()),
+    institutionLogo: v.optional(v.string()),
+    institutionColor: v.optional(v.string()),
+    
+    // Consent expiration (for European institutions)
+    consentExpirationTime: v.optional(v.number()),
+    
+    // Status
+    status: v.union(
+      v.literal("active"),
+      v.literal("needs_reauth"),
+      v.literal("revoked"),
+      v.literal("error")
+    ),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    
+    // Sync state
+    lastSyncedAt: v.optional(v.number()),
+    transactionCursor: v.optional(v.string()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_itemId", ["itemId"]),
+
+  // Plaid Accounts (linked from Plaid to TallyUp accounts)
+  plaidAccounts: defineTable({
+    userId: v.string(),
+    
+    // Links
+    plaidItemId: v.id("plaidItems"),
+    accountId: v.id("accounts"), // TallyUp account
+    
+    // Plaid identifiers
+    plaidAccountId: v.string(),
+    
+    // Account details from Plaid
+    name: v.string(),
+    officialName: v.optional(v.string()),
+    type: v.string(),
+    subtype: v.optional(v.string()),
+    mask: v.optional(v.string()),
+    
+    // Balances (in dollars, as returned by Plaid)
+    balanceCurrent: v.optional(v.number()),
+    balanceAvailable: v.optional(v.number()),
+    balanceLimit: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    
+    // UI state
+    isHidden: v.boolean(),
+    
+    // Sync state
+    lastSyncedAt: v.optional(v.number()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_plaidItem", ["plaidItemId"])
+    .index("by_account", ["accountId"])
+    .index("by_plaidAccountId", ["plaidAccountId"]),
+
+  // Plaid Transactions (raw transactions from Plaid before import)
+  plaidTransactions: defineTable({
+    userId: v.string(),
+    
+    // Links
+    plaidAccountId: v.id("plaidAccounts"),
+    entryId: v.optional(v.id("entries")), // Link to TallyUp entry
+    
+    // Plaid identifiers
+    plaidTransactionId: v.string(),
+    pendingTransactionId: v.optional(v.string()),
+    
+    // Transaction details
+    amount: v.number(), // In dollars (Plaid convention: positive = outflow)
+    date: v.string(), // YYYY-MM-DD
+    datetime: v.optional(v.string()),
+    name: v.string(),
+    merchantName: v.optional(v.string()),
+    pending: v.boolean(),
+    
+    // Categories
+    category: v.optional(v.string()),
+    categoryDetailed: v.optional(v.string()),
+    categoryConfidence: v.optional(v.string()),
+    
+    // Payment details
+    paymentChannel: v.string(), // "online", "in store", "other"
+    transactionType: v.optional(v.string()),
+    
+    // Location
+    locationCity: v.optional(v.string()),
+    locationRegion: v.optional(v.string()),
+    locationCountry: v.optional(v.string()),
+    
+    // Import status
+    importStatus: v.union(
+      v.literal("pending"),
+      v.literal("imported"),
+      v.literal("skipped"),
+      v.literal("duplicate")
+    ),
+    importedAt: v.optional(v.number()),
+    skipReason: v.optional(v.string()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_plaidAccount", ["plaidAccountId"])
+    .index("by_entry", ["entryId"])
+    .index("by_plaidTransactionId", ["plaidTransactionId"])
+    .index("by_user_importStatus", ["userId", "importStatus"])
+    .index("by_user_date", ["userId", "date"]),
+
+  // Plaid Sync Log (audit trail for syncs)
+  plaidSyncLogs: defineTable({
+    userId: v.string(),
+    plaidItemId: v.id("plaidItems"),
+    
+    // Sync details
+    syncType: v.union(
+      v.literal("initial"),
+      v.literal("incremental"),
+      v.literal("manual"),
+      v.literal("webhook")
+    ),
+    
+    // Results
+    status: v.union(
+      v.literal("started"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    transactionsAdded: v.optional(v.number()),
+    transactionsModified: v.optional(v.number()),
+    transactionsRemoved: v.optional(v.number()),
+    
+    // Error info
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    
+    // Timing
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_plaidItem", ["plaidItemId"])
+    .index("by_user_status", ["userId", "status"]),
 });
