@@ -110,6 +110,8 @@ export default function ActivityPage() {
 
   // Update URL when filters change (but not on initial mount or when reading from URL)
   useEffect(() => {
+    if (typeof window === "undefined" || !window.location.pathname.startsWith("/activity")) return;
+
     // Skip on initial mount - state is already initialized from URL
     if (isInitialMount.current) {
       isInitialMount.current = false;

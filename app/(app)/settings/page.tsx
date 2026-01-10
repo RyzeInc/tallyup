@@ -5,8 +5,35 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
-import * as Lucide from "lucide-react";
+import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left.js";
+import ArrowUpRight from "lucide-react/dist/esm/icons/arrow-up-right.js";
+import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.js";
+import Star from "lucide-react/dist/esm/icons/star.js";
+import ArrowDownLeft from "lucide-react/dist/esm/icons/arrow-down-left.js";
+import Tags from "lucide-react/dist/esm/icons/tags.js";
+import EyeOff from "lucide-react/dist/esm/icons/eye-off.js";
+import Eye from "lucide-react/dist/esm/icons/eye.js";
+import FileText from "lucide-react/dist/esm/icons/file-text.js";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2.js";
+import Download from "lucide-react/dist/esm/icons/download.js";
+import Lock from "lucide-react/dist/esm/icons/lock.js";
+import BookOpen from "lucide-react/dist/esm/icons/book-open.js";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.js";
+import FilterX from "lucide-react/dist/esm/icons/filter-x.js";
+import Sun from "lucide-react/dist/esm/icons/sun.js";
+import Bell from "lucide-react/dist/esm/icons/bell.js";
+import Check from "lucide-react/dist/esm/icons/check.js";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
+import HelpCircle from "lucide-react/dist/esm/icons/help-circle.js";
+import Lightbulb from "lucide-react/dist/esm/icons/lightbulb.js";
+import Moon from "lucide-react/dist/esm/icons/moon.js";
+import Palette from "lucide-react/dist/esm/icons/palette.js";
+import Repeat from "lucide-react/dist/esm/icons/repeat.js";
+import Shield from "lucide-react/dist/esm/icons/shield.js";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles.js";
+import TrendingUp from "lucide-react/dist/esm/icons/trending-up.js";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTheme, APPEARANCE_OPTIONS, NAV_ITEM_CONFIG } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
@@ -40,6 +67,7 @@ export default function SettingsPage() {
   const { user } = useUser();
   const { theme, setTheme: changeTheme, visibleNavItems, toggleNavItem } = useTheme();
   const toast = useToast();
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
   // Category/tag management state
@@ -172,7 +200,7 @@ export default function SettingsPage() {
     try {
       localStorage.removeItem("tallyup.timeRange");
     } catch {}
-    window.location.href = "/activity";
+    router.replace("/activity");
   }
 
   function resetOnboarding() {
@@ -197,7 +225,7 @@ export default function SettingsPage() {
             className="flex items-center gap-2 text-sm font-medium"
             style={{ color: "var(--accent)" }}
           >
-            <Lucide.ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" />
             Back to Settings
           </button>
         </div>
@@ -221,7 +249,7 @@ export default function SettingsPage() {
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
               <div className="flex items-center gap-2 mb-3">
-                <Lucide.ArrowUpRight className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                <ArrowUpRight className="h-4 w-4" style={{ color: "var(--danger)" }} />
                 <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Expense Categories</h3>
                 <span className="text-xs ml-auto" style={{ color: "var(--text-tertiary)" }}>
                   Tap ⭐ to pin to top
@@ -238,7 +266,7 @@ export default function SettingsPage() {
                       style={{ backgroundColor: isPinned ? "var(--accent-subtle)" : "var(--surface-subtle)" }}
                     >
                       <div className="flex items-center gap-3">
-                        <Lucide.GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
+                        <GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
                         <span className="text-sm" style={{ color: "var(--text)" }}>{cat}</span>
                         {isPinned && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
@@ -251,7 +279,7 @@ export default function SettingsPage() {
                         className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
                         title={isPinned ? "Unpin" : "Pin to top"}
                       >
-                        <Lucide.Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
+                        <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
                       </button>
                     </div>
                   );
@@ -265,7 +293,7 @@ export default function SettingsPage() {
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
               <div className="flex items-center gap-2 mb-3">
-                <Lucide.ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
+                <ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
                 <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Income Categories</h3>
                 <span className="text-xs ml-auto" style={{ color: "var(--text-tertiary)" }}>
                   Tap ⭐ to pin to top
@@ -281,7 +309,7 @@ export default function SettingsPage() {
                       style={{ backgroundColor: isPinned ? "var(--accent-subtle)" : "var(--surface-subtle)" }}
                     >
                       <div className="flex items-center gap-3">
-                        <Lucide.GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
+                        <GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
                         <span className="text-sm" style={{ color: "var(--text)" }}>{cat}</span>
                         {isPinned && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
@@ -294,7 +322,7 @@ export default function SettingsPage() {
                         className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
                         title={isPinned ? "Unpin" : "Pin to top"}
                       >
-                        <Lucide.Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
+                        <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
                       </button>
                     </div>
                   );
@@ -309,7 +337,7 @@ export default function SettingsPage() {
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Lucide.Tags className="h-4 w-4" style={{ color: "var(--accent)" }} />
+                  <Tags className="h-4 w-4" style={{ color: "var(--accent)" }} />
                   <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Context Tags</h3>
                 </div>
                 <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
@@ -335,7 +363,7 @@ export default function SettingsPage() {
                       }}
                     >
                       <div className="flex items-center gap-3">
-                        <Lucide.GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
+                        <GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
                         <span className="text-sm" style={{ color: "var(--text)", textDecoration: isHidden ? "line-through" : "none" }}>{tag}</span>
                         {isPinned && !isHidden && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
@@ -355,7 +383,7 @@ export default function SettingsPage() {
                           title={isPinned ? "Unpin" : "Pin to top"}
                           disabled={isHidden}
                         >
-                          <Lucide.Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
+                          <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
                         </button>
                         <button
                           onClick={() => toggleHideTag(tag)}
@@ -363,9 +391,9 @@ export default function SettingsPage() {
                           title={isHidden ? "Show" : "Hide"}
                         >
                           {isHidden ? (
-                            <Lucide.EyeOff className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                            <EyeOff className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                           ) : (
-                            <Lucide.Eye className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                            <Eye className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                           )}
                         </button>
                       </div>
@@ -479,7 +507,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-                <Lucide.FileText className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+                <FileText className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
                 <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
                   {entries ? `${entries.length} transactions will be exported` : "Loading..."}
                 </div>
@@ -492,9 +520,9 @@ export default function SettingsPage() {
                 style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
               >
                 {exporting ? (
-                  <Lucide.Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Lucide.Download className="h-4 w-4" />
+                  <Download className="h-4 w-4" />
                 )}
                 Export as CSV
               </button>
@@ -523,7 +551,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-                    <Lucide.EyeOff className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                    <EyeOff className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
                   </div>
                   <div>
                     <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Hide amounts</div>
@@ -544,7 +572,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-                    <Lucide.Lock className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                    <Lock className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
                   </div>
                   <div>
                     <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Require device auth</div>
@@ -584,7 +612,7 @@ export default function SettingsPage() {
             >
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--accent-subtle)" }}>
-                  <Lucide.BookOpen className="h-5 w-5" style={{ color: "var(--accent)" }} />
+                  <BookOpen className="h-5 w-5" style={{ color: "var(--accent)" }} />
                 </div>
                 <div className="text-sm font-medium" style={{ color: "var(--text)" }}>How to use TallyUp</div>
               </div>
@@ -618,7 +646,7 @@ export default function SettingsPage() {
                 className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-[var(--surface-subtle)]"
                 style={{ borderBottom: "1px solid var(--border)" }}
               >
-                <Lucide.RefreshCw className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                <RefreshCw className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
                 <div>
                   <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Reset tips & onboarding</div>
                   <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Show all tips again</div>
@@ -628,7 +656,7 @@ export default function SettingsPage() {
                 onClick={resetFilters}
                 className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-[var(--surface-subtle)]"
               >
-                <Lucide.FilterX className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+                <FilterX className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
                 <div>
                   <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Reset all filters</div>
                   <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Clear Activity filters and time range</div>
@@ -658,10 +686,10 @@ export default function SettingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 {APPEARANCE_OPTIONS.map(({ value, label, description }) => {
                   // Pick icon based on theme type
-                  let Icon = Lucide.Sun;
-                  if (value === "dim") Icon = Lucide.Moon;
-                  else if (value === "estate") Icon = Lucide.TrendingUp;
-                  else if (value === "clarity") Icon = Lucide.Sparkles;
+                  let Icon = Sun;
+                  if (value === "dim") Icon = Moon;
+                  else if (value === "estate") Icon = TrendingUp;
+                  else if (value === "clarity") Icon = Sparkles;
                   return (
                     <button
                       key={value}
@@ -719,7 +747,7 @@ export default function SettingsPage() {
                           }}
                         >
                           {isVisible && (
-                            <Lucide.Check className="h-3 w-3" style={{ color: "var(--accent-foreground)" }} />
+                            <Check className="h-3 w-3" style={{ color: "var(--accent-foreground)" }} />
                           )}
                         </div>
                         <div style={{ textAlign: "left" }}>
@@ -824,13 +852,13 @@ export default function SettingsPage() {
             style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--accent-subtle)" }}>
-              <Lucide.Tags className="h-5 w-5" style={{ color: "var(--accent)" }} />
+              <Tags className="h-5 w-5" style={{ color: "var(--accent)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Categories & Tags</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Manage category sets and context tags</div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
 
           {/* Export */}
@@ -840,13 +868,13 @@ export default function SettingsPage() {
             style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "rgba(16,185,129,0.1)" }}>
-              <Lucide.Download className="h-5 w-5" style={{ color: "var(--success)" }} />
+              <Download className="h-5 w-5" style={{ color: "var(--success)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Export Data</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Download as CSV</div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
 
           {/* Privacy & Lock */}
@@ -856,13 +884,13 @@ export default function SettingsPage() {
             style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "rgba(245,158,11,0.1)" }}>
-              <Lucide.Shield className="h-5 w-5" style={{ color: "var(--warning)" }} />
+              <Shield className="h-5 w-5" style={{ color: "var(--warning)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Privacy & Lock</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Hide amounts, require auth</div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
 
           {/* Help */}
@@ -872,13 +900,13 @@ export default function SettingsPage() {
             style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-              <Lucide.HelpCircle className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              <HelpCircle className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Help</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>How to use TallyUp, reset tips</div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
 
           {/* Theme */}
@@ -888,7 +916,7 @@ export default function SettingsPage() {
             style={{ borderBottom: "1px solid var(--border)" }}
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-              <Lucide.Palette className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              <Palette className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Theme</div>
@@ -896,7 +924,7 @@ export default function SettingsPage() {
                 {APPEARANCE_OPTIONS.find((o) => o.value === theme)?.label ?? "Light"}
               </div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
 
           {/* Notifications */}
@@ -905,13 +933,13 @@ export default function SettingsPage() {
             className="w-full flex items-center gap-3 p-4 text-left transition-colors hover:bg-[var(--surface-subtle)]"
           >
             <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-              <Lucide.Bell className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              <Bell className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Review Reminders</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Weekly review notifications</div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </button>
         </div>
 
@@ -923,13 +951,13 @@ export default function SettingsPage() {
         >
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
-              <Lucide.Repeat className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+              <Repeat className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Recurring Patterns</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Manage detected recurring entries</div>
             </div>
-            <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </div>
         </Link>
       </SignedIn>
@@ -1151,7 +1179,7 @@ function NotificationsSection({ toast }: { toast: ReturnType<typeof useToast> })
         style={{ backgroundColor: "var(--surface-subtle)", border: "1px solid var(--border)" }}
       >
         <div className="flex gap-3">
-          <Lucide.Lightbulb className="h-5 w-5 flex-shrink-0" style={{ color: "var(--warning)" }} />
+          <Lightbulb className="h-5 w-5 flex-shrink-0" style={{ color: "var(--warning)" }} />
           <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
             <strong style={{ color: "var(--text)" }}>Why weekly?</strong> Financial awareness is a habit. 
             A brief weekly review helps you stay in control without becoming obsessive. 

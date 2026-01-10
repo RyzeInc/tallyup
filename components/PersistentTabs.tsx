@@ -2,7 +2,7 @@
 
 import { ReactNode, createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 import { flushSync } from "react-dom";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts";
 
@@ -37,6 +37,7 @@ export function useTabs() {
 
 export function PersistentTabsProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   // Initialize tab based on current pathname, default to dashboard
   const [activeTab, setActiveTab] = useState<TabId>(() => {
     if (typeof window === "undefined") return "dashboard";
@@ -59,14 +60,13 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
 
   // Helper to update URL without navigation
   const updateUrl = useCallback((tab: TabId) => {
-    if (typeof window !== "undefined") {
-      const tabPath = `/${tab}`;
-      if (window.location.pathname !== tabPath) {
-        const newUrl = tabPath + window.location.search;
-        window.history.replaceState(null, "", newUrl);
-      }
+    if (typeof window === "undefined") return;
+    const tabPath = `/${tab}`;
+    if (window.location.pathname !== tabPath) {
+      const newUrl = tabPath + window.location.search;
+      router.replace(newUrl);
     }
-  }, []);
+  }, [router]);
 
   // User-triggered tab change (uses flushSync for immediate feedback)
   const setActiveTabWithHistory = useCallback((tab: TabId) => {
@@ -146,12 +146,14 @@ export function TabPanel({ tabId, children }: TabPanelProps) {
     }
   }, [isActive, wasJustActivated, tabId]);
 
+  if (!isActive) return null;
+
   return (
     <div
       style={{
-        display: isActive ? "block" : "none",
+        display: "block",
       }}
-      aria-hidden={!isActive}
+      aria-hidden={false}
     >
       {children}
     </div>
