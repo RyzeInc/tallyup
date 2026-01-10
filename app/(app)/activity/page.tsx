@@ -110,8 +110,6 @@ export default function ActivityPage() {
 
   // Update URL when filters change (but not on initial mount or when reading from URL)
   useEffect(() => {
-    if (typeof window === "undefined" || !window.location.pathname.startsWith("/activity")) return;
-
     // Skip on initial mount - state is already initialized from URL
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -289,8 +287,12 @@ export default function ActivityPage() {
     } else {
       p.set("review", "1");
     }
-    const qs = p.toString();
-    router.replace(qs ? `/activity?${qs}` : `/activity`);
+    // Use history.replaceState for non-navigational URL update
+    if (typeof window !== "undefined") {
+      const qs = p.toString();
+      const url = qs ? `/activity?${qs}` : `/activity`;
+      window.history.replaceState({ ...window.history.state }, "", url);
+    }
   }
 
   // Category options based on type
