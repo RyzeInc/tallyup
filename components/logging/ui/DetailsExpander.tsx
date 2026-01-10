@@ -18,6 +18,7 @@ import type {
 import type { TxType } from "../types";
 import * as Lucide from "lucide-react";
 import { AddAccountDialog } from "./AddAccountDialog";
+import { AddGoalDialog } from "./AddGoalDialog";
 
 // ============================================
 // Types
@@ -66,6 +67,9 @@ type DetailsExpanderProps = {
 
   // Account creation callback (optional)
   onAccountCreated?: (accountId: string, accountName: string) => void;
+  
+  // Goal creation callback (optional)
+  onGoalCreated?: (goalId: string, goalName: string) => void;
 };
 
 // ============================================
@@ -269,10 +273,12 @@ export function DetailsExpander(props: DetailsExpanderProps) {
     goals,
     onSetGoal,
     onAccountCreated,
+    onGoalCreated,
   } = props;
 
   const [tagSearch, setTagSearch] = React.useState("");
   const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false);
+  const [showAddGoalDialog, setShowAddGoalDialog] = React.useState(false);
 
   // Filter tags catalog
   const filteredTags = React.useMemo(() => {
@@ -706,7 +712,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
       {/* Recurring Expansion */}
       <ExpandableSection isExpanded={expandedSection === "recurring"}>
         <SectionLabel>Cadence</SectionLabel>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {CADENCE_OPTIONS.map((opt) => {
             const isSelected = recurring?.cadence === opt.value;
             return (
@@ -726,36 +732,77 @@ export function DetailsExpander(props: DetailsExpanderProps) {
             );
           })}
         </div>
+        
+        {/* Anchor Date - shown when cadence is selected */}
+        {recurring?.cadence && (
+          <div className="mt-3">
+            <SectionLabel>Start Date</SectionLabel>
+            <input
+              type="date"
+              value={recurring.anchorDate || ""}
+              onChange={(e) => onSetRecurring({ ...recurring, anchorDate: e.target.value })}
+              className="w-full h-9 px-2.5 rounded-md text-xs"
+              style={{
+                backgroundColor: "var(--surface)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                outline: "none",
+              }}
+            />
+            {recurring.anchorDate && (
+              <div className="text-[10px] mt-1" style={{ color: "var(--text-tertiary)" }}>
+                {(() => {
+                  const d = new Date(recurring.anchorDate + "T00:00:00");
+                  if (recurring.cadence === "weekly" || recurring.cadence === "biweekly") {
+                    return `Runs on ${d.toLocaleDateString(undefined, { weekday: "long" })}s`;
+                  }
+                  if (recurring.cadence === "yearly") {
+                    return `Runs on ${d.toLocaleDateString(undefined, { month: "long", day: "numeric" })}`;
+                  }
+                  return `Runs on day ${d.getDate()} each cycle`;
+                })()}
+              </div>
+            )}
+          </div>
+        )}
       </ExpandableSection>
 
       {/* Goal Expansion */}
       <ExpandableSection isExpanded={expandedSection === "goal"}>
         <SectionLabel>Link to Goal</SectionLabel>
         <div className="flex flex-wrap gap-1.5">
-          {goals.length === 0 ? (
-            <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
-              No goals yet
-            </span>
-          ) : (
-            goals.map((goal) => {
-              const isSelected = goalId === goal.id;
-              return (
-                <button
-                  key={goal.id}
-                  type="button"
-                  onClick={() => onSetGoal(isSelected ? undefined : goal.id)}
-                  className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-                  style={{
-                    backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
-                    color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
-                    border: isSelected ? "none" : "1px solid var(--border)",
-                  }}
-                >
-                  {goal.name}
-                </button>
-              );
-            })
-          )}
+          {goals.map((goal) => {
+            const isSelected = goalId === goal.id;
+            return (
+              <button
+                key={goal.id}
+                type="button"
+                onClick={() => onSetGoal(isSelected ? undefined : goal.id)}
+                className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                  color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
+                  border: isSelected ? "none" : "1px solid var(--border)",
+                }}
+              >
+                {goal.name}
+              </button>
+            );
+          })}
+          {/* Add Goal Button */}
+          <button
+            type="button"
+            onClick={() => setShowAddGoalDialog(true)}
+            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+            style={{
+              backgroundColor: "transparent",
+              color: "var(--primary)",
+              border: "1px dashed var(--primary)",
+            }}
+          >
+            <Lucide.Plus className="h-3 w-3" />
+            Add
+          </button>
         </div>
       </ExpandableSection>
 
@@ -764,6 +811,13 @@ export function DetailsExpander(props: DetailsExpanderProps) {
         open={showAddAccountDialog}
         onOpenChange={setShowAddAccountDialog}
         onAccountCreated={onAccountCreated}
+      />
+
+      {/* Add Goal Dialog */}
+      <AddGoalDialog
+        open={showAddGoalDialog}
+        onOpenChange={setShowAddGoalDialog}
+        onGoalCreated={onGoalCreated}
       />
     </div>
   );

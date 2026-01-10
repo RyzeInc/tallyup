@@ -285,7 +285,7 @@ export default function GoalsPage() {
         {/* Create Modal */}
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={resetCreate} />
+            <div className="absolute inset-0 bg-black/40" onClick={resetCreate} />
             <div className="relative w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5" style={{ backgroundColor: "var(--surface)" }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -353,7 +353,7 @@ export default function GoalsPage() {
         {/* Edit Modal */}
         {editingGoal && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setEditingGoal(null)} />
+            <div className="absolute inset-0 bg-black/40" onClick={() => setEditingGoal(null)} />
             <div className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5" style={{ backgroundColor: "var(--surface)" }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">

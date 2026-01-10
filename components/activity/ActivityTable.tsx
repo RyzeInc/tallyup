@@ -482,7 +482,7 @@ export default function ActivityTable({
       {/* Tag Selection Sheet */}
       {bulkAction === "tag" && (
         <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40"
           onClick={() => setBulkAction("none")}
         >
           <div
@@ -518,7 +518,7 @@ export default function ActivityTable({
       {/* Category Selection Sheet */}
       {bulkAction === "category" && (
         <div
-          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50"
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40"
           onClick={() => setBulkAction("none")}
         >
           <div

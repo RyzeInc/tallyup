@@ -69,11 +69,22 @@ export default function ActivityPage() {
   }, [searchParams]);
 
   // Sync URL params to state when URL changes (for drill-down navigation)
-  const prevSearchParams = useRef(searchParams.toString());
+  // We compare only the filter-related params, ignoring edit param
+  const getFilterParams = (sp: URLSearchParams) => {
+    const p = new URLSearchParams();
+    const t = sp.get("type"); if (t) p.set("type", t);
+    const c = sp.get("category"); if (c) p.set("category", c);
+    const tag = sp.get("tag"); if (tag) p.set("tag", tag);
+    const qp = sp.get("q"); if (qp) p.set("q", qp);
+    const r = sp.get("review"); if (r) p.set("review", r);
+    return p.toString();
+  };
+  const prevFilterParams = useRef(getFilterParams(searchParams));
   useEffect(() => {
-    const currentParams = searchParams.toString();
-    if (currentParams !== prevSearchParams.current) {
-      prevSearchParams.current = currentParams;
+    const currentFilterParams = getFilterParams(searchParams);
+    // Only sync state if filter params actually changed (ignore edit param changes)
+    if (currentFilterParams !== prevFilterParams.current) {
+      prevFilterParams.current = currentFilterParams;
       
       // Update state from URL params
       const urlType = searchParams.get("type");
@@ -106,13 +117,36 @@ export default function ActivityPage() {
 
   // Track if this is initial mount to avoid URL sync loops
   const isInitialMount = useRef(true);
-  const lastUrlUpdate = useRef<string>("");
+  // Initialize lastUrlUpdate to the current URL so we don't trigger a replace on mount
+  const lastUrlUpdate = useRef<string>(
+    (() => {
+      const p = new URLSearchParams();
+      const t = searchParams.get("type");
+      if (t === "income" || t === "expense") p.set("type", t);
+      const qVal = searchParams.get("q");
+      if (qVal) p.set("q", qVal);
+      if (searchParams.get("review") === "1") p.set("review", "1");
+      const cat = searchParams.get("category");
+      if (cat) p.set("category", cat);
+      const tag = searchParams.get("tag");
+      if (tag) p.set("tag", tag);
+      const qs = p.toString();
+      return qs ? `/activity?${qs}` : `/activity`;
+    })()
+  );
 
   // Update URL when filters change (but not on initial mount or when reading from URL)
+  // Skip entirely when edit modal is open to avoid URL thrashing
   useEffect(() => {
     // Skip on initial mount - state is already initialized from URL
     if (isInitialMount.current) {
       isInitialMount.current = false;
+      return;
+    }
+
+    // Skip URL updates while the edit modal is open to prevent thrashing
+    const editParam = searchParams.get("edit");
+    if (editParam) {
       return;
     }
 
@@ -122,10 +156,6 @@ export default function ActivityPage() {
     if (reviewOnly) p.set("review", "1");
     if (selectedCategories.length === 1) p.set("category", selectedCategories[0]);
     if (selectedTags.length === 1) p.set("tag", selectedTags[0]);
-    
-    // Preserve edit param if present
-    const editParam = searchParams.get("edit");
-    if (editParam) p.set("edit", editParam);
     
     const qs = p.toString();
     const url = qs ? `/activity?${qs}` : `/activity`;
@@ -229,9 +259,15 @@ export default function ActivityPage() {
   // Edit modal state - triggered by ?edit=id query param
   const editId = searchParams.get("edit");
   const [editEntry, setEditEntry] = useState<EditableEntry | null>(null);
+  // Track when we're intentionally closing to prevent race condition reopening
+  const isClosingModal = useRef(false);
 
   // Load entry for editing when editId changes
   useEffect(() => {
+    // Don't reopen if we're in the process of closing
+    if (isClosingModal.current) {
+      return;
+    }
     if (editId && allEntries.length > 0) {
       const entry = allEntries.find((e) => e._id === editId);
       if (entry && isEditableEntry(entry)) {
@@ -246,12 +282,17 @@ export default function ActivityPage() {
 
   // Close edit modal and clear URL param
   function closeEditModal() {
+    isClosingModal.current = true;
     setEditEntry(null);
     // Remove edit param from URL
     const p = new URLSearchParams(searchParams.toString());
     p.delete("edit");
     const qs = p.toString();
     router.replace(qs ? `/activity?${qs}` : `/activity`);
+    // Reset the closing flag after URL update settles
+    setTimeout(() => {
+      isClosingModal.current = false;
+    }, 100);
   }
 
   async function loadMore() {
@@ -702,17 +743,13 @@ export default function ActivityPage() {
             entry={editEntry}
             onClose={closeEditModal}
             onSaved={() => {
-              // Close the modal first (this clears editEntry and URL param)
-              closeEditModal();
-              // Then refresh the list
+              // Refresh the list after a successful save (modal will be closed by the form)
               setPages([]);
               setCursorList([undefined]);
               setSeenIds({});
             }}
             onDeleted={() => {
-              // Close the modal first
-              closeEditModal();
-              // Then refresh the list
+              // Refresh the list after deletion (modal will be closed by the delete handler)
               setPages([]);
               setCursorList([undefined]);
               setSeenIds({});

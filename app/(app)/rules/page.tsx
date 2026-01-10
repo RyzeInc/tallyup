@@ -314,7 +314,7 @@ export default function RulesPage() {
         {/* Create Category Rule Modal */}
         {showCreateCategory && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={resetCategoryModal} />
+            <div className="absolute inset-0 bg-black/40" onClick={resetCategoryModal} />
             <div className="relative w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5" style={{ backgroundColor: "var(--surface)" }}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>New Category Rule</h2>
@@ -372,7 +372,7 @@ export default function RulesPage() {
         {/* Create Merchant Rule Modal */}
         {showCreateMerchant && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={resetMerchantModal} />
+            <div className="absolute inset-0 bg-black/40" onClick={resetMerchantModal} />
             <div className="relative w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5" style={{ backgroundColor: "var(--surface)" }}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>New Merchant Rule</h2>

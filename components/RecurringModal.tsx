@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc, Id } from "convex/_generated/dataModel";
 import { centsToDollars, dollarsToCents } from "./utils";
 import { useToast } from "./ToastProvider";
 import { useOptimisticLinks } from "./OptimisticLinksProvider";
+import * as Lucide from "lucide-react";
 
 type EntryDoc = Doc<"entries">;
 type EditableEntry = EntryDoc & { type: "expense" | "income" };
+type CadenceKind = "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly";
 
 export default function RecurringModal({
   entry,
@@ -20,17 +22,36 @@ export default function RecurringModal({
   onClose: () => void;
   onCreated?: (ruleId: Id<"recurringRules">) => void;
 }) {
-  const [displayName, setDisplayName] = useState(entry.bucket ? `${entry.bucket} ${entry.category ?? ""}`.trim() : entry.note ?? "");
+  const [displayName, setDisplayName] = useState(entry.bucket ? `${entry.bucket} ${entry.category ?? ""}`.trim() : entry.merchant ?? entry.note ?? "");
   const [autolink, setAutolink] = useState(false);
   const [autolinkConfirm, setAutolinkConfirm] = useState(false);
   const [applyToExisting, setApplyToExisting] = useState(false);
   const [amount, setAmount] = useState(centsToDollars(entry.amountCents));
+  const [cadence, setCadence] = useState<CadenceKind>("monthly");
+  // Initialize anchorDate from entry date
+  const [anchorDate, setAnchorDate] = useState(() => {
+    const d = new Date(entry.date);
+    return d.toISOString().slice(0, 10);
+  });
   const create = useMutation(api.recurring.createRecurringRule);
   const link = useMutation(api.recurring.linkEntriesToRule);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
   const { add } = useOptimisticLinks();
+
+  // Compute cadence label based on anchor date
+  const cadenceLabel = useMemo(() => {
+    if (!anchorDate) return "";
+    const d = new Date(anchorDate + "T00:00:00");
+    if (cadence === "weekly" || cadence === "biweekly") {
+      return d.toLocaleDateString(undefined, { weekday: "long" });
+    }
+    if (cadence === "yearly") {
+      return d.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+    }
+    return `Day ${d.getDate()}`;
+  }, [anchorDate, cadence]);
 
   // Handle escape key
   useEffect(() => {
@@ -47,10 +68,17 @@ export default function RecurringModal({
       return;
     }
 
+    if (!anchorDate) {
+      setErr("Please select a start date");
+      return;
+    }
+
     setBusy(true);
     setErr(null);
     try {
       const cents = dollarsToCents(amount) ?? entry.amountCents;
+      const anchorTs = new Date(anchorDate + "T00:00:00").getTime();
+      
       const res = await create({
         type: entry.type,
         displayName: displayName.trim() || undefined,
@@ -60,7 +88,9 @@ export default function RecurringModal({
         amountCents: cents,
         amountTolerancePercent: 5,
         autolinkEnabled: autolink,
-        intervalType: "monthly",
+        cadenceType: cadence,
+        cadence: { kind: cadence, anchorDate: anchorTs },
+        status: "active" as const,
         active: true,
       });
 
@@ -97,25 +127,26 @@ export default function RecurringModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 bg-black/40"
         onClick={onClose}
-        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
       />
       <div 
-        className="relative z-10 w-[420px] max-w-[calc(100vw-32px)] rounded-2xl p-5" 
+        className="relative z-10 w-full sm:w-[420px] sm:max-w-[calc(100vw-32px)] rounded-t-2xl sm:rounded-2xl p-5" 
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         role="dialog"
         aria-modal="true"
         aria-label="Save recurring rule"
       >
-        <div className="text-lg font-semibold" style={{ color: "var(--text)" }}>Save recurring rule</div>
-        <div className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
-          Save a recurring rule to recognize similar future entries. Auto-apply is off by default and requires explicit confirmation.
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-lg font-semibold" style={{ color: "var(--text)" }}>Save recurring rule</div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]">
+            <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+          </button>
         </div>
 
-        <div className="mt-4 space-y-4">
+        <div className="space-y-4">
           <div>
             <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Name</div>
             <input 
@@ -147,7 +178,8 @@ export default function RecurringModal({
             <div>
               <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Cadence</div>
               <select 
-                defaultValue="monthly" 
+                value={cadence}
+                onChange={(e) => setCadence(e.target.value as CadenceKind)}
                 className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
                 style={{ 
                   backgroundColor: "var(--surface-subtle)", 
@@ -155,12 +187,37 @@ export default function RecurringModal({
                   color: "var(--text)"
                 }}
               >
-                <option value="monthly">Monthly</option>
                 <option value="weekly">Weekly</option>
                 <option value="biweekly">Biweekly</option>
-                <option value="custom">Custom</option>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Start date</div>
+            <input 
+              type="date"
+              value={anchorDate}
+              onChange={(e) => setAnchorDate(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+              style={{ 
+                backgroundColor: "var(--surface-subtle)", 
+                border: "1px solid var(--border)",
+                color: "var(--text)"
+              }}
+            />
+            {cadenceLabel && (
+              <div className="text-[11px] mt-1" style={{ color: "var(--text-tertiary)" }}>
+                {cadence === "weekly" || cadence === "biweekly"
+                  ? `Runs on ${cadenceLabel}s`
+                  : cadence === "yearly"
+                  ? `Runs on ${cadenceLabel}`
+                  : `Runs on ${cadenceLabel} each cycle`}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-3">
@@ -172,7 +229,7 @@ export default function RecurringModal({
                 className="h-4 w-4 rounded"
                 style={{ accentColor: "var(--primary)" }}
               />
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Auto-apply to future entries (off by default)</span>
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Auto-apply to future entries</span>
             </label>
 
             <label className="flex items-center gap-2.5">
@@ -183,7 +240,7 @@ export default function RecurringModal({
                 className="h-4 w-4 rounded"
                 style={{ accentColor: "var(--primary)" }}
               />
-              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Apply to existing entries (optional)</span>
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Apply to existing entries</span>
             </label>
 
             {autolink && (
@@ -196,7 +253,7 @@ export default function RecurringModal({
               >
                 <div className="font-medium text-sm" style={{ color: "var(--warning)" }}>Auto-apply confirmation</div>
                 <div className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-                  Auto-apply will automatically fill this recurring rule on future entries. It&apos;s best for stable, regular payments (e.g., rent, salary). Please confirm:
+                  Auto-apply will automatically link future matching entries. Best for stable payments like rent or salary.
                 </div>
                 <label className="mt-3 flex items-center gap-2.5">
                   <input 
@@ -206,7 +263,7 @@ export default function RecurringModal({
                     className="h-4 w-4 rounded"
                     style={{ accentColor: "var(--warning)" }}
                   />
-                  <span className="text-sm" style={{ color: "var(--text)" }}>I understand this will automatically apply to future entries</span>
+                  <span className="text-sm" style={{ color: "var(--text)" }}>I understand</span>
                 </label>
               </div>
             )}
@@ -214,9 +271,10 @@ export default function RecurringModal({
 
           {err && (
             <div 
-              className="text-sm rounded-lg p-2.5"
-              style={{ backgroundColor: "var(--error-subtle)", color: "var(--error)" }}
+              className="text-sm rounded-lg p-2.5 flex items-center gap-2"
+              style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
             >
+              <Lucide.AlertCircle className="h-4 w-4 shrink-0" />
               {err}
             </div>
           )}
@@ -225,7 +283,7 @@ export default function RecurringModal({
         <div className="mt-5 flex gap-3">
           <button 
             onClick={onClose} 
-            className="rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+            className="flex-1 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
             style={{ border: "1px solid var(--border)", color: "var(--text)" }}
           >
             Cancel
@@ -233,10 +291,10 @@ export default function RecurringModal({
           <button 
             onClick={onCreate} 
             disabled={busy} 
-            className="ml-auto rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
+            className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
             style={{ backgroundColor: "var(--primary)", color: "var(--on-primary)" }}
           >
-            {busy ? "Saving…" : "Save recurring rule"}
+            {busy ? "Saving…" : "Save rule"}
           </button>
         </div>
       </div>

@@ -333,7 +333,13 @@ export const updateEntry = mutation({
         methodOrAccount: next.methodOrAccount,
       });
       patch.reviewReason = reviewReason ?? undefined;
-      patch.needsReview = !!reviewReason;
+      // Honor explicit needsReview: false from client (user clicked "Resolve")
+      // Only auto-compute needsReview if client didn't explicitly set it to false
+      if (args.needsReview === false) {
+        patch.needsReview = false;
+      } else {
+        patch.needsReview = !!reviewReason;
+      }
       if (!patch.transactionType) {
         patch.transactionType = next.type === "income" ? "RECEIVED" : "SPENT";
       }

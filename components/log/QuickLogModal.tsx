@@ -97,29 +97,32 @@ export default function QuickLogModal({
         return { ok: true, txId: res.id };
       }
 
-      // Combine context and intent into tags
-      const allTags: string[] = [...draft.tags];
+      // Build contextTags from contextScope and contextFlags
+      const contextTags: string[] = [];
       if (draft.contextScope) {
-        allTags.push(
+        contextTags.push(
           draft.contextScope.charAt(0).toUpperCase() + draft.contextScope.slice(1)
         );
       }
       draft.contextFlags.forEach((f) => {
-        allTags.push(
+        contextTags.push(
           f
             .split("_")
             .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
             .join("-")
         );
       });
+
+      // Build intentTags from intent object
+      const intentTags: string[] = [];
       if (draft.intent.necessity) {
-        allTags.push(
+        intentTags.push(
           draft.intent.necessity.charAt(0).toUpperCase() +
             draft.intent.necessity.slice(1)
         );
       }
       if (draft.intent.planning) {
-        allTags.push(
+        intentTags.push(
           draft.intent.planning.charAt(0).toUpperCase() +
             draft.intent.planning.slice(1)
         );
@@ -135,7 +138,11 @@ export default function QuickLogModal({
         methodOrAccount: draft.account.method?.trim() || undefined,
         amountCents,
         date: dateTs,
-        tags: allTags.length > 0 ? allTags : undefined,
+        // Keep regular tags separate
+        tags: draft.tags.length > 0 ? draft.tags : undefined,
+        // Pass context and intent as separate fields
+        contextTags: contextTags.length > 0 ? contextTags : undefined,
+        intentTags: intentTags.length > 0 ? intentTags : undefined,
         goalId: draft.goalId ?? undefined,
         accountId: draft.account.accountId ?? undefined,
         needsReview: draft.needsReview,

@@ -131,7 +131,7 @@ export default function GlobalSearch({ open, onClose }: GlobalSearchProps) {
   return (
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/40" onClick={onClose} />
 
       {/* Dialog */}
       <div className="fixed left-1/2 top-[15%] w-full max-w-lg -translate-x-1/2 px-4">

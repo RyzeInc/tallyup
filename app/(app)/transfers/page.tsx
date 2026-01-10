@@ -195,7 +195,7 @@ export default function TransfersPage() {
         {/* Create Modal */}
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={resetCreate} />
+            <div className="absolute inset-0 bg-black/40" onClick={resetCreate} />
             <div
               className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5"
               style={{ backgroundColor: "var(--surface)" }}

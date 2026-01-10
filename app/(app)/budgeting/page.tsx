@@ -368,7 +368,7 @@ export default function BudgetingPage() {
 
         {showCreate && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={() => { setShowCreate(false); resetCreateForm(); }} />
+            <div className="absolute inset-0 bg-black/40" onClick={() => { setShowCreate(false); resetCreateForm(); }} />
             <div className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5" style={{ backgroundColor: "var(--surface)" }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -457,7 +457,7 @@ export default function BudgetingPage() {
 
         {editingBudget && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setEditingBudget(null)} />
+            <div className="absolute inset-0 bg-black/40" onClick={() => setEditingBudget(null)} />
             <div className="relative w-full sm:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5" style={{ backgroundColor: "var(--surface)" }}>
               <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Edit Budget</h2><button onClick={() => setEditingBudget(null)}><Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} /></button></div>
               <div className="space-y-4">
