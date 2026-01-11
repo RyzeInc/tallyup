@@ -16,6 +16,7 @@ const SWIPE_THRESHOLD = 80;
 export default function ActivityTable({
   entries = [],
   viewMode = "cards",
+  typeFilter = "all",
   onDelete,
   onSavePattern,
   onBulkComplete,
@@ -24,6 +25,7 @@ export default function ActivityTable({
 }: {
   entries?: Doc<"entries">[];
   viewMode?: "cards" | "table";
+  typeFilter?: "all" | "expense" | "income";
   onDelete?: (id: Id<"entries">) => void;
   onSavePattern?: (entry: Doc<"entries">) => void;
   onBulkComplete?: () => void;
@@ -41,6 +43,22 @@ export default function ActivityTable({
     const income = (incomeCategories ?? []) as { _id: string; name: string }[];
     return [...expense, ...income];
   }, [expenseCategories, incomeCategories]);
+  
+  // Fetch goals for goal column
+  const goals = useQuery(api.goals.listGoals, {}) as { _id: string; name: string }[] | undefined;
+  const getGoalName = useCallback((goalId: string | undefined) => {
+    if (!goalId || !goals) return null;
+    const goal = goals.find((g) => g._id === goalId);
+    return goal?.name ?? null;
+  }, [goals]);
+  
+  // Fetch accounts for account column
+  const accounts = useQuery(api.accounts.listAccounts, {}) as { _id: string; name: string }[] | undefined;
+  const getAccountName = useCallback((accountId: string | undefined) => {
+    if (!accountId || !accounts) return null;
+    const account = accounts.find((a) => a._id === accountId);
+    return account?.name ?? null;
+  }, [accounts]);
   
   // Selection mode state - use external control if provided
   const [internalSelectMode, setInternalSelectMode] = useState(false);
@@ -250,35 +268,58 @@ export default function ActivityTable({
       {/* Transaction List - Table View */}
       {viewMode === "table" && (
         <div
-          className="rounded-xl overflow-hidden"
+          className="rounded-xl overflow-hidden overflow-x-auto"
           style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         >
-          {/* Table Header */}
+          {/* Table Header - columns vary by typeFilter */}
           <div
-            className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide"
+            className="flex items-center min-w-max"
             style={{ 
+              gap: 8,
+              padding: "12px 12px 8px",
               backgroundColor: "var(--surface-subtle)", 
+              borderBottom: "1px solid var(--border)",
+              fontSize: "0.8125rem",
+              fontWeight: 600,
               color: "var(--text-tertiary)",
-              borderBottom: "1px solid var(--border)" 
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
             }}
           >
-            {selectMode && <div className="w-5 shrink-0" />}
-            <div className="w-[72px] shrink-0 text-right">Date</div>
-            <div className="flex-1 min-w-0">Description</div>
-            <div className="w-[100px] shrink-0">Category</div>
-            <div className="w-[80px] shrink-0 text-right">Amount</div>
+            {selectMode && <div style={{ width: 20, flexShrink: 0 }} />}
+            <div style={{ width: 72, flexShrink: 0 }}>Date</div>
+            <div style={{ width: 110, flexShrink: 0 }}>{typeFilter === "income" ? "Source" : "Category"}</div>
+            <div style={{ width: 80, flexShrink: 0, textAlign: "right" }}>Amount</div>
+            <div style={{ width: 140, flexShrink: 0 }}>{typeFilter === "income" ? "Description" : "Note"}</div>
+            <div style={{ width: 100, flexShrink: 0 }}>{typeFilter === "income" ? "Account" : "Payment"}</div>
+            <div style={{ width: 80, flexShrink: 0 }}>Context</div>
+            <div style={{ width: 80, flexShrink: 0 }}>Intent</div>
+            <div style={{ width: 90, flexShrink: 0 }}>Tags</div>
+            <div style={{ width: 28, flexShrink: 0, textAlign: "center" }} title="Recurring">
+              <Lucide.Repeat className="h-3.5 w-3.5 inline" />
+            </div>
+            <div style={{ width: 80, flexShrink: 0 }}>Goal</div>
           </div>
           {entries.map((r, i) => {
             const isIncome = r.type === "income";
             const amountColor = isIncome ? "var(--success)" : "var(--text)";
             const amountPrefix = isIncome ? "+" : "−";
             const categoryLabel = getCategoryDisplayName(r.category || r.bucket, allCustomCategories);
+            const accountName = getAccountName(r.accountId as string | undefined) || r.methodOrAccount || "—";
+            const goalName = getGoalName(r.goalId as string | undefined);
+            const contextTags = r.contextTags ?? [];
+            const intentTags = r.intentTags ?? [];
+            const otherTags = r.tags ?? [];
             
             return (
               <div
                 key={r._id}
-                className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-[var(--surface-subtle)] transition-colors ${i > 0 ? "border-t" : ""}`}
-                style={{ borderColor: "var(--border)" }}
+                className={`flex items-center min-w-max cursor-pointer hover:bg-[var(--surface-subtle)] transition-colors ${i > 0 ? "border-t" : ""}`}
+                style={{ 
+                  gap: 8,
+                  padding: "8px 12px",
+                  borderColor: "var(--border)",
+                }}
                 onClick={() => {
                   if (selectMode) {
                     toggle(r._id);
@@ -293,45 +334,73 @@ export default function ActivityTable({
                     type="checkbox"
                     checked={!!selected[r._id]}
                     onChange={() => toggle(r._id)}
-                    className="h-4 w-4 shrink-0 rounded"
-                    style={{ accentColor: "var(--primary)" }}
+                    className="rounded"
+                    style={{ width: 18, height: 18, flexShrink: 0, accentColor: "var(--primary)" }}
                   />
                 )}
                 
                 {/* Date */}
-                <div className="w-[72px] shrink-0 text-right text-[12px] tabular-nums" style={{ color: "var(--text-tertiary)" }}>
+                <div style={{ width: 72, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
                   {new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                 </div>
                 
-                {/* Description */}
-                <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                  <span className="text-[13px] font-medium truncate" style={{ color: "var(--text)" }}>
-                    {r.merchant || r.note || categoryLabel}
-                  </span>
-                  {r.needsReview && (
-                    <span
-                      className="shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold"
-                      style={{ backgroundColor: "var(--warning-subtle)", color: "var(--warning)" }}
-                    >
-                      !
-                    </span>
-                  )}
-                  {r.recurringRuleId && (
-                    <Lucide.Repeat className="h-3 w-3 shrink-0" style={{ color: "var(--text-tertiary)" }} />
-                  )}
-                </div>
-                
-                {/* Category */}
-                <div className="w-[100px] shrink-0 text-[11px] truncate" style={{ color: "var(--text-secondary)" }}>
+                {/* Category/Source */}
+                <div style={{ width: 110, flexShrink: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {categoryLabel}
                 </div>
                 
                 {/* Amount */}
                 <div
-                  className="w-[80px] shrink-0 text-right text-[13px] font-semibold tabular-nums"
-                  style={{ color: amountColor }}
+                  style={{ 
+                    width: 80, 
+                    flexShrink: 0, 
+                    textAlign: "right", 
+                    fontSize: "0.875rem", 
+                    fontWeight: 700, 
+                    fontVariantNumeric: "tabular-nums",
+                    color: amountColor,
+                  }}
                 >
                   {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
+                </div>
+                
+                {/* Note/Description */}
+                <div style={{ width: 140, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.merchant || r.note || "—"}
+                </div>
+                
+                {/* Account/Payment Method */}
+                <div style={{ width: 100, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {accountName}
+                </div>
+                
+                {/* Context Tags */}
+                <div style={{ width: 80, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {contextTags.length > 0 ? contextTags.slice(0, 2).join(", ") : "—"}
+                </div>
+                
+                {/* Intent Tags */}
+                <div style={{ width: 80, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {intentTags.length > 0 ? intentTags.slice(0, 2).join(", ") : "—"}
+                </div>
+                
+                {/* Other Tags */}
+                <div style={{ width: 90, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {otherTags.length > 0 ? otherTags.slice(0, 2).join(", ") : "—"}
+                </div>
+                
+                {/* Recurring indicator */}
+                <div style={{ width: 28, flexShrink: 0, textAlign: "center" }}>
+                  {r.recurringRuleId ? (
+                    <Lucide.Check className="h-4 w-4 inline" style={{ color: "var(--success)" }} />
+                  ) : (
+                    <span style={{ color: "var(--text-tertiary)", fontSize: "0.75rem" }}>—</span>
+                  )}
+                </div>
+                
+                {/* Goal */}
+                <div style={{ width: 80, flexShrink: 0, fontSize: "0.75rem", color: goalName ? "var(--primary)" : "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {goalName || "—"}
                 </div>
               </div>
             );

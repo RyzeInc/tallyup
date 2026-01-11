@@ -776,6 +776,7 @@ export default function ActivityPage() {
             <ActivityTable
               entries={allEntries}
               viewMode={viewMode}
+              typeFilter={type}
               onDelete={(id) => deleteEntry({ id })}
               onSavePattern={(e) => {
                 if (isEditableEntry(e)) setSelected(e);
