@@ -294,7 +294,8 @@ export default function ActivityTable({
             <div style={{ width: 72, flexShrink: 0 }}>Date</div>
             <div style={{ width: 110, flexShrink: 0 }}>{typeFilter === "income" ? "Source" : "Category"}</div>
             <div style={{ width: 80, flexShrink: 0, textAlign: "right" }}>Amount</div>
-            <div style={{ width: 140, flexShrink: 0 }}>{typeFilter === "income" ? "Description" : "Note"}</div>
+            <div style={{ width: 120, flexShrink: 0 }}>{typeFilter === "income" ? "Title" : "Merchant"}</div>
+            <div style={{ width: 120, flexShrink: 0 }}>Note</div>
             <div style={{ width: 100, flexShrink: 0 }}>{typeFilter === "income" ? "Account" : "Payment"}</div>
             <div style={{ width: 80, flexShrink: 0 }}>Context</div>
             <div style={{ width: 80, flexShrink: 0 }}>Intent</div>
@@ -368,9 +369,14 @@ export default function ActivityTable({
                   {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
                 </div>
                 
-                {/* Note/Description */}
-                <div style={{ width: 140, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {r.merchant || r.note || "—"}
+                {/* Merchant/Title */}
+                <div style={{ width: 120, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.merchant || "—"}
+                </div>
+                
+                {/* Note */}
+                <div style={{ width: 120, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.note || "—"}
                 </div>
                 
                 {/* Account/Payment Method */}
