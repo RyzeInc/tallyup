@@ -77,7 +77,8 @@ export default function SettingsPage() {
   // Convex queries & mutations
   const userPrefs = useQuery(api.preferences.getUserPreferences);
   const upsertPrefs = useMutation(api.preferences.upsertUserPreferences);
-  const customCategories = useQuery(api.categories.listCategories);
+  const customExpenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" });
+  const customIncomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" });
   const createCategory = useMutation(api.categories.createCategory);
   const deleteCategory = useMutation(api.categories.deleteCategory);
 
@@ -112,7 +113,7 @@ export default function SettingsPage() {
       setPinnedExpense((userPrefs.pinnedExpenseCategories ?? []).filter(isExpenseSpace));
       setPinnedIncome((userPrefs.pinnedIncomeCategories ?? []).filter(isIncomeSpace));
       setPinnedTags((userPrefs.pinnedContextTags ?? []).filter(isContextTag));
-      setHiddenTags(userPrefs.hiddenContextTags ?? []);
+      setHiddenTags((userPrefs.hiddenContextTags ?? []).filter(isContextTag));
       setHiddenExpense(userPrefs.hiddenExpenseCategories ?? []);
       setHiddenIncome(userPrefs.hiddenIncomeCategories ?? []);
     } else {
@@ -257,14 +258,14 @@ export default function SettingsPage() {
     }
   }, [newIncomeCategory, createCategory, toast]);
 
-  // Get custom categories by type
+  // Get custom categories by type (as name arrays)
   const customExpenseCategories = useMemo(() => 
-    (customCategories ?? []).filter(c => c.categoryType === "expense").map(c => c.name),
-    [customCategories]
+    (customExpenseCategoriesData ?? []).map(c => c.name),
+    [customExpenseCategoriesData]
   );
   const customIncomeCategories = useMemo(() => 
-    (customCategories ?? []).filter(c => c.categoryType === "income").map(c => c.name),
-    [customCategories]
+    (customIncomeCategoriesData ?? []).map(c => c.name),
+    [customIncomeCategoriesData]
   );
 
   // Combined lists: defaults + custom
@@ -512,7 +513,7 @@ export default function SettingsPage() {
                   const isPinned = pinnedExpense.includes(cat as ExpenseSpace);
                   const isHidden = hiddenExpense.includes(cat);
                   const isCustom = customExpenseCategories.includes(cat);
-                  const customCat = (customCategories ?? []).find(c => c.name === cat && c.categoryType === "expense");
+                  const customCat = (customExpenseCategoriesData ?? []).find(c => c.name === cat);
                   return (
                     <div
                       key={cat}
@@ -667,7 +668,7 @@ export default function SettingsPage() {
                   const isPinned = pinnedIncome.includes(cat as IncomeSpace);
                   const isHidden = hiddenIncome.includes(cat);
                   const isCustom = customIncomeCategories.includes(cat);
-                  const customCat = (customCategories ?? []).find(c => c.name === cat && c.categoryType === "income");
+                  const customCat = (customIncomeCategoriesData ?? []).find(c => c.name === cat);
                   return (
                     <div
                       key={cat}
@@ -816,11 +817,11 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 {/* Render in saved order, with hidden items at the end */}
                 {[
-                  ...tagOrder.filter(t => !hiddenTags.includes(t)),
-                  ...tagOrder.filter(t => hiddenTags.includes(t)),
+                  ...tagOrder.filter(t => !hiddenTags.includes(t as ContextTag)),
+                  ...tagOrder.filter(t => hiddenTags.includes(t as ContextTag)),
                 ].map((tag) => {
                   const isPinned = pinnedTags.includes(tag as ContextTag);
-                  const isHidden = hiddenTags.includes(tag);
+                  const isHidden = hiddenTags.includes(tag as ContextTag);
                   return (
                     <div
                       key={tag}
@@ -857,7 +858,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => togglePinTag(tag)}
+                          onClick={() => togglePinTag(tag as ContextTag)}
                           className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
                           title={isPinned ? "Unpin" : "Pin to top"}
                           disabled={isHidden}
@@ -865,7 +866,7 @@ export default function SettingsPage() {
                           <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
                         </button>
                         <button
-                          onClick={() => toggleHideTag(tag)}
+                          onClick={() => toggleHideTag(tag as ContextTag)}
                           className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
                           title={isHidden ? "Show" : "Hide"}
                         >

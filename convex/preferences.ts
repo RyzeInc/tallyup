@@ -91,6 +91,7 @@ export const upsertUserPreferences = mutation({
         userId,
         ...updates,
         createdAt: now,
+        updatedAt: now,
       });
     }
   },
