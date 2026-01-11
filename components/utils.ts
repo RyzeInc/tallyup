@@ -15,12 +15,15 @@ export const INCOME_SPACES = [
 export const EXPENSE_SPACES = [
   "Housing",
   "Utilities",
-  "Food",
+  "Groceries",
+  "Food & Dining",
   "Transportation",
   "Health",
+  "Supplements",
   "Insurance",
   "Debt",
   "Subscriptions",
+  "Work / Business",
   "Personal Care",
   "Entertainment",
   "Education",
@@ -28,6 +31,69 @@ export const EXPENSE_SPACES = [
   "Savings & Investing",
   "Miscellaneous",
 ] as const;
+
+// Category ID to display name mapping (for built-in categories)
+// IDs are lowercase/snake_case, names are Title Case
+export const CATEGORY_ID_TO_NAME: Record<string, string> = {
+  // Expense categories
+  housing: "Housing",
+  utilities: "Utilities",
+  groceries: "Groceries",
+  food: "Food & Dining",
+  transportation: "Transportation",
+  health: "Health",
+  supplements: "Supplements",
+  insurance: "Insurance",
+  debt: "Debt",
+  subscriptions: "Subscriptions",
+  work: "Work / Business",
+  personal_care: "Personal Care",
+  entertainment: "Entertainment",
+  education: "Education",
+  gifts_giving: "Gifts & Giving",
+  savings_investing: "Savings & Investing",
+  miscellaneous: "Miscellaneous",
+  // Income categories
+  wages_salary: "Wages & Salary",
+  contract_freelance: "Contract / Freelance",
+  business_revenue: "Business Revenue",
+  investment_income: "Investment Income",
+  transfers: "Transfers",
+};
+
+/**
+ * Get display name for a category ID
+ * Handles: built-in IDs (lowercase), custom category IDs, and already-formatted names
+ */
+export function getCategoryDisplayName(
+  categoryId: string | undefined,
+  customCategories?: { _id: string; name: string }[]
+): string {
+  if (!categoryId) return "Uncategorized";
+  
+  // Check built-in categories first
+  if (CATEGORY_ID_TO_NAME[categoryId]) {
+    return CATEGORY_ID_TO_NAME[categoryId];
+  }
+  
+  // Check custom categories (IDs look like "j574..." from Convex)
+  const customCat = customCategories?.find((c) => c._id === categoryId);
+  if (customCat) {
+    return customCat.name;
+  }
+  
+  // If it's already Title Case (legacy data), return as-is
+  // Check if first char is uppercase and contains spaces or special chars
+  if (categoryId.length > 0 && categoryId[0] === categoryId[0].toUpperCase() && /[A-Z]/.test(categoryId[0])) {
+    return categoryId;
+  }
+  
+  // Fallback: convert snake_case/lowercase to Title Case
+  return categoryId
+    .split(/[_\s]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
 
 // Context tags - life/work/tax context (who/what flow)
 export const CONTEXT_TAGS = [

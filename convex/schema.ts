@@ -665,6 +665,21 @@ export default defineSchema({
     defaultTab: v.optional(v.string()),
     compactMode: v.optional(v.boolean()),
     
+    // Category customization - hide default categories
+    hiddenExpenseCategories: v.optional(v.array(v.string())),
+    hiddenIncomeCategories: v.optional(v.array(v.string())),
+    hiddenContextTags: v.optional(v.array(v.string())),
+    
+    // Category ordering - stored as arrays of category names
+    expenseCategoryOrder: v.optional(v.array(v.string())),
+    incomeCategoryOrder: v.optional(v.array(v.string())),
+    contextTagOrder: v.optional(v.array(v.string())),
+    
+    // Pinned categories (legacy support)
+    pinnedExpenseCategories: v.optional(v.array(v.string())),
+    pinnedIncomeCategories: v.optional(v.array(v.string())),
+    pinnedContextTags: v.optional(v.array(v.string())),
+    
     createdAt: v.number(),
     updatedAt: v.number(),
   })

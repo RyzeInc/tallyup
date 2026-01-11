@@ -75,11 +75,11 @@ type DetailsExpanderProps = {
 // ============================================
 // Constants
 // ============================================
-const SCOPE_OPTIONS: Array<{ value: ContextScope; label: string }> = [
-  { value: "personal", label: "Personal" },
-  { value: "shared", label: "Shared" },
-  { value: "household", label: "Household" },
-  { value: "partner", label: "Partner" },
+const SCOPE_OPTIONS: Array<{ value: ContextScope; label: string; description?: string }> = [
+  { value: "personal", label: "Personal", description: "Just me" },
+  { value: "shared", label: "Shared", description: "Split with others" },
+  { value: "household", label: "Household", description: "Joint account/expense" },
+  { value: "partner", label: "Partner", description: "Paid by partner" },
 ];
 
 const FLAG_OPTIONS: Array<{ value: ContextFlag; label: string }> = [
@@ -151,57 +151,6 @@ function Pill({
         </span>
       )}
     </button>
-  );
-}
-
-// ============================================
-// Chip Selector (for single/multi select)
-// ============================================
-function ChipSelector<T extends string>({
-  options,
-  selected,
-  onSelect,
-  multiSelect = false,
-}: {
-  options: Array<{ value: T; label: string }>;
-  selected: T | T[] | undefined;
-  onSelect: (value: T | undefined) => void;
-  multiSelect?: boolean;
-}) {
-  const selectedArray = Array.isArray(selected)
-    ? selected
-    : selected
-      ? [selected]
-      : [];
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map((opt) => {
-        const isSelected = selectedArray.includes(opt.value);
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            onClick={() => {
-              if (multiSelect) {
-                // For multi-select, parent handles toggle
-                onSelect(opt.value);
-              } else {
-                // For single-select, toggle off if already selected
-                onSelect(isSelected ? undefined : opt.value);
-              }
-            }}
-            className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-            style={{
-              backgroundColor: isSelected ? "var(--primary)" : "var(--surface-subtle)",
-              color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 
@@ -306,7 +255,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
       {/* Primary Pills Row */}
       <div className="flex flex-wrap gap-1.5">
         <Pill
-          label="Context"
+          label="Personal / Joint"
           badge={contextBadge}
           isExpanded={expandedSection === "context"}
           onClick={() => onToggleSection("context")}
@@ -357,14 +306,37 @@ export function DetailsExpander(props: DetailsExpanderProps) {
 
       {/* Context Expansion */}
       <ExpandableSection isExpanded={expandedSection === "context"}>
-        <SectionLabel>Scope</SectionLabel>
-        <ChipSelector
-          options={SCOPE_OPTIONS}
-          selected={contextScope}
-          onSelect={onSetContextScope}
-        />
+        <SectionLabel>Who&apos;s this for?</SectionLabel>
+        <div className="flex flex-wrap gap-1.5 mb-1">
+          {SCOPE_OPTIONS.map((opt) => {
+            const isSelected = contextScope === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onSetContextScope(isSelected ? undefined : opt.value)}
+                className="h-8 px-3 rounded-lg text-xs font-medium transition-colors flex flex-col items-center justify-center"
+                style={{
+                  backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                  color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                  border: isSelected ? "none" : "1px solid var(--border)",
+                  minWidth: "70px",
+                }}
+              >
+                <span>{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[10px] mb-3" style={{ color: "var(--text-tertiary)" }}>
+          {contextScope === "personal" && "Just for you — counts towards your personal spending."}
+          {contextScope === "shared" && "Split with someone — e.g., splitting a bill."}
+          {contextScope === "household" && "Joint expense — from a shared account or household budget."}
+          {contextScope === "partner" && "Paid by your partner — track for visibility but not your expense."}
+          {!contextScope && "Optional: helps separate personal vs. shared spending in reports."}
+        </p>
         <div className="mt-3">
-          <SectionLabel>Flags</SectionLabel>
+          <SectionLabel>Additional Flags</SectionLabel>
           <div className="flex flex-wrap gap-1.5">
             {FLAG_OPTIONS.map((opt) => {
               const isSelected = contextFlags.includes(opt.value);
@@ -579,22 +551,10 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                 </button>
               </div>
             </div>
-            <div>
-              <SectionLabel>Method (optional)</SectionLabel>
-              <input
-                type="text"
-                value={account.method ?? ""}
-                onChange={(e) => onSetAccount({ method: e.target.value })}
-                placeholder="e.g., Visa *1234"
-                className="w-full h-8 px-2.5 text-xs rounded-md"
-                style={{
-                  backgroundColor: "var(--surface)",
-                  color: "var(--text)",
-                  border: "1px solid var(--border)",
-                  outline: "none",
-                }}
-              />
-            </div>
+            {/* Helper text */}
+            <p className="text-[10px] mt-2" style={{ color: "var(--text-tertiary)" }}>
+              Select which card or account was used for this transaction.
+            </p>
           </div>
         )}
       </ExpandableSection>

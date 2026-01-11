@@ -5,7 +5,7 @@ import { useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
-import { centsToDollars } from "@/components/utils";
+import { centsToDollars, getCategoryDisplayName } from "@/components/utils";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import Link from "next/link";
@@ -230,6 +230,15 @@ export default function InsightsPage() {
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
   const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
+  
+  // Fetch custom categories for display name resolution
+  const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
+  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
+  const allCustomCategories = useMemo(() => {
+    const expense = (expenseCategories ?? []) as { _id: string; name: string }[];
+    const income = (incomeCategories ?? []) as { _id: string; name: string }[];
+    return [...expense, ...income];
+  }, [expenseCategories, incomeCategories]);
 
   // Days in range
   const daysInRange = useMemo(() => getDaysBetween(startDate, endDate), [startDate, endDate]);
@@ -286,7 +295,7 @@ export default function InsightsPage() {
         income += e.amountCents;
       } else {
         expense += e.amountCents;
-        const c = (e.category ?? "Uncategorized").trim() || "Uncategorized";
+        const c = getCategoryDisplayName(e.category, allCustomCategories);
         categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
         categoryCount.set(c, (categoryCount.get(c) ?? 0) + 1);
 
@@ -384,7 +393,7 @@ export default function InsightsPage() {
       avgDailyOutflow: daysInRange > 0 ? expense / daysInRange : 0,
       savingsRate: income > 0 ? ((income - expense) / income) * 100 : 0,
     };
-  }, [filteredEntries, daysInRange]);
+  }, [filteredEntries, daysInRange, allCustomCategories]);
 
   const prevComputed = useMemo(() => {
     const all = filteredPrevEntries;
@@ -397,7 +406,7 @@ export default function InsightsPage() {
         income += e.amountCents;
       } else {
         expense += e.amountCents;
-        const c = (e.category ?? "Uncategorized").trim() || "Uncategorized";
+        const c = getCategoryDisplayName(e.category, allCustomCategories);
         categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
       }
     }
@@ -409,7 +418,7 @@ export default function InsightsPage() {
       categorySpend,
       transactionCount: all.length,
     };
-  }, [filteredPrevEntries]);
+  }, [filteredPrevEntries, allCustomCategories]);
 
   // ─────────────────────────────────────────────────────────────
   // Time-series data for Net Trend chart

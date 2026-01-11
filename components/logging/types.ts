@@ -109,6 +109,7 @@ export type SubmitResult =
 export type CategoryOption = {
   id: string;
   name: string;
+  description?: string;
 };
 
 export type AccountOption = {

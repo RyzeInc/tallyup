@@ -32,6 +32,8 @@ import Repeat from "lucide-react/dist/esm/icons/repeat.js";
 import Shield from "lucide-react/dist/esm/icons/shield.js";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles.js";
 import TrendingUp from "lucide-react/dist/esm/icons/trending-up.js";
+import Plus from "lucide-react/dist/esm/icons/plus.js";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2.js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme, APPEARANCE_OPTIONS, NAV_ITEM_CONFIG } from "@/components/ThemeProvider";
@@ -56,11 +58,13 @@ function isContextTag(x: string): x is ContextTag {
 
 type SettingsSection = "main" | "categories" | "export" | "privacy" | "help" | "theme" | "notifications";
 
-// Keys for localStorage
+// Keys for localStorage (fallback)
 const PINNED_EXPENSE_KEY = "tallyup.pinnedExpenseCategories";
 const PINNED_INCOME_KEY = "tallyup.pinnedIncomeCategories";
 const HIDDEN_TAGS_KEY = "tallyup.hiddenTags";
 const PINNED_TAGS_KEY = "tallyup.pinnedTags";
+const HIDDEN_EXPENSE_KEY = "tallyup.hiddenExpenseCategories";
+const HIDDEN_INCOME_KEY = "tallyup.hiddenIncomeCategories";
 const REVIEW_REMINDER_KEY = "tallyup.reviewReminder";
 
 export default function SettingsPage() {
@@ -70,11 +74,30 @@ export default function SettingsPage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<SettingsSection>("main");
 
-  // Category/tag management state
+  // Convex queries & mutations
+  const userPrefs = useQuery(api.preferences.getUserPreferences);
+  const upsertPrefs = useMutation(api.preferences.upsertUserPreferences);
+  const customCategories = useQuery(api.categories.listCategories);
+  const createCategory = useMutation(api.categories.createCategory);
+  const deleteCategory = useMutation(api.categories.deleteCategory);
+
+  // Category/tag management state - synced with Convex or localStorage fallback
   const [pinnedExpense, setPinnedExpense] = useState<ExpenseSpace[]>([]);
   const [pinnedIncome, setPinnedIncome] = useState<IncomeSpace[]>([]);
   const [pinnedTags, setPinnedTags] = useState<ContextTag[]>([]);
   const [hiddenTags, setHiddenTags] = useState<ContextTag[]>([]);
+  const [hiddenExpense, setHiddenExpense] = useState<string[]>([]);
+  const [hiddenIncome, setHiddenIncome] = useState<string[]>([]);
+
+  // New category input state
+  const [newExpenseCategory, setNewExpenseCategory] = useState("");
+  const [newIncomeCategory, setNewIncomeCategory] = useState("");
+  const [addingExpense, setAddingExpense] = useState(false);
+  const [addingIncome, setAddingIncome] = useState(false);
+
+  // Drag state for reordering
+  const [draggedItem, setDraggedItem] = useState<{ type: "expense" | "income" | "tag"; name: string } | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<{ type: "expense" | "income" | "tag"; name: string } | null>(null);
 
   function errorMessage(error: unknown): string | undefined {
     if (error instanceof Error) return error.message;
@@ -82,50 +105,273 @@ export default function SettingsPage() {
     return undefined;
   }
 
+  // Load from Convex prefs when available, fallback to localStorage
   useEffect(() => {
+    if (userPrefs) {
+      // Use Convex data
+      setPinnedExpense((userPrefs.pinnedExpenseCategories ?? []).filter(isExpenseSpace));
+      setPinnedIncome((userPrefs.pinnedIncomeCategories ?? []).filter(isIncomeSpace));
+      setPinnedTags((userPrefs.pinnedContextTags ?? []).filter(isContextTag));
+      setHiddenTags(userPrefs.hiddenContextTags ?? []);
+      setHiddenExpense(userPrefs.hiddenExpenseCategories ?? []);
+      setHiddenIncome(userPrefs.hiddenIncomeCategories ?? []);
+    } else {
+      // Fallback to localStorage
+      try {
+        const pe = localStorage.getItem(PINNED_EXPENSE_KEY);
+        if (pe) setPinnedExpense(((JSON.parse(pe) as string[]) ?? []).filter(isExpenseSpace));
+        const pi = localStorage.getItem(PINNED_INCOME_KEY);
+        if (pi) setPinnedIncome(((JSON.parse(pi) as string[]) ?? []).filter(isIncomeSpace));
+        const pt = localStorage.getItem(PINNED_TAGS_KEY);
+        if (pt) setPinnedTags(((JSON.parse(pt) as string[]) ?? []).filter(isContextTag));
+        const ht = localStorage.getItem(HIDDEN_TAGS_KEY);
+        if (ht) setHiddenTags(((JSON.parse(ht) as string[]) ?? []).filter(isContextTag));
+        const he = localStorage.getItem(HIDDEN_EXPENSE_KEY);
+        if (he) setHiddenExpense(JSON.parse(he) as string[] ?? []);
+        const hi = localStorage.getItem(HIDDEN_INCOME_KEY);
+        if (hi) setHiddenIncome(JSON.parse(hi) as string[] ?? []);
+      } catch {}
+    }
+  }, [userPrefs]);
+
+  // Save to both localStorage and Convex
+  const savePrefs = useCallback(async (updates: {
+    pinnedExpenseCategories?: string[];
+    pinnedIncomeCategories?: string[];
+    pinnedContextTags?: string[];
+    hiddenContextTags?: string[];
+    hiddenExpenseCategories?: string[];
+    hiddenIncomeCategories?: string[];
+    expenseCategoryOrder?: string[];
+    incomeCategoryOrder?: string[];
+    contextTagOrder?: string[];
+  }) => {
+    // Save to localStorage first for immediate effect
+    if (updates.pinnedExpenseCategories) {
+      localStorage.setItem(PINNED_EXPENSE_KEY, JSON.stringify(updates.pinnedExpenseCategories));
+    }
+    if (updates.pinnedIncomeCategories) {
+      localStorage.setItem(PINNED_INCOME_KEY, JSON.stringify(updates.pinnedIncomeCategories));
+    }
+    if (updates.pinnedContextTags) {
+      localStorage.setItem(PINNED_TAGS_KEY, JSON.stringify(updates.pinnedContextTags));
+    }
+    if (updates.hiddenContextTags) {
+      localStorage.setItem(HIDDEN_TAGS_KEY, JSON.stringify(updates.hiddenContextTags));
+    }
+    if (updates.hiddenExpenseCategories) {
+      localStorage.setItem(HIDDEN_EXPENSE_KEY, JSON.stringify(updates.hiddenExpenseCategories));
+    }
+    if (updates.hiddenIncomeCategories) {
+      localStorage.setItem(HIDDEN_INCOME_KEY, JSON.stringify(updates.hiddenIncomeCategories));
+    }
+    if (updates.expenseCategoryOrder) {
+      localStorage.setItem("tallyup.expenseCategoryOrder", JSON.stringify(updates.expenseCategoryOrder));
+    }
+    if (updates.incomeCategoryOrder) {
+      localStorage.setItem("tallyup.incomeCategoryOrder", JSON.stringify(updates.incomeCategoryOrder));
+    }
+    if (updates.contextTagOrder) {
+      localStorage.setItem("tallyup.contextTagOrder", JSON.stringify(updates.contextTagOrder));
+    }
+    // Then save to Convex
     try {
-      const pe = localStorage.getItem(PINNED_EXPENSE_KEY);
-      if (pe) setPinnedExpense(((JSON.parse(pe) as string[]) ?? []).filter(isExpenseSpace));
-      const pi = localStorage.getItem(PINNED_INCOME_KEY);
-      if (pi) setPinnedIncome(((JSON.parse(pi) as string[]) ?? []).filter(isIncomeSpace));
-      const pt = localStorage.getItem(PINNED_TAGS_KEY);
-      if (pt) setPinnedTags(((JSON.parse(pt) as string[]) ?? []).filter(isContextTag));
-      const ht = localStorage.getItem(HIDDEN_TAGS_KEY);
-      if (ht) setHiddenTags(((JSON.parse(ht) as string[]) ?? []).filter(isContextTag));
-    } catch {}
-  }, []);
+      await upsertPrefs(updates);
+    } catch (e) {
+      console.error("Failed to save preferences:", e);
+    }
+  }, [upsertPrefs]);
 
   const togglePinExpense = useCallback((cat: ExpenseSpace) => {
     setPinnedExpense((prev) => {
       const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
-      try { localStorage.setItem(PINNED_EXPENSE_KEY, JSON.stringify(next)); } catch {}
+      savePrefs({ pinnedExpenseCategories: next });
       return next;
     });
-  }, []);
+  }, [savePrefs]);
 
   const togglePinIncome = useCallback((cat: IncomeSpace) => {
     setPinnedIncome((prev) => {
       const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
-      try { localStorage.setItem(PINNED_INCOME_KEY, JSON.stringify(next)); } catch {}
+      savePrefs({ pinnedIncomeCategories: next });
       return next;
     });
-  }, []);
+  }, [savePrefs]);
 
   const togglePinTag = useCallback((tag: ContextTag) => {
     setPinnedTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
-      try { localStorage.setItem(PINNED_TAGS_KEY, JSON.stringify(next)); } catch {}
+      savePrefs({ pinnedContextTags: next });
       return next;
     });
-  }, []);
+  }, [savePrefs]);
 
   const toggleHideTag = useCallback((tag: ContextTag) => {
     setHiddenTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag];
-      try { localStorage.setItem(HIDDEN_TAGS_KEY, JSON.stringify(next)); } catch {}
+      savePrefs({ hiddenContextTags: next });
       return next;
     });
+  }, [savePrefs]);
+
+  const toggleHideExpense = useCallback((cat: string) => {
+    setHiddenExpense((prev) => {
+      const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
+      savePrefs({ hiddenExpenseCategories: next });
+      return next;
+    });
+  }, [savePrefs]);
+
+  const toggleHideIncome = useCallback((cat: string) => {
+    setHiddenIncome((prev) => {
+      const next = prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat];
+      savePrefs({ hiddenIncomeCategories: next });
+      return next;
+    });
+  }, [savePrefs]);
+
+  // Add custom category handlers
+  const handleAddExpenseCategory = useCallback(async () => {
+    const name = newExpenseCategory.trim();
+    if (!name) return;
+    try {
+      await createCategory({ name, categoryType: "expense" });
+      setNewExpenseCategory("");
+      setAddingExpense(false);
+      toast.success("Category added", { description: `"${name}" added to expenses` });
+    } catch (e) {
+      toast.error("Failed to add category", { description: errorMessage(e) });
+    }
+  }, [newExpenseCategory, createCategory, toast]);
+
+  const handleAddIncomeCategory = useCallback(async () => {
+    const name = newIncomeCategory.trim();
+    if (!name) return;
+    try {
+      await createCategory({ name, categoryType: "income" });
+      setNewIncomeCategory("");
+      setAddingIncome(false);
+      toast.success("Category added", { description: `"${name}" added to income sources` });
+    } catch (e) {
+      toast.error("Failed to add category", { description: errorMessage(e) });
+    }
+  }, [newIncomeCategory, createCategory, toast]);
+
+  // Get custom categories by type
+  const customExpenseCategories = useMemo(() => 
+    (customCategories ?? []).filter(c => c.categoryType === "expense").map(c => c.name),
+    [customCategories]
+  );
+  const customIncomeCategories = useMemo(() => 
+    (customCategories ?? []).filter(c => c.categoryType === "income").map(c => c.name),
+    [customCategories]
+  );
+
+  // Combined lists: defaults + custom
+  const allExpenseCategories = useMemo(() => [
+    ...EXPENSE_SPACES,
+    ...customExpenseCategories.filter(c => !EXPENSE_SPACES.includes(c as ExpenseSpace))
+  ], [customExpenseCategories]);
+
+  const allIncomeCategories = useMemo(() => [
+    ...INCOME_SPACES,
+    ...customIncomeCategories.filter(c => !INCOME_SPACES.includes(c as IncomeSpace))
+  ], [customIncomeCategories]);
+
+  // Order state - derived from prefs or defaults
+  const [expenseOrder, setExpenseOrder] = useState<string[]>([]);
+  const [incomeOrder, setIncomeOrder] = useState<string[]>([]);
+  const [tagOrder, setTagOrder] = useState<string[]>([]);
+
+  // Initialize order from prefs or use default order
+  useEffect(() => {
+    if (userPrefs?.expenseCategoryOrder?.length) {
+      // Merge saved order with any new categories
+      const saved = userPrefs.expenseCategoryOrder;
+      const all = allExpenseCategories;
+      const ordered = [...saved.filter(c => all.includes(c)), ...all.filter(c => !saved.includes(c))];
+      setExpenseOrder(ordered);
+    } else {
+      setExpenseOrder([...allExpenseCategories]);
+    }
+  }, [userPrefs?.expenseCategoryOrder, allExpenseCategories]);
+
+  useEffect(() => {
+    if (userPrefs?.incomeCategoryOrder?.length) {
+      const saved = userPrefs.incomeCategoryOrder;
+      const all = allIncomeCategories;
+      const ordered = [...saved.filter(c => all.includes(c)), ...all.filter(c => !saved.includes(c))];
+      setIncomeOrder(ordered);
+    } else {
+      setIncomeOrder([...allIncomeCategories]);
+    }
+  }, [userPrefs?.incomeCategoryOrder, allIncomeCategories]);
+
+  useEffect(() => {
+    if (userPrefs?.contextTagOrder?.length) {
+      const saved = userPrefs.contextTagOrder;
+      const all = [...CONTEXT_TAGS];
+      const ordered = [...saved.filter(t => all.includes(t as ContextTag)), ...all.filter(t => !saved.includes(t))];
+      setTagOrder(ordered);
+    } else {
+      setTagOrder([...CONTEXT_TAGS]);
+    }
+  }, [userPrefs?.contextTagOrder]);
+
+  // Drag handlers
+  const handleDragStart = useCallback((type: "expense" | "income" | "tag", name: string) => {
+    setDraggedItem({ type, name });
   }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, type: "expense" | "income" | "tag", name: string) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.type === type && draggedItem.name !== name) {
+      setDragOverItem({ type, name });
+    }
+  }, [draggedItem]);
+
+  const handleDragEnd = useCallback(async () => {
+    if (draggedItem && dragOverItem && draggedItem.type === dragOverItem.type) {
+      const type = draggedItem.type;
+      
+      if (type === "expense") {
+        const items = [...expenseOrder];
+        const fromIdx = items.indexOf(draggedItem.name);
+        const toIdx = items.indexOf(dragOverItem.name);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          items.splice(fromIdx, 1);
+          items.splice(toIdx, 0, draggedItem.name);
+          setExpenseOrder(items);
+          await savePrefs({ expenseCategoryOrder: items } as Parameters<typeof savePrefs>[0]);
+          toast.success("Order saved");
+        }
+      } else if (type === "income") {
+        const items = [...incomeOrder];
+        const fromIdx = items.indexOf(draggedItem.name);
+        const toIdx = items.indexOf(dragOverItem.name);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          items.splice(fromIdx, 1);
+          items.splice(toIdx, 0, draggedItem.name);
+          setIncomeOrder(items);
+          await savePrefs({ incomeCategoryOrder: items } as Parameters<typeof savePrefs>[0]);
+          toast.success("Order saved");
+        }
+      } else if (type === "tag") {
+        const items = [...tagOrder];
+        const fromIdx = items.indexOf(draggedItem.name);
+        const toIdx = items.indexOf(dragOverItem.name);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          items.splice(fromIdx, 1);
+          items.splice(toIdx, 0, draggedItem.name);
+          setTagOrder(items);
+          await savePrefs({ contextTagOrder: items } as Parameters<typeof savePrefs>[0]);
+          toast.success("Order saved");
+        }
+      }
+    }
+    setDraggedItem(null);
+    setDragOverItem(null);
+  }, [draggedItem, dragOverItem, expenseOrder, incomeOrder, tagOrder, savePrefs, toast]);
 
   // Privacy settings
   const [hideAmounts, setHideAmounts] = useState(false);
@@ -239,7 +485,7 @@ export default function SettingsPage() {
             >
               <h2 className="text-lg font-semibold mb-1" style={{ color: "var(--text)" }}>Categories & Tags</h2>
               <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                Manage your category sets and context tags
+                Customize categories, add your own, or hide ones you don&apos;t use
               </p>
             </div>
 
@@ -248,43 +494,154 @@ export default function SettingsPage() {
               className="rounded-xl p-4"
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
-              <div className="flex items-center gap-2 mb-3">
-                <ArrowUpRight className="h-4 w-4" style={{ color: "var(--danger)" }} />
-                <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Expense Categories</h3>
-                <span className="text-xs ml-auto" style={{ color: "var(--text-tertiary)" }}>
-                  Tap ⭐ to pin to top
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <ArrowUpRight className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                  <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Expense Categories</h3>
+                </div>
+                <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                  ⭐ Pin · 👁 Hide
                 </span>
               </div>
               <div className="space-y-2">
-                {/* Show pinned first, then rest */}
-                {[...pinnedExpense.filter(c => EXPENSE_SPACES.includes(c)), ...EXPENSE_SPACES.filter(c => !pinnedExpense.includes(c))].map((cat) => {
-                  const isPinned = pinnedExpense.includes(cat);
+                {/* Render in saved order, with hidden items at the end */}
+                {[
+                  ...expenseOrder.filter(c => !hiddenExpense.includes(c)),
+                  ...expenseOrder.filter(c => hiddenExpense.includes(c)),
+                ].map((cat) => {
+                  const isPinned = pinnedExpense.includes(cat as ExpenseSpace);
+                  const isHidden = hiddenExpense.includes(cat);
+                  const isCustom = customExpenseCategories.includes(cat);
+                  const customCat = (customCategories ?? []).find(c => c.name === cat && c.categoryType === "expense");
                   return (
                     <div
                       key={cat}
-                      className="flex items-center justify-between py-2 px-3 rounded-lg"
-                      style={{ backgroundColor: isPinned ? "var(--accent-subtle)" : "var(--surface-subtle)" }}
+                      draggable
+                      onDragStart={() => handleDragStart("expense", cat)}
+                      onDragOver={(e) => handleDragOver(e, "expense", cat)}
+                      onDragEnd={handleDragEnd}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg transition-all"
+                      style={{
+                        backgroundColor: dragOverItem?.type === "expense" && dragOverItem.name === cat
+                          ? "var(--accent)"
+                          : isHidden 
+                            ? "var(--surface)" 
+                            : isPinned 
+                              ? "var(--accent-subtle)" 
+                              : "var(--surface-subtle)",
+                        opacity: isHidden ? 0.5 : 1,
+                        cursor: "grab",
+                      }}
                     >
                       <div className="flex items-center gap-3">
-                        <GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
-                        <span className="text-sm" style={{ color: "var(--text)" }}>{cat}</span>
-                        {isPinned && (
+                        <GripVertical className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                        <span className="text-sm" style={{ color: "var(--text)", textDecoration: isHidden ? "line-through" : "none" }}>{cat}</span>
+                        {isPinned && !isHidden && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
                             Pinned
                           </span>
                         )}
+                        {isHidden && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text-tertiary)" }}>
+                            Hidden
+                          </span>
+                        )}
+                        {isCustom && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--success-subtle)", color: "var(--success)" }}>
+                            Custom
+                          </span>
+                        )}
                       </div>
-                      <button
-                        onClick={() => togglePinExpense(cat)}
-                        className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
-                        title={isPinned ? "Unpin" : "Pin to top"}
-                      >
-                        <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => isExpenseSpace(cat) && togglePinExpense(cat)}
+                          className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
+                          title={isPinned ? "Unpin" : "Pin to top"}
+                          disabled={isHidden}
+                        >
+                          <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
+                        </button>
+                        <button
+                          onClick={() => toggleHideExpense(cat)}
+                          className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
+                          title={isHidden ? "Show" : "Hide"}
+                        >
+                          {isHidden ? (
+                            <EyeOff className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                          ) : (
+                            <Eye className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                          )}
+                        </button>
+                        {isCustom && customCat && (
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Delete "${cat}"?`)) {
+                                try {
+                                  await deleteCategory({ id: customCat._id });
+                                  toast.success("Category deleted");
+                                } catch (e) {
+                                  toast.error("Failed to delete", { description: errorMessage(e) });
+                                }
+                              }
+                            }}
+                            className="p-1.5 rounded hover:bg-[var(--danger-subtle)] transition-colors"
+                            title="Delete custom category"
+                          >
+                            <Trash2 className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
+              
+              {/* Add custom expense category */}
+              {addingExpense ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newExpenseCategory}
+                    onChange={(e) => setNewExpenseCategory(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddExpenseCategory()}
+                    placeholder="New category name..."
+                    autoFocus
+                    className="flex-1 px-3 py-2 rounded-lg text-sm"
+                    style={{
+                      backgroundColor: "var(--input)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text)",
+                    }}
+                  />
+                  <button
+                    onClick={handleAddExpenseCategory}
+                    className="px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => { setAddingExpense(false); setNewExpenseCategory(""); }}
+                    className="px-3 py-2 rounded-lg text-sm"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingExpense(true)}
+                  className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium w-full justify-center"
+                  style={{ backgroundColor: "var(--surface-subtle)", color: "var(--accent)" }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Custom Category
+                </button>
+              )}
+              
+              <p className="text-xs mt-3" style={{ color: "var(--text-tertiary)" }}>
+                Hidden categories won&apos;t appear in quick-add flows but remain on existing entries.
+              </p>
             </div>
 
             {/* Income Categories */}
@@ -292,42 +649,154 @@ export default function SettingsPage() {
               className="rounded-xl p-4"
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
-              <div className="flex items-center gap-2 mb-3">
-                <ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
-                <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Income Categories</h3>
-                <span className="text-xs ml-auto" style={{ color: "var(--text-tertiary)" }}>
-                  Tap ⭐ to pin to top
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
+                  <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>Income Categories</h3>
+                </div>
+                <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                  ⭐ Pin · 👁 Hide
                 </span>
               </div>
               <div className="space-y-2">
-                {[...pinnedIncome.filter(c => INCOME_SPACES.includes(c)), ...INCOME_SPACES.filter(c => !pinnedIncome.includes(c))].map((cat) => {
-                  const isPinned = pinnedIncome.includes(cat);
+                {/* Render in saved order, with hidden items at the end */}
+                {[
+                  ...incomeOrder.filter(c => !hiddenIncome.includes(c)),
+                  ...incomeOrder.filter(c => hiddenIncome.includes(c)),
+                ].map((cat) => {
+                  const isPinned = pinnedIncome.includes(cat as IncomeSpace);
+                  const isHidden = hiddenIncome.includes(cat);
+                  const isCustom = customIncomeCategories.includes(cat);
+                  const customCat = (customCategories ?? []).find(c => c.name === cat && c.categoryType === "income");
                   return (
                     <div
                       key={cat}
-                      className="flex items-center justify-between py-2 px-3 rounded-lg"
-                      style={{ backgroundColor: isPinned ? "var(--accent-subtle)" : "var(--surface-subtle)" }}
+                      draggable
+                      onDragStart={() => handleDragStart("income", cat)}
+                      onDragOver={(e) => handleDragOver(e, "income", cat)}
+                      onDragEnd={handleDragEnd}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg transition-all"
+                      style={{
+                        backgroundColor: dragOverItem?.type === "income" && dragOverItem.name === cat
+                          ? "var(--accent)"
+                          : isHidden 
+                            ? "var(--surface)" 
+                            : isPinned 
+                              ? "var(--accent-subtle)" 
+                              : "var(--surface-subtle)",
+                        opacity: isHidden ? 0.5 : 1,
+                        cursor: "grab",
+                      }}
                     >
                       <div className="flex items-center gap-3">
-                        <GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
-                        <span className="text-sm" style={{ color: "var(--text)" }}>{cat}</span>
-                        {isPinned && (
+                        <GripVertical className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                        <span className="text-sm" style={{ color: "var(--text)", textDecoration: isHidden ? "line-through" : "none" }}>{cat}</span>
+                        {isPinned && !isHidden && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>
                             Pinned
                           </span>
                         )}
+                        {isHidden && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text-tertiary)" }}>
+                            Hidden
+                          </span>
+                        )}
+                        {isCustom && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--success-subtle)", color: "var(--success)" }}>
+                            Custom
+                          </span>
+                        )}
                       </div>
-                      <button
-                        onClick={() => togglePinIncome(cat)}
-                        className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
-                        title={isPinned ? "Unpin" : "Pin to top"}
-                      >
-                        <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => isIncomeSpace(cat) && togglePinIncome(cat)}
+                          className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
+                          title={isPinned ? "Unpin" : "Pin to top"}
+                          disabled={isHidden}
+                        >
+                          <Star className="h-4 w-4" style={{ color: isPinned ? "var(--warning)" : "var(--text-tertiary)" }} fill={isPinned ? "var(--warning)" : "none"} />
+                        </button>
+                        <button
+                          onClick={() => toggleHideIncome(cat)}
+                          className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
+                          title={isHidden ? "Show" : "Hide"}
+                        >
+                          {isHidden ? (
+                            <EyeOff className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                          ) : (
+                            <Eye className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                          )}
+                        </button>
+                        {isCustom && customCat && (
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Delete "${cat}"?`)) {
+                                try {
+                                  await deleteCategory({ id: customCat._id });
+                                  toast.success("Category deleted");
+                                } catch (e) {
+                                  toast.error("Failed to delete", { description: errorMessage(e) });
+                                }
+                              }
+                            }}
+                            className="p-1.5 rounded hover:bg-[var(--danger-subtle)] transition-colors"
+                            title="Delete custom category"
+                          >
+                            <Trash2 className="h-4 w-4" style={{ color: "var(--danger)" }} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
+              
+              {/* Add custom income category */}
+              {addingIncome ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newIncomeCategory}
+                    onChange={(e) => setNewIncomeCategory(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddIncomeCategory()}
+                    placeholder="New income source..."
+                    autoFocus
+                    className="flex-1 px-3 py-2 rounded-lg text-sm"
+                    style={{
+                      backgroundColor: "var(--input)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text)",
+                    }}
+                  />
+                  <button
+                    onClick={handleAddIncomeCategory}
+                    className="px-3 py-2 rounded-lg text-sm font-medium"
+                    style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={() => { setAddingIncome(false); setNewIncomeCategory(""); }}
+                    className="px-3 py-2 rounded-lg text-sm"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setAddingIncome(true)}
+                  className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium w-full justify-center"
+                  style={{ backgroundColor: "var(--surface-subtle)", color: "var(--accent)" }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Custom Income Source
+                </button>
+              )}
+              
+              <p className="text-xs mt-3" style={{ color: "var(--text-tertiary)" }}>
+                Hidden categories won&apos;t appear in quick-add flows but remain on existing entries.
+              </p>
             </div>
 
             {/* Context Tags */}
@@ -345,25 +814,35 @@ export default function SettingsPage() {
                 </span>
               </div>
               <div className="space-y-2">
-                {/* Show pinned first, then visible, then hidden */}
+                {/* Render in saved order, with hidden items at the end */}
                 {[
-                  ...pinnedTags.filter(t => CONTEXT_TAGS.includes(t) && !hiddenTags.includes(t)),
-                  ...CONTEXT_TAGS.filter(t => !pinnedTags.includes(t) && !hiddenTags.includes(t)),
-                  ...hiddenTags.filter(t => CONTEXT_TAGS.includes(t)),
+                  ...tagOrder.filter(t => !hiddenTags.includes(t)),
+                  ...tagOrder.filter(t => hiddenTags.includes(t)),
                 ].map((tag) => {
-                  const isPinned = pinnedTags.includes(tag);
+                  const isPinned = pinnedTags.includes(tag as ContextTag);
                   const isHidden = hiddenTags.includes(tag);
                   return (
                     <div
                       key={tag}
-                      className="flex items-center justify-between py-2 px-3 rounded-lg"
+                      draggable
+                      onDragStart={() => handleDragStart("tag", tag)}
+                      onDragOver={(e) => handleDragOver(e, "tag", tag)}
+                      onDragEnd={handleDragEnd}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg transition-all"
                       style={{
-                        backgroundColor: isHidden ? "var(--surface)" : isPinned ? "var(--accent-subtle)" : "var(--surface-subtle)",
+                        backgroundColor: dragOverItem?.type === "tag" && dragOverItem.name === tag
+                          ? "var(--accent)"
+                          : isHidden 
+                            ? "var(--surface)" 
+                            : isPinned 
+                              ? "var(--accent-subtle)" 
+                              : "var(--surface-subtle)",
                         opacity: isHidden ? 0.5 : 1,
+                        cursor: "grab",
                       }}
                     >
                       <div className="flex items-center gap-3">
-                        <GripVertical className="h-4 w-4 cursor-grab" style={{ color: "var(--text-tertiary)" }} />
+                        <GripVertical className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                         <span className="text-sm" style={{ color: "var(--text)", textDecoration: isHidden ? "line-through" : "none" }}>{tag}</span>
                         {isPinned && !isHidden && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}>

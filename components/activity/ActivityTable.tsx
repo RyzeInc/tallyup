@@ -1,19 +1,21 @@
 "use client";
 
 import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc, Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
-import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES } from "@/components/utils";
+import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES, getCategoryDisplayName } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Swipe threshold in px
 const SWIPE_THRESHOLD = 80;
 
 export default function ActivityTable({
   entries = [],
+  viewMode = "cards",
   onDelete,
   onSavePattern,
   onBulkComplete,
@@ -21,6 +23,7 @@ export default function ActivityTable({
   onSelectModeChange,
 }: {
   entries?: Doc<"entries">[];
+  viewMode?: "cards" | "table";
   onDelete?: (id: Id<"entries">) => void;
   onSavePattern?: (entry: Doc<"entries">) => void;
   onBulkComplete?: () => void;
@@ -28,6 +31,16 @@ export default function ActivityTable({
   onSelectModeChange?: (mode: boolean) => void;
 }) {
   const toast = useToast();
+  const router = useRouter();
+  
+  // Fetch custom categories to resolve IDs to names
+  const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
+  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
+  const allCustomCategories = useMemo(() => {
+    const expense = (expenseCategories ?? []) as { _id: string; name: string }[];
+    const income = (incomeCategories ?? []) as { _id: string; name: string }[];
+    return [...expense, ...income];
+  }, [expenseCategories, incomeCategories]);
   
   // Selection mode state - use external control if provided
   const [internalSelectMode, setInternalSelectMode] = useState(false);
@@ -163,23 +176,26 @@ export default function ActivityTable({
     setSwipeOffset((o) => ({ ...o, [id]: Math.max(-SWIPE_THRESHOLD, Math.min(SWIPE_THRESHOLD, deltaX)) }));
   }, []);
 
-  const handleTouchEnd = useCallback(async (id: Id<"entries">) => {
+  const handleTouchEnd = useCallback(async (id: Id<"entries">, e: React.TouchEvent) => {
     const offset = swipeOffset[id] ?? 0;
     if (offset >= SWIPE_THRESHOLD) {
       // Swipe right = mark reviewed
+      e.preventDefault();
       try {
         await updateEntry({ id, needsReview: false });
         onBulkComplete?.();
-      } catch (e) {
-        console.error(e);
+      } catch (err) {
+        console.error(err);
       }
     } else if (offset <= -SWIPE_THRESHOLD) {
-      // Swipe left = edit (navigate)
-      window.location.href = `/activity?edit=${id}`;
+      // Swipe left = edit (navigate using Next.js router)
+      e.preventDefault();
+      router.push(`/activity?edit=${id}`);
     }
+    // For small/no swipes, don't prevent default - allow Link to work
     setSwipeOffset((o) => ({ ...o, [id]: 0 }));
     delete touchStart.current[id];
-  }, [swipeOffset, updateEntry, onBulkComplete]);
+  }, [swipeOffset, updateEntry, onBulkComplete, router]);
 
   // Get category options based on selected entries
   const categoryOptions = useMemo(() => {
@@ -231,7 +247,100 @@ export default function ActivityTable({
         </div>
       )}
 
-      {/* Transaction List */}
+      {/* Transaction List - Table View */}
+      {viewMode === "table" && (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          {/* Table Header */}
+          <div
+            className="flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide"
+            style={{ 
+              backgroundColor: "var(--surface-subtle)", 
+              color: "var(--text-tertiary)",
+              borderBottom: "1px solid var(--border)" 
+            }}
+          >
+            {selectMode && <div className="w-5 shrink-0" />}
+            <div className="w-[72px] shrink-0 text-right">Date</div>
+            <div className="flex-1 min-w-0">Description</div>
+            <div className="w-[100px] shrink-0">Category</div>
+            <div className="w-[80px] shrink-0 text-right">Amount</div>
+          </div>
+          {entries.map((r, i) => {
+            const isIncome = r.type === "income";
+            const amountColor = isIncome ? "var(--success)" : "var(--text)";
+            const amountPrefix = isIncome ? "+" : "−";
+            const categoryLabel = getCategoryDisplayName(r.category || r.bucket, allCustomCategories);
+            
+            return (
+              <div
+                key={r._id}
+                className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-[var(--surface-subtle)] transition-colors ${i > 0 ? "border-t" : ""}`}
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => {
+                  if (selectMode) {
+                    toggle(r._id);
+                  } else {
+                    router.push(`/activity?edit=${r._id}`);
+                  }
+                }}
+              >
+                {/* Checkbox */}
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={!!selected[r._id]}
+                    onChange={() => toggle(r._id)}
+                    className="h-4 w-4 shrink-0 rounded"
+                    style={{ accentColor: "var(--primary)" }}
+                  />
+                )}
+                
+                {/* Date */}
+                <div className="w-[72px] shrink-0 text-right text-[12px] tabular-nums" style={{ color: "var(--text-tertiary)" }}>
+                  {new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </div>
+                
+                {/* Description */}
+                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                  <span className="text-[13px] font-medium truncate" style={{ color: "var(--text)" }}>
+                    {r.merchant || r.note || categoryLabel}
+                  </span>
+                  {r.needsReview && (
+                    <span
+                      className="shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold"
+                      style={{ backgroundColor: "var(--warning-subtle)", color: "var(--warning)" }}
+                    >
+                      !
+                    </span>
+                  )}
+                  {r.recurringRuleId && (
+                    <Lucide.Repeat className="h-3 w-3 shrink-0" style={{ color: "var(--text-tertiary)" }} />
+                  )}
+                </div>
+                
+                {/* Category */}
+                <div className="w-[100px] shrink-0 text-[11px] truncate" style={{ color: "var(--text-secondary)" }}>
+                  {categoryLabel}
+                </div>
+                
+                {/* Amount */}
+                <div
+                  className="w-[80px] shrink-0 text-right text-[13px] font-semibold tabular-nums"
+                  style={{ color: amountColor }}
+                >
+                  {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Transaction List - Card View */}
+      {viewMode === "cards" && (
       <div
         className="rounded-xl overflow-hidden"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
@@ -242,7 +351,7 @@ export default function ActivityTable({
           const amountPrefix = isIncome ? "+" : "−";
           
           // Build secondary line: Category · Tags (as short chips)
-          const categoryLabel = r.category || r.bucket || "Uncategorized";
+          const categoryLabel = getCategoryDisplayName(r.category || r.bucket, allCustomCategories);
           const tagLabels = r.tags?.slice(0, 2) || [];
           const offset = swipeOffset[r._id] ?? 0;
           
@@ -282,8 +391,21 @@ export default function ActivityTable({
               
               {/* Main row content */}
               <div
-                className="relative flex items-center gap-3 px-4 py-3 transition-transform bg-[var(--surface)]"
+                className="relative flex items-center gap-3 px-4 py-3 transition-transform bg-[var(--surface)] cursor-pointer"
                 style={{ transform: `translateX(${offset}px)` }}
+                onClick={(e) => {
+                  // Only navigate if not in select mode and click target isn't a button/checkbox
+                  const target = e.target as HTMLElement;
+                  if (selectMode) {
+                    toggle(r._id);
+                    return;
+                  }
+                  if (target.tagName === 'INPUT' || target.tagName === 'BUTTON' || target.closest('button')) {
+                    return;
+                  }
+                  // Navigate to edit using Next.js router (prevents full page reload)
+                  router.push(`/activity?edit=${r._id}`);
+                }}
                 onTouchStart={(e) => {
                   handleTouchStart(r._id, e);
                   // Long press to enter select mode
@@ -299,13 +421,13 @@ export default function ActivityTable({
                     longPressTimer.current = null;
                   }
                 }}
-                onTouchEnd={() => {
+                onTouchEnd={(e) => {
                   if (longPressTimer.current) {
                     clearTimeout(longPressTimer.current);
                     longPressTimer.current = null;
                   }
                   if (!selectMode) {
-                    handleTouchEnd(r._id);
+                    handleTouchEnd(r._id, e);
                   }
                 }}
               >
@@ -336,13 +458,13 @@ export default function ActivityTable({
 
               {/* Main Content */}
               <Link href={`/activity?edit=${r._id}`} className="flex-1 min-w-0">
-                {/* Primary: Title */}
+                {/* Primary: Title - Merchant/Name takes priority, note is separate */}
                 <div className="flex items-center gap-2">
                   <span
                     className="text-body font-semibold truncate"
                     style={{ color: "var(--text)" }}
                   >
-                    {r.note || r.merchant || categoryLabel}
+                    {r.merchant || categoryLabel}
                   </span>
                   {r.needsReview && (
                     <span
@@ -353,6 +475,13 @@ export default function ActivityTable({
                     </span>
                   )}
                 </div>
+                
+                {/* Note - shown separately below title if present */}
+                {r.note && (
+                  <div className="text-[11px] truncate" style={{ color: "var(--text-secondary)" }}>
+                    {r.note}
+                  </div>
+                )}
                 
                 {/* Secondary: Category · Context tags */}
                 <div className="flex items-center gap-1.5 text-meta truncate" style={{ color: "var(--text-secondary)" }}>
@@ -422,6 +551,7 @@ export default function ActivityTable({
           );
         })}
       </div>
+      )}
 
       {/* Fixed Bottom Action Bar - shown when in select mode with items selected */}
       {selectMode && selectedIds.length > 0 && (

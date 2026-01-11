@@ -42,6 +42,21 @@ export default function ActivityPage() {
   
   // Selection mode - controlled from here, passed to ActivityTable
   const [selectMode, setSelectMode] = useState(false);
+  
+  // View mode - "cards" (default) or "table" (compact ledger view)
+  const [viewMode, setViewMode] = useState<"cards" | "table">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("tallyup.activityViewMode") as "cards" | "table") || "cards";
+    }
+    return "cards";
+  });
+  
+  // Persist view mode
+  useEffect(() => {
+    try {
+      localStorage.setItem("tallyup.activityViewMode", viewMode);
+    } catch {}
+  }, [viewMode]);
 
   // Filter state
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
@@ -55,11 +70,15 @@ export default function ActivityPage() {
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>("newest");
 
   // Get review count for badge
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as EntryDoc[] | undefined;
   const reviewCount = inbox?.length ?? 0;
+
+  // Get user's accounts for filtering
+  const accounts = useQuery(api.accounts.listAccounts, {}) as Doc<"accounts">[] | undefined;
 
   // Focus search on mount if requested
   useEffect(() => {
@@ -229,7 +248,7 @@ export default function ActivityPage() {
       entries = entries.filter((e) => Math.abs(e.amountCents) <= maxCents);
     }
     
-    // Apply method/account filter
+    // Apply method/account filter (legacy methodOrAccount string)
     if (selectedMethods.length > 0) {
       entries = entries.filter((e) => {
         const method = e.methodOrAccount ?? "";
@@ -237,6 +256,17 @@ export default function ActivityPage() {
           if (m === "__unspecified__") return !e.methodOrAccount || e.methodOrAccount.trim() === "";
           return method.toLowerCase() === m.toLowerCase();
         });
+      });
+    }
+
+    // Apply account filter (linked accounts)
+    if (selectedAccountIds.length > 0) {
+      entries = entries.filter((e) => {
+        // Check if entry has a linked accountId that matches selection
+        if (e.accountId && selectedAccountIds.includes(e.accountId)) return true;
+        // Also check for "unlinked" filter option
+        if (selectedAccountIds.includes("__unlinked__") && !e.accountId) return true;
+        return false;
       });
     }
     
@@ -252,7 +282,7 @@ export default function ActivityPage() {
       default:
         return [...entries].sort((a, b) => b.date - a.date);
     }
-  }, [pages, sortBy, minAmount, maxAmount, selectedMethods]);
+  }, [pages, sortBy, minAmount, maxAmount, selectedMethods, selectedAccountIds]);
 
   const [selected, setSelected] = useState<EditableEntry | null>(null);
 
@@ -301,7 +331,7 @@ export default function ActivityPage() {
   }
 
   // Count active filters
-  const activeFilterCount = selectedCategories.length + selectedTags.length + selectedMethods.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
+  const activeFilterCount = selectedCategories.length + selectedTags.length + selectedMethods.length + selectedAccountIds.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
 
   // Clear a specific filter
   function clearCategory(cat: string) {
@@ -313,10 +343,14 @@ export default function ActivityPage() {
   function clearMethod(m: string) {
     setSelectedMethods((prev) => prev.filter((x) => x !== m));
   }
+  function clearAccountId(id: string) {
+    setSelectedAccountIds((prev) => prev.filter((x) => x !== id));
+  }
   function clearAllFilters() {
     setSelectedCategories([]);
     setSelectedTags([]);
     setSelectedMethods([]);
+    setSelectedAccountIds([]);
     setMinAmount("");
     setMaxAmount("");
   }
@@ -506,6 +540,31 @@ export default function ActivityPage() {
           {/* Spacer */}
           <div style={{ flex: 1, minWidth: 8 }} />
 
+          {/* View toggle - cards vs table */}
+          <button
+            onClick={() => setViewMode(viewMode === "cards" ? "table" : "cards")}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "8px 14px",
+              borderRadius: "var(--radius-full)",
+              fontSize: "var(--text-meta)",
+              fontWeight: 500,
+              cursor: "pointer",
+              backgroundColor: "transparent",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+            }}
+            title={viewMode === "cards" ? "Switch to table view" : "Switch to card view"}
+          >
+            {viewMode === "cards" ? (
+              <Lucide.LayoutList className="h-4 w-4" />
+            ) : (
+              <Lucide.LayoutGrid className="h-4 w-4" />
+            )}
+          </button>
+
           {/* Select button - inline with Filters */}
           <button
             onClick={() => setSelectMode(!selectMode)}
@@ -632,6 +691,32 @@ export default function ActivityPage() {
                 <Lucide.X className="h-3 w-3" />
               </button>
             ))}
+            {selectedAccountIds.map((id) => {
+              const acc = accounts?.find((a) => a._id === id);
+              const label = id === "__unlinked__" ? "No Account" : (acc?.name ?? id);
+              return (
+                <button
+                  key={id}
+                  onClick={() => clearAccountId(id)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    borderRadius: "var(--radius-full)",
+                    fontSize: "var(--text-micro)",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    backgroundColor: "var(--surface-2)",
+                    color: "var(--text)",
+                    border: "none",
+                  }}
+                >
+                  {label}
+                  <Lucide.X className="h-3 w-3" />
+                </button>
+              );
+            })}
             {(minAmount || maxAmount) && (
               <span
                 style={{
@@ -690,6 +775,7 @@ export default function ActivityPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
             <ActivityTable
               entries={allEntries}
+              viewMode={viewMode}
               onDelete={(id) => deleteEntry({ id })}
               onSavePattern={(e) => {
                 if (isEditableEntry(e)) setSelected(e);
@@ -940,9 +1026,9 @@ export default function ActivityPage() {
                   </div>
                 </div>
 
-                {/* Method/Account filter */}
+                {/* Method/Account filter (legacy freeform text) */}
                 <div style={{ marginBottom: "var(--space-4)" }}>
-                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Method / Account</h3>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Payment Method</h3>
                   {methodOptions.length === 0 ? (
                     <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
                       No methods found in your entries
@@ -976,6 +1062,69 @@ export default function ActivityPage() {
                             }}
                           >
                             {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Linked Accounts filter */}
+                <div style={{ marginBottom: "var(--space-4)" }}>
+                  <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Account</h3>
+                  {!accounts || accounts.length === 0 ? (
+                    <p style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                      No accounts set up yet. Add accounts in the Accounts tab.
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                      {/* Unlinked option */}
+                      <button
+                        onClick={() => {
+                          if (selectedAccountIds.includes("__unlinked__")) {
+                            setSelectedAccountIds((prev) => prev.filter((id) => id !== "__unlinked__"));
+                          } else {
+                            setSelectedAccountIds((prev) => [...prev, "__unlinked__"]);
+                          }
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "var(--radius-full)",
+                          fontSize: "var(--text-micro)",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          backgroundColor: selectedAccountIds.includes("__unlinked__") ? "var(--primary)" : "transparent",
+                          color: selectedAccountIds.includes("__unlinked__") ? "var(--primary-foreground)" : "var(--text)",
+                          border: selectedAccountIds.includes("__unlinked__") ? "none" : "1px solid var(--border)",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        No Account
+                      </button>
+                      {accounts.map((acc) => {
+                        const isSelected = selectedAccountIds.includes(acc._id);
+                        return (
+                          <button
+                            key={acc._id}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedAccountIds((prev) => prev.filter((id) => id !== acc._id));
+                              } else {
+                                setSelectedAccountIds((prev) => [...prev, acc._id]);
+                              }
+                            }}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "var(--radius-full)",
+                              fontSize: "var(--text-micro)",
+                              fontWeight: 500,
+                              cursor: "pointer",
+                              backgroundColor: isSelected ? "var(--primary)" : "transparent",
+                              color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                              border: isSelected ? "none" : "1px solid var(--border)",
+                            }}
+                          >
+                            {acc.name}
                           </button>
                         );
                       })}

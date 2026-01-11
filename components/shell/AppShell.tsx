@@ -16,6 +16,9 @@ const GoalsPage = dynamic(() => import("@/app/(app)/goals/page"), { ssr: false }
 const InsightsPage = dynamic(() => import("@/app/(app)/insights/page"), { ssr: false });
 const HelpPage = dynamic(() => import("@/app/(app)/help/page"), { ssr: false });
 const MorePage = dynamic(() => import("@/app/(app)/more/page"), { ssr: false });
+const ReviewPage = dynamic(() => import("@/app/(app)/review/page"), { ssr: false });
+const AccountsPage = dynamic(() => import("@/app/(app)/accounts/page"), { ssr: false });
+const CalendarPage = dynamic(() => import("@/app/(app)/calendar/page"), { ssr: false });
 
 /**
  * AppShell - Unified shell with:
@@ -72,10 +75,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     pathname === "/budgeting" || pathname === "/recurring" || 
                     pathname === "/goals" || pathname === "/insights" || 
                     pathname === "/help" || pathname === "/more" ||
+                    pathname === "/review" || pathname === "/accounts" || 
+                    pathname === "/calendar" ||
                     pathname?.startsWith("/dashboard/") || pathname?.startsWith("/activity/") || 
                     pathname?.startsWith("/budgeting/") || pathname?.startsWith("/recurring/") || 
                     pathname?.startsWith("/goals/") || pathname?.startsWith("/insights/") ||
-                    pathname?.startsWith("/help/") || pathname?.startsWith("/more/");
+                    pathname?.startsWith("/help/") || pathname?.startsWith("/more/") ||
+                    pathname?.startsWith("/review/") || pathname?.startsWith("/accounts/") ||
+                    pathname?.startsWith("/calendar/");
 
   return (
     <div 
@@ -117,6 +124,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </TabPanel>
                 <TabPanel tabId="insights">
                   <InsightsPage />
+                </TabPanel>
+                <TabPanel tabId="calendar">
+                  <CalendarPage />
+                </TabPanel>
+                <TabPanel tabId="review">
+                  <ReviewPage />
+                </TabPanel>
+                <TabPanel tabId="accounts">
+                  <AccountsPage />
                 </TabPanel>
                 <TabPanel tabId="help">
                   <HelpPage />

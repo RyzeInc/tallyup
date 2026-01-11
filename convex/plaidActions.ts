@@ -75,13 +75,18 @@ export const createLinkToken = action({
       request.access_token = accessToken;
     }
     
-    // Add redirect URI if configured (for OAuth banks)
+    // Add redirect URI only when OAuth is explicitly enabled and redirect URI is configured
+    // This avoids Plaid rejecting requests when the redirect URI hasn't been registered
+    // in the Plaid developer dashboard.
+    const enableOauth = process.env.PLAID_ENABLE_OAUTH === "true";
     const redirectUri = process.env.PLAID_REDIRECT_URI;
-    if (redirectUri) {
+    if (enableOauth && redirectUri) {
       request.redirect_uri = redirectUri;
     }
     
     try {
+      // Diagnostic: log whether we intend to include redirect_uri (no secrets)
+      console.info("[plaid] createLinkToken: enableOauth=", enableOauth, "redirectUriSet=", !!redirectUri);
       const response = await plaidClient.linkTokenCreate(request);
       
       return {

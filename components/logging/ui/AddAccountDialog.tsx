@@ -75,7 +75,11 @@ export function AddAccountDialog({
   const canContinue = React.useMemo(() => {
     if (step === 0) return !!type;
     if (step === 1) return name.trim().length > 0;
-    if (step === 2) return !!startingBalance.trim() && !Number.isNaN(parseFloat(startingBalance));
+    // Step 2: Starting balance is optional - empty means 0
+    if (step === 2) {
+      if (!startingBalance.trim()) return true; // Empty = 0, valid
+      return !Number.isNaN(parseFloat(startingBalance));
+    }
     return true;
   }, [step, type, name, startingBalance]);
 
@@ -89,7 +93,10 @@ export function AddAccountDialog({
   };
 
   const handleSave = async () => {
-    const balanceCents = Math.round(parseFloat(startingBalance) * 100);
+    // Default to 0 if empty
+    const balanceCents = startingBalance.trim() 
+      ? Math.round(parseFloat(startingBalance) * 100)
+      : 0;
     if (!Number.isFinite(balanceCents)) {
       toast.error("Enter a valid starting balance");
       return;
@@ -220,7 +227,7 @@ export function AddAccountDialog({
                 className="block text-xs font-medium mb-1.5 uppercase tracking-wide"
                 style={{ color: "var(--text-tertiary)" }}
               >
-                Starting balance
+                Starting balance <span style={{ fontWeight: 400 }}>(optional)</span>
               </label>
               <div className="relative">
                 <span
@@ -251,7 +258,7 @@ export function AddAccountDialog({
                 />
               </div>
               <p className="mt-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
-                Your current balance as of today.
+                Your current balance as of today. Leave blank to start at $0.
               </p>
             </div>
           )}

@@ -43,6 +43,17 @@ export const upsertUserPreferences = mutation({
     // UI preferences
     defaultTab: v.optional(v.string()),
     compactMode: v.optional(v.boolean()),
+    
+    // Category customization
+    hiddenExpenseCategories: v.optional(v.array(v.string())),
+    hiddenIncomeCategories: v.optional(v.array(v.string())),
+    hiddenContextTags: v.optional(v.array(v.string())),
+    expenseCategoryOrder: v.optional(v.array(v.string())),
+    incomeCategoryOrder: v.optional(v.array(v.string())),
+    contextTagOrder: v.optional(v.array(v.string())),
+    pinnedExpenseCategories: v.optional(v.array(v.string())),
+    pinnedIncomeCategories: v.optional(v.array(v.string())),
+    pinnedContextTags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -56,43 +67,30 @@ export const upsertUserPreferences = mutation({
 
     const now = Date.now();
 
-    if (existing) {
-      // Update existing preferences
-      const updates: Record<string, unknown> = { updatedAt: now };
-      
-      if (args.reviewReminderEnabled !== undefined) {
-        updates.reviewReminderEnabled = args.reviewReminderEnabled;
-      }
-      if (args.reviewReminderDay !== undefined) {
-        updates.reviewReminderDay = args.reviewReminderDay;
-      }
-      if (args.reviewReminderTime !== undefined) {
-        updates.reviewReminderTime = args.reviewReminderTime;
-      }
-      if (args.reviewReminderFrequency !== undefined) {
-        updates.reviewReminderFrequency = args.reviewReminderFrequency;
-      }
-      if (args.defaultTab !== undefined) {
-        updates.defaultTab = args.defaultTab;
-      }
-      if (args.compactMode !== undefined) {
-        updates.compactMode = args.compactMode;
-      }
+    // Build updates object from all provided args
+    const updates: Record<string, unknown> = { updatedAt: now };
+    const fields = [
+      "reviewReminderEnabled", "reviewReminderDay", "reviewReminderTime", "reviewReminderFrequency",
+      "defaultTab", "compactMode",
+      "hiddenExpenseCategories", "hiddenIncomeCategories", "hiddenContextTags",
+      "expenseCategoryOrder", "incomeCategoryOrder", "contextTagOrder",
+      "pinnedExpenseCategories", "pinnedIncomeCategories", "pinnedContextTags",
+    ] as const;
 
+    for (const field of fields) {
+      if (args[field] !== undefined) {
+        updates[field] = args[field];
+      }
+    }
+
+    if (existing) {
       await ctx.db.patch(existing._id, updates);
       return existing._id;
     } else {
-      // Create new preferences
       return await ctx.db.insert("userPreferences", {
         userId,
-        reviewReminderEnabled: args.reviewReminderEnabled,
-        reviewReminderDay: args.reviewReminderDay,
-        reviewReminderTime: args.reviewReminderTime,
-        reviewReminderFrequency: args.reviewReminderFrequency,
-        defaultTab: args.defaultTab,
-        compactMode: args.compactMode,
+        ...updates,
         createdAt: now,
-        updatedAt: now,
       });
     }
   },

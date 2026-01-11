@@ -22,12 +22,15 @@ import {
 const SPENT_CATEGORIES: CategoryOption[] = [
   { id: "housing", name: "Housing" },
   { id: "utilities", name: "Utilities" },
-  { id: "food", name: "Food" },
+  { id: "groceries", name: "Groceries" },
+  { id: "food", name: "Food & Dining" },
   { id: "transportation", name: "Transportation" },
   { id: "health", name: "Health" },
+  { id: "supplements", name: "Supplements", description: "Vitamins, protein, health supplements" },
   { id: "insurance", name: "Insurance" },
   { id: "debt", name: "Debt" },
-  { id: "subscriptions", name: "Subscriptions" },
+  { id: "subscriptions", name: "Subscriptions", description: "Recurring digital/media services" },
+  { id: "work", name: "Work / Business" },
   { id: "personal_care", name: "Personal Care" },
   { id: "entertainment", name: "Entertainment" },
   { id: "education", name: "Education" },
@@ -134,8 +137,8 @@ export function QuickLogForm(props: QuickLogFormProps) {
     if (state.focusTarget === "merchant") merchantRef.current?.focus();
   }, [state.focusTarget]);
 
-  const title = props.mode === "resolve" ? "Needs meaning" : "Log";
-  const ctaLabel = props.mode === "resolve" ? "Resolve" : "Save entry";
+  const title = props.mode === "resolve" ? "Add Details" : "Log";
+  const ctaLabel = props.mode === "resolve" ? "Save" : "Save entry";
 
   // Compute detail counts
   const detailCounts = {
@@ -158,14 +161,14 @@ export function QuickLogForm(props: QuickLogFormProps) {
     if (props.mode === "create") {
       const wouldNeedReview = deriveNeedsReview(state);
       if (wouldNeedReview) {
-        return "Skip details — saved to Review for later.";
+        return "Just the basics for now — add details later in Review.";
       }
-      return "Review anytime.";
+      return "You can always edit this later.";
     }
     if (missing.length) {
-      return "Fill required fields to resolve.";
+      return "Add a category to complete.";
     }
-    return "Ready to resolve.";
+    return "Ready to save!";
   }, [props.mode, state, missing.length]);
 
   // Toggle section: tap once to open, tap again to close
@@ -193,8 +196,8 @@ export function QuickLogForm(props: QuickLogFormProps) {
             style={{ color: "var(--text-secondary)" }}
           >
             {props.mode === "create"
-              ? "Just the basics — review anytime"
-              : "Fill the missing meaning to resolve."}
+              ? "Just the basics — add more anytime"
+              : "Add a category to help with reports."}
           </div>
         </div>
         {props.onClose && (
@@ -252,8 +255,45 @@ export function QuickLogForm(props: QuickLogFormProps) {
             onChange={(id) => dispatch({ type: "SET_CATEGORY", categoryId: id })}
             required={props.mode === "resolve"}
             showError={showValidationErrors && missing.includes("category")}
+            categoryType={state.draft.type === "received" ? "income" : "expense"}
           />
         </div>
+
+        {/* Account Selection - Prominent placement for easy card/account selection */}
+        {props.accounts.length > 0 && (
+          <div>
+            <div
+              className="text-[10px] font-medium uppercase tracking-wider mb-2"
+              style={{ color: "var(--text-tertiary)" }}
+            >
+              Account / Card
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+              {props.accounts.map((acc) => {
+                const isSelected = state.draft.account.accountId === acc.id;
+                return (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => dispatch({ type: "SET_ACCOUNT", patch: { accountId: isSelected ? undefined : acc.id } })}
+                    className="h-9 px-3 rounded-lg text-xs font-medium transition-all shrink-0 flex items-center gap-2"
+                    style={{
+                      backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                      color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                      border: isSelected ? "none" : "1px solid var(--border)",
+                    }}
+                  >
+                    {acc.kind === "credit" && <Lucide.CreditCard className="h-3.5 w-3.5" />}
+                    {acc.kind === "checking" && <Lucide.Landmark className="h-3.5 w-3.5" />}
+                    {acc.kind === "savings" && <Lucide.PiggyBank className="h-3.5 w-3.5" />}
+                    {!["credit", "checking", "savings"].includes(acc.kind ?? "") && <Lucide.Wallet className="h-3.5 w-3.5" />}
+                    {acc.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Inline Details Expander */}
         <DetailsExpander

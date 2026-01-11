@@ -141,6 +141,19 @@ export default function ReviewWizardPage() {
           </Link>
         </div>
 
+        {/* Info box explaining review */}
+        {step !== "done" && totalCount > 0 && (
+          <div 
+            className="mt-4 p-3 rounded-lg text-xs"
+            style={{ backgroundColor: "var(--accent-subtle)", color: "var(--text-secondary)" }}
+          >
+            <strong style={{ color: "var(--text)" }}>What happens if I skip?</strong> Nothing bad! 
+            Unreviewed entries still appear in your activity and totals. 
+            Adding a category just helps with better reports and insights. 
+            You can always come back later.
+          </div>
+        )}
+
         {/* Progress bar */}
         {step !== "done" && totalCount > 0 && (
           <div className="mt-4">
