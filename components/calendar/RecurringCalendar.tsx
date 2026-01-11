@@ -675,14 +675,15 @@ export function RecurringCalendar() {
     <div 
       style={{ 
         backgroundColor: "var(--surface)",
-        borderRadius: isDesktop ? 0 : "var(--card-radius, 12px)",
-        border: isDesktop ? "none" : "1px solid var(--border)",
-        overflow: "hidden",
+        borderRadius: "var(--card-radius, 12px)",
+        border: "1px solid var(--border)",
         boxShadow: isDesktop ? "none" : "var(--shadow-card)",
         width: "100%",
         height: isDesktop ? "100%" : "auto",
         display: "flex",
         flexDirection: "column",
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       {/* Header with month selector */}

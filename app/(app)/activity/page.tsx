@@ -28,6 +28,10 @@ export default function ActivityPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Ref for measuring filter chip space
+  const spacerRef = useRef<HTMLDivElement>(null);
+  const [chipsInline, setChipsInline] = useState(false);
 
   const { startDate, endDate } = useTimeRange();
 
@@ -37,7 +41,7 @@ export default function ActivityPage() {
   })();
   const [type, setType] = useState<"all" | EntryType>(initialType);
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
-  const reviewOnly = searchParams.get("review") === "1";
+  const [reviewOnly, setReviewOnly] = useState(() => searchParams.get("review") === "1");
   const [filtersOpen, setFiltersOpen] = useState(false);
   
   // Selection mode - controlled from here, passed to ActivityTable
@@ -333,6 +337,41 @@ export default function ActivityPage() {
   // Count active filters
   const activeFilterCount = selectedCategories.length + selectedTags.length + selectedMethods.length + selectedAccountIds.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
 
+  // Estimate total width needed for all filter chips (rough calculation)
+  const estimatedChipsWidth = useMemo(() => {
+    // Each chip is roughly: padding (24px) + text (~8px per char) + X icon (12px) + gap (8px)
+    let width = 0;
+    selectedCategories.forEach((cat) => { width += 24 + cat.length * 7 + 12 + 8; });
+    selectedTags.forEach((tag) => { width += 24 + tag.length * 7 + 12 + 8; });
+    selectedMethods.forEach((m) => { width += 24 + (m === "__unspecified__" ? 11 : m.length) * 7 + 12 + 8; });
+    selectedAccountIds.forEach(() => { width += 24 + 10 * 7 + 12 + 8; }); // ~10 chars avg
+    if (minAmount || maxAmount) width += 24 + 12 * 7 + 8; // amount range
+    if (activeFilterCount > 0) width += 60; // "Clear all" link
+    return width;
+  }, [selectedCategories, selectedTags, selectedMethods, selectedAccountIds, minAmount, maxAmount, activeFilterCount]);
+
+  // Measure spacer width and decide if chips fit inline
+  useEffect(() => {
+    if (!spacerRef.current || activeFilterCount === 0) {
+      setChipsInline(false);
+      return;
+    }
+
+    const checkFit = () => {
+      if (!spacerRef.current) return;
+      const spacerWidth = spacerRef.current.offsetWidth;
+      // Add some margin (40px) to ensure comfortable fit
+      setChipsInline(spacerWidth > estimatedChipsWidth + 40);
+    };
+
+    checkFit();
+
+    const observer = new ResizeObserver(checkFit);
+    observer.observe(spacerRef.current);
+    
+    return () => observer.disconnect();
+  }, [estimatedChipsWidth, activeFilterCount]);
+
   // Clear a specific filter
   function clearCategory(cat: string) {
     setSelectedCategories((prev) => prev.filter((c) => c !== cat));
@@ -356,13 +395,16 @@ export default function ActivityPage() {
   }
 
   function toggleReview() {
+    const newReviewOnly = !reviewOnly;
+    setReviewOnly(newReviewOnly);
+    
+    // Also update URL for bookmarkability
     const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    if (reviewOnly) {
-      p.delete("review");
-    } else {
+    if (newReviewOnly) {
       p.set("review", "1");
+    } else {
+      p.delete("review");
     }
-    // Use history.replaceState for non-navigational URL update
     if (typeof window !== "undefined") {
       const qs = p.toString();
       const url = qs ? `/activity?${qs}` : `/activity`;
@@ -401,45 +443,50 @@ export default function ActivityPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 0, height: "100%", minHeight: 0 }}>
+      {/* Date picker - full width to match table */}
       <div className="flex items-center justify-end" style={{ marginBottom: "var(--space-4)", flexShrink: 0, padding: "var(--space-4)" }}>
         <GlobalDateRangePicker showAllPresets />
       </div>
 
       <SignedOut>
-        <div
-          style={{
-            backgroundColor: "var(--surface)",
-            borderRadius: "var(--card-radius)",
-            border: "1px solid var(--border)",
-            padding: "var(--space-6)",
-            textAlign: "center",
-          }}
-        >
-          <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
-            Sign in to view your activity
-          </p>
-          <SignInButton mode="modal">
-            <button className="btn-primary">Sign in</button>
-          </SignInButton>
+        <div style={{ maxWidth: "var(--content-max-width)", margin: "0 auto", width: "100%" }}>
+          <div
+            style={{
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--card-radius)",
+              border: "1px solid var(--border)",
+              padding: "var(--space-6)",
+              textAlign: "center",
+            }}
+          >
+            <p style={{ color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
+              Sign in to view your activity
+            </p>
+            <SignInButton mode="modal">
+              <button className="btn-primary">Sign in</button>
+            </SignInButton>
+          </div>
         </div>
       </SignedOut>
 
       <SignedIn>
         <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0, overflow: "hidden" }}>
-        {/* Search Input */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-3)",
-            backgroundColor: "var(--surface)",
-            borderRadius: "var(--input-radius)",
-            border: "1px solid var(--border)",
-            padding: "var(--space-3) var(--space-4)",
-            flexShrink: 0,
-            margin: "var(--space-4)",
-          }}
-        >
+        {/* Narrow content wrapper for search only */}
+        <div style={{ maxWidth: "var(--content-max-width)", margin: "0 auto", width: "100%", flexShrink: 0 }}>
+          {/* Search Input */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-3)",
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--input-radius)",
+              border: "1px solid var(--border)",
+              padding: "var(--space-3) var(--space-4)",
+              flexShrink: 0,
+              margin: "var(--space-4)",
+            }}
+          >
           <Lucide.Search className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
           <input
             ref={searchInputRef}
@@ -471,9 +518,11 @@ export default function ActivityPage() {
             </button>
           )}
         </div>
+        </div>
+        {/* End narrow wrapper - filters and table at full width */}
 
-        {/* Compact Filter Row */}
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+        {/* Compact Filter Row - full width */}
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)", padding: "0 var(--space-4)", marginBottom: "var(--space-2)" }}>
           {/* Type chips - Spent/Received only, tapping selected deselects back to all */}
           {(["expense", "income"] as const).map((t) => {
             const isActive = type === t;
@@ -540,8 +589,135 @@ export default function ActivityPage() {
             )}
           </button>
 
-          {/* Spacer */}
-          <div style={{ flex: 1, minWidth: 8 }} />
+          {/* Spacer - contains inline filter chips when they fit */}
+          <div ref={spacerRef} style={{ flex: 1, minWidth: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)", justifyContent: "flex-end" }}>
+            {chipsInline && activeFilterCount > 0 && (
+              <>
+                {selectedCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => clearCategory(cat)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-micro)",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      backgroundColor: "var(--accent-subtle)",
+                      color: "var(--primary)",
+                      border: "none",
+                    }}
+                  >
+                    {cat}
+                    <Lucide.X className="h-3 w-3" />
+                  </button>
+                ))}
+                {selectedTags.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => clearTag(tag)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-micro)",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      backgroundColor: "var(--surface-2)",
+                      color: "var(--text)",
+                      border: "none",
+                    }}
+                  >
+                    {tag}
+                    <Lucide.X className="h-3 w-3" />
+                  </button>
+                ))}
+                {selectedMethods.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => clearMethod(m)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-micro)",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      backgroundColor: "var(--surface-2)",
+                      color: "var(--text)",
+                      border: "none",
+                    }}
+                  >
+                    {m === "__unspecified__" ? "Unspecified" : m}
+                    <Lucide.X className="h-3 w-3" />
+                  </button>
+                ))}
+                {selectedAccountIds.map((id) => {
+                  const acc = accounts?.find((a) => a._id === id);
+                  const label = id === "__unlinked__" ? "No Account" : (acc?.name ?? id);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => clearAccountId(id)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "4px 10px",
+                        borderRadius: "var(--radius-full)",
+                        fontSize: "var(--text-micro)",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        backgroundColor: "var(--surface-2)",
+                        color: "var(--text)",
+                        border: "none",
+                      }}
+                    >
+                      {label}
+                      <Lucide.X className="h-3 w-3" />
+                    </button>
+                  );
+                })}
+                {(minAmount || maxAmount) && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "4px 10px",
+                      borderRadius: "var(--radius-full)",
+                      fontSize: "var(--text-micro)",
+                      fontWeight: 500,
+                      backgroundColor: "var(--surface-2)",
+                      color: "var(--text)",
+                    }}
+                  >
+                    {minAmount && maxAmount ? `$${minAmount} – $${maxAmount}` : minAmount ? `≥ $${minAmount}` : `≤ $${maxAmount}`}
+                  </span>
+                )}
+                <button
+                  onClick={clearAllFilters}
+                  style={{
+                    fontSize: "var(--text-micro)",
+                    fontWeight: 500,
+                    color: "var(--text-secondary)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  Clear all
+                </button>
+              </>
+            )}
+          </div>
 
           {/* View toggle - cards vs table */}
           <button
@@ -625,9 +801,9 @@ export default function ActivityPage() {
           </button>
         </div>
 
-        {/* Active filter pills */}
-        {activeFilterCount > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)" }}>
+        {/* Active filter pills - separate row when they don't fit inline */}
+        {activeFilterCount > 0 && !chipsInline && (
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)", padding: "0 var(--space-4)", marginBottom: "var(--space-2)" }}>
             {selectedCategories.map((cat) => (
               <button
                 key={cat}
@@ -753,7 +929,7 @@ export default function ActivityPage() {
           </div>
         )}
 
-        {/* Results */}
+        {/* Results - can expand to full width (1400px) */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", flex: 1, minHeight: 0, overflow: "hidden", padding: "0 var(--space-4) var(--space-4) var(--space-4)" }}>
         {pages.length === 0 && !pageResult ? (
           <div

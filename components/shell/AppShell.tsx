@@ -98,14 +98,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     >
       <TopNav />
       <div
-        className="mx-auto flex-1 overflow-hidden"
+        className="mx-auto flex-1 w-full"
         style={{
-          maxWidth: "var(--content-max-width)",
+          maxWidth: "var(--content-max-width-wide)",
           paddingLeft: "var(--page-padding)",
           paddingRight: "var(--page-padding)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
           display: "flex",
           flexDirection: "column",
+          minHeight: 0,
         }}
       >
         <main className="pt-4 flex-1 overflow-auto flex flex-col">

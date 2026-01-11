@@ -229,7 +229,7 @@ export default function ActivityTable({
   }, [selectedIds, entries]);
 
   return (
-    <div className="space-y-3 h-full flex flex-col">
+    <div className="space-y-3 flex flex-col min-h-0 max-h-full">
       {/* Selection Mode Header - Sticky at top when in select mode */}
       {selectMode && (
         <div
@@ -272,12 +272,12 @@ export default function ActivityTable({
       {/* Transaction List - Table View */}
       {viewMode === "table" && (
         <div
-          className="rounded-xl overflow-y-auto overflow-x-auto flex-1 min-h-0"
+          className="rounded-xl overflow-y-auto overflow-x-auto min-h-0"
           style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         >
           {/* Table Header - columns vary by typeFilter */}
           <div
-            className="flex items-center min-w-max"
+            className="flex items-center min-w-max sticky top-0 z-10"
             style={{ 
               gap: 8,
               padding: "12px 12px 8px",
@@ -440,7 +440,7 @@ export default function ActivityTable({
       {/* Transaction List - Card View */}
       {viewMode === "cards" && (
       <div
-        className="rounded-xl overflow-y-auto flex-1 min-h-0"
+        className="rounded-xl overflow-y-auto min-h-0"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
         {entries.map((r, i) => {

@@ -89,6 +89,7 @@
   --topbar-height: 56px;
   --bottomnav-height: 72px;
   --content-max-width: 560px;
+  --content-max-width-wide: 1400px;
   
   /* -------- Shadows -------- */
   --shadow-card: var(--shadow);

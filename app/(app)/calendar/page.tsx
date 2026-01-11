@@ -31,14 +31,9 @@ export default function CalendarPage() {
         display: "flex", 
         flexDirection: "column", 
         gap: "var(--space-4, 16px)",
-        // On desktop, break out of the narrow content container to use full width
-        ...(isDesktop && {
-          marginLeft: "calc(-1 * (50vw - 50%))",
-          marginRight: "calc(-1 * (50vw - 50%))",
-          paddingLeft: "max(24px, calc(50vw - 720px))",
-          paddingRight: "max(24px, calc(50vw - 720px))",
-          width: "100vw",
-        }),
+        height: "100%",
+        minHeight: 0,
+        width: "100%",
       }}
     >
       {/* Page Header */}
@@ -141,19 +136,22 @@ export default function CalendarPage() {
         </div>
 
         {/* Calendar Content */}
-        <div>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", width: "100%" }}>
           {activeTab === "net-income" && (
-            <div>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", width: "100%" }}>
               <p 
                 style={{ 
                   fontSize: "0.8125rem", 
                   color: "var(--text-secondary)", 
                   marginBottom: "var(--space-3, 12px)",
+                  flexShrink: 0,
                 }}
               >
                 View your monthly income vs expenses across any year.
               </p>
-              <NetIncomeCalendar />
+              <div style={{ flex: 1, minHeight: 0, width: "100%" }}>
+                <NetIncomeCalendar />
+              </div>
             </div>
           )}
 
@@ -161,8 +159,9 @@ export default function CalendarPage() {
             <div style={{ 
               display: "flex", 
               flexDirection: "column",
-              height: isDesktop ? "calc(100vh - 280px)" : "auto",
-              minHeight: isDesktop ? 400 : undefined,
+              flex: 1,
+              minHeight: isDesktop ? 400 : 0,
+              width: "100%",
             }}>
               <p 
                 style={{ 
@@ -174,7 +173,7 @@ export default function CalendarPage() {
               >
                 See when your recurring transactions are expected each month.
               </p>
-              <div style={{ flex: 1, minHeight: 0 }}>
+              <div style={{ flex: 1, minHeight: 0, width: "100%" }}>
                 <RecurringCalendar />
               </div>
             </div>
