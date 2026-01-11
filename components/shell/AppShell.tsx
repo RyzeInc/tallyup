@@ -90,20 +90,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       style={{ 
         background: "var(--bg-full)",
         color: "var(--text)",
+        height: "100vh",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <TopNav />
       <div
-        className="mx-auto"
+        className="mx-auto flex-1 overflow-hidden"
         style={{
           maxWidth: "var(--content-max-width)",
           paddingLeft: "var(--page-padding)",
           paddingRight: "var(--page-padding)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
-          minHeight: "100vh",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <main className="pt-4">
+        <main className="pt-4 flex-1 overflow-auto flex flex-col">
           {isMainTab ? (
             <TabContainer>
               <TabPanel tabId="dashboard">

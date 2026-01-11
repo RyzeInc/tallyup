@@ -552,6 +552,20 @@ body {
    SCROLLBAR
    ============================================ */
 
+/* Hide scrollbars on main content and tabs for a cleaner look */
+main::-webkit-scrollbar,
+[role="tabpanel"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+main,
+[role="tabpanel"] {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

@@ -22,6 +22,8 @@ export default function ActivityTable({
   onBulkComplete,
   externalSelectMode,
   onSelectModeChange,
+  hasMore,
+  onLoadMore,
 }: {
   entries?: Doc<"entries">[];
   viewMode?: "cards" | "table";
@@ -31,6 +33,8 @@ export default function ActivityTable({
   onBulkComplete?: () => void;
   externalSelectMode?: boolean;
   onSelectModeChange?: (mode: boolean) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -225,7 +229,7 @@ export default function ActivityTable({
   }, [selectedIds, entries]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 h-full flex flex-col">
       {/* Selection Mode Header - Sticky at top when in select mode */}
       {selectMode && (
         <div
@@ -268,7 +272,7 @@ export default function ActivityTable({
       {/* Transaction List - Table View */}
       {viewMode === "table" && (
         <div
-          className="rounded-xl overflow-hidden overflow-x-auto"
+          className="rounded-xl overflow-y-auto overflow-x-auto flex-1 min-h-0"
           style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         >
           {/* Table Header - columns vary by typeFilter */}
@@ -405,13 +409,38 @@ export default function ActivityTable({
               </div>
             );
           })}
+
+          {/* Load More Button - inside scroll container */}
+          {hasMore && onLoadMore && (
+            <div style={{ textAlign: "center", padding: "var(--space-4)" }}>
+              <button
+                onClick={onLoadMore}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "var(--space-2)",
+                  padding: "10px 16px",
+                  borderRadius: "var(--input-radius)",
+                  fontSize: "var(--text-meta)",
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  backgroundColor: "transparent",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <Lucide.ChevronDown className="h-4 w-4" />
+                Load more
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Transaction List - Card View */}
       {viewMode === "cards" && (
       <div
-        className="rounded-xl overflow-hidden"
+        className="rounded-xl overflow-y-auto flex-1 min-h-0"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
         {entries.map((r, i) => {
@@ -619,6 +648,31 @@ export default function ActivityTable({
             </div>
           );
         })}
+
+        {/* Load More Button - inside scroll container */}
+        {hasMore && onLoadMore && (
+          <div style={{ textAlign: "center", padding: "var(--space-4)" }}>
+            <button
+              onClick={onLoadMore}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "var(--space-2)",
+                padding: "10px 16px",
+                borderRadius: "var(--input-radius)",
+                fontSize: "var(--text-meta)",
+                fontWeight: 500,
+                cursor: "pointer",
+                backgroundColor: "transparent",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <Lucide.ChevronDown className="h-4 w-4" />
+              Load more
+            </button>
+          </div>
+        )}
       </div>
       )}
 

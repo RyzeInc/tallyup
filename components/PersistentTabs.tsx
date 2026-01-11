@@ -151,7 +151,10 @@ export function TabPanel({ tabId, children }: TabPanelProps) {
   return (
     <div
       style={{
-        display: "block",
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        minHeight: 0,
       }}
       aria-hidden={false}
     >
@@ -162,7 +165,7 @@ export function TabPanel({ tabId, children }: TabPanelProps) {
 
 export function TabContainer({ children }: { children: ReactNode }) {
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
       {children}
     </div>
   );

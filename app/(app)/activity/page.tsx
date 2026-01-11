@@ -400,8 +400,8 @@ export default function ActivityPage() {
   }, [pages]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-      <div className="flex items-center justify-end" style={{ marginBottom: "var(--space-4)" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 0, height: "100%", minHeight: 0 }}>
+      <div className="flex items-center justify-end" style={{ marginBottom: "var(--space-4)", flexShrink: 0, padding: "var(--space-4)" }}>
         <GlobalDateRangePicker showAllPresets />
       </div>
 
@@ -425,6 +425,7 @@ export default function ActivityPage() {
       </SignedOut>
 
       <SignedIn>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1, minHeight: 0, overflow: "hidden" }}>
         {/* Search Input */}
         <div
           style={{
@@ -435,6 +436,8 @@ export default function ActivityPage() {
             borderRadius: "var(--input-radius)",
             border: "1px solid var(--border)",
             padding: "var(--space-3) var(--space-4)",
+            flexShrink: 0,
+            margin: "var(--space-4)",
           }}
         >
           <Lucide.Search className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
@@ -751,6 +754,7 @@ export default function ActivityPage() {
         )}
 
         {/* Results */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", flex: 1, minHeight: 0, overflow: "hidden", padding: "0 var(--space-4) var(--space-4) var(--space-4)" }}>
         {pages.length === 0 && !pageResult ? (
           <div
             style={{
@@ -772,49 +776,26 @@ export default function ActivityPage() {
             subtitle="No entries match your current filters."
           />
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
-            <ActivityTable
-              entries={allEntries}
-              viewMode={viewMode}
-              typeFilter={type}
-              onDelete={(id) => deleteEntry({ id })}
-              onSavePattern={(e) => {
-                if (isEditableEntry(e)) setSelected(e);
-              }}
-              onBulkComplete={() => {
-                setPages([]);
-                setCursorList([undefined]);
-                setSeenIds({});
-              }}
-              externalSelectMode={selectMode}
-              onSelectModeChange={setSelectMode}
-            />
-
-            {nextCursor && (
-              <div style={{ textAlign: "center", paddingTop: "var(--space-2)" }}>
-                <button
-                  onClick={loadMore}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "var(--space-2)",
-                    padding: "10px 16px",
-                    borderRadius: "var(--input-radius)",
-                    fontSize: "var(--text-meta)",
-                    fontWeight: 500,
-                    cursor: "pointer",
-                    backgroundColor: "transparent",
-                    color: "var(--text)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <Lucide.ChevronDown className="h-4 w-4" />
-                  Load more
-                </button>
-              </div>
-            )}
-          </div>
+          <ActivityTable
+            entries={allEntries}
+            viewMode={viewMode}
+            typeFilter={type}
+            onDelete={(id) => deleteEntry({ id })}
+            onSavePattern={(e) => {
+              if (isEditableEntry(e)) setSelected(e);
+            }}
+            onBulkComplete={() => {
+              setPages([]);
+              setCursorList([undefined]);
+              setSeenIds({});
+            }}
+            externalSelectMode={selectMode}
+            onSelectModeChange={setSelectMode}
+            hasMore={!!nextCursor}
+            onLoadMore={loadMore}
+          />
         )}
+        </div>
 
         {selected && (
           <RecurringModal
@@ -1202,6 +1183,7 @@ export default function ActivityPage() {
             </div>
           </div>
         )}
+        </div>
       </SignedIn>
     </div>
   );
