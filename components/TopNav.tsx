@@ -30,7 +30,7 @@ interface NavTab {
   customizableId?: CustomizableNavItem; // If set, this tab can be hidden by user
 }
 
-type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts";
+type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts" | "auto-sort";
 
 const iconMap = {
   LayoutDashboard: Lucide.LayoutDashboard,
@@ -44,6 +44,7 @@ const iconMap = {
   Calendar: Lucide.Calendar,
   ClipboardCheck: Lucide.ClipboardCheck,
   Building2: Lucide.Building2,
+  Wand2: Lucide.Wand2,
 };
 
 export default function TopNav() {
@@ -69,6 +70,7 @@ export default function TopNav() {
     { id: "calendar", label: "Calendar", iconName: "Calendar", tabId: "calendar", customizableId: "calendar" },
     { id: "review", label: "Review", iconName: "ClipboardCheck", tabId: "review", customizableId: "review" },
     { id: "accounts", label: "Accounts", iconName: "Building2", tabId: "accounts", customizableId: "accounts" },
+    { id: "auto-sort", label: "Auto-Sort", iconName: "Wand2", tabId: "auto-sort", customizableId: "auto-sort" },
     { id: "more", label: "Menu", iconName: "Menu", tabId: "more" },
   ];
 

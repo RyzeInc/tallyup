@@ -51,6 +51,10 @@ const navIconMap: Record<CustomizableNavItem, { icon: React.ReactNode; iconBg: s
     icon: <Lucide.CreditCard className="h-6 w-6" style={{ color: "var(--primary)" }} />,
     iconBg: "var(--accent-subtle)",
   },
+  "auto-sort": {
+    icon: <Lucide.Wand2 className="h-6 w-6" style={{ color: "var(--primary)" }} />,
+    iconBg: "var(--accent-subtle)",
+  },
 };
 
 export default function MorePage() {
@@ -116,6 +120,13 @@ export default function MorePage() {
       description: "Banks, cards, and balances",
       ...navIconMap.accounts,
       navId: "accounts" as const,
+    },
+    {
+      href: "/auto-sort",
+      label: "Auto-Sort",
+      description: "Auto-categorize transactions",
+      ...navIconMap["auto-sort"],
+      navId: "auto-sort" as const,
     },
   ] as MenuItem[]).filter((item) => item.navId && !isNavItemVisible(item.navId));
 

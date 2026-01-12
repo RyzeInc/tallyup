@@ -7,15 +7,7 @@ import { Id, Doc } from "@/convex/_generated/dataModel";
 import { SignedIn } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
-
-const formatMoney = (cents: number) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
-};
+import { formatMoney } from "@/components/utils";
 
 const formatPercent = (ratio: number) => {
   return new Intl.NumberFormat("en-US", {

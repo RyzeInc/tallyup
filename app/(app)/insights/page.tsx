@@ -584,7 +584,7 @@ export default function InsightsPage() {
         severity: "warning",
         title: `${computed.needsReviewCount} item${computed.needsReviewCount > 1 ? "s" : ""} need review`,
         description: "Uncategorized transactions awaiting classification",
-        link: "/inbox",
+        link: "/review",
       });
     }
 
@@ -1948,7 +1948,7 @@ export default function InsightsPage() {
                 {[
                   { href: "/activity", icon: Lucide.List, label: "All Transactions" },
                   { href: "/recurring", icon: Lucide.Repeat, label: "Recurring Patterns" },
-                  { href: "/inbox", icon: Lucide.Inbox, label: "Needs Review" },
+                  { href: "/review", icon: Lucide.ClipboardCheck, label: "Needs Review" },
                 ].map(({ href, icon: Icon, label: linkLabel }) => (
                   <Link
                     key={href}

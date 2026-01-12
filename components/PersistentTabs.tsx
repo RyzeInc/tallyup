@@ -4,7 +4,7 @@ import { ReactNode, createContext, useContext, useState, useCallback, useRef, us
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 
-export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts";
+export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts" | "auto-sort";
 
 interface TabsContextValue {
   activeTab: TabId;
@@ -27,6 +27,7 @@ const scrollPositions: Record<TabId, number> = {
   calendar: 0,
   review: 0,
   accounts: 0,
+  "auto-sort": 0,
 };
 
 export function useTabs() {

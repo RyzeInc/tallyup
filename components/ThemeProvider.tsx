@@ -21,7 +21,7 @@ const THEME_CLASSES: ThemeMode[] = ["light", "dim", "estate", "clarity"];
  * Users can show/hide certain pages from the main nav bar.
  * Hidden pages still accessible via More menu.
  */
-export type CustomizableNavItem = "activity" | "budgeting" | "recurring" | "goals" | "insights" | "calendar" | "review" | "accounts";
+export type CustomizableNavItem = "activity" | "budgeting" | "recurring" | "goals" | "insights" | "calendar" | "review" | "accounts" | "auto-sort";
 
 export const NAV_ITEM_CONFIG: { id: CustomizableNavItem; label: string; description: string }[] = [
   { id: "activity", label: "Activity", description: "Transaction history and log" },
@@ -32,6 +32,7 @@ export const NAV_ITEM_CONFIG: { id: CustomizableNavItem; label: string; descript
   { id: "calendar", label: "Calendar", description: "Calendar view of transactions" },
   { id: "review", label: "Review", description: "Weekly/monthly review" },
   { id: "accounts", label: "Accounts", description: "Connected accounts" },
+  { id: "auto-sort", label: "Auto-Sort", description: "Auto-categorize transactions" },
 ];
 
 // Default visible items in nav bar

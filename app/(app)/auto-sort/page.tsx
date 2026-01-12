@@ -7,15 +7,7 @@ import { Id, Doc } from "@/convex/_generated/dataModel";
 import { SignedIn } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
-
-const formatMoney = (cents: number) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
-};
+import { formatMoney } from "@/components/utils";
 
 type Tab = "category" | "merchant";
 
@@ -126,7 +118,7 @@ export default function RulesPage() {
   return (
     <div className="min-h-screen pb-24" style={{ backgroundColor: "var(--background)" }}>
       <SignedIn>
-        <PageHeader title="Rules" subtitle="Auto-categorize and normalize transactions" />
+        <PageHeader title="Auto-Sort" subtitle="Automatically categorize and organize transactions" />
 
         {/* Tab Switcher */}
         <div className="px-4 mb-4">

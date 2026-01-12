@@ -25,10 +25,10 @@ const menuGroups: MenuGroup[] = [
     title: "Workflows",
     items: [
       { 
-        href: "/rules", 
-        label: "Rules", 
+        href: "/auto-sort", 
+        label: "Auto-Sort", 
         description: "Auto-categorize transactions",
-        icon: <Lucide.BookOpen className="h-5 w-5" /> 
+        icon: <Lucide.Wand2 className="h-5 w-5" /> 
       },
       { 
         href: "/recurring", 
