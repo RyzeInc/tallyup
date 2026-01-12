@@ -70,6 +70,9 @@ export default function ReviewTriagePage() {
   const [selectedEntry, setSelectedEntry] = useState<EditableEntry | null>(null);
 
   const inbox = useQuery(api.entries.listInbox, { limit: 200 }) as EntryDoc[] | undefined;
+  
+  // Fetch user preferences for hidden categories/tags
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
 
   // Use both types for suggestions
   const expenseCats = useQuery(api.entries.listCategories, { type: "expense", bucket: undefined }) as
@@ -80,6 +83,23 @@ export default function ReviewTriagePage() {
     | undefined;
 
   const updateEntry = useMutation(api.entries.updateEntry);
+  
+  // Get context tags filtered by user preferences
+  const filteredContextTags = useMemo(() => {
+    const hiddenSet = new Set((userPrefs?.hiddenContextTags ?? []).map(t => t.toLowerCase()));
+    return CONTEXT_TAGS.filter(tag => !hiddenSet.has(tag.toLowerCase()));
+  }, [userPrefs?.hiddenContextTags]);
+  
+  // Get filtered expense/income categories
+  const filteredExpenseCategories = useMemo(() => {
+    const hiddenSet = new Set(userPrefs?.hiddenExpenseCategories ?? []);
+    return EXPENSE_SPACES.filter(cat => !hiddenSet.has(cat));
+  }, [userPrefs?.hiddenExpenseCategories]);
+  
+  const filteredIncomeCategories = useMemo(() => {
+    const hiddenSet = new Set(userPrefs?.hiddenIncomeCategories ?? []);
+    return INCOME_SPACES.filter(cat => !hiddenSet.has(cat));
+  }, [userPrefs?.hiddenIncomeCategories]);
 
   // Categorize entries by what they're missing
   const categorizedEntries = useMemo(() => {
@@ -103,10 +123,10 @@ export default function ReviewTriagePage() {
     return uniqCaseInsensitive([
       ...((expenseCats ?? []) as string[]),
       ...((incomeCats ?? []) as string[]),
-      ...(EXPENSE_SPACES as unknown as string[]),
-      ...(INCOME_SPACES as unknown as string[]),
+      ...(filteredExpenseCategories as unknown as string[]),
+      ...(filteredIncomeCategories as unknown as string[]),
     ]).slice(0, 30);
-  }, [expenseCats, incomeCats]);
+  }, [expenseCats, incomeCats, filteredExpenseCategories, filteredIncomeCategories]);
 
   // Tab counts
   const tabCounts = {
@@ -219,6 +239,9 @@ export default function ReviewTriagePage() {
                   if (isEditableEntry(entry)) setSelectedEntry(entry);
                 }}
                 toast={toast}
+                filteredExpenseCategories={filteredExpenseCategories}
+                filteredIncomeCategories={filteredIncomeCategories}
+                filteredContextTags={filteredContextTags}
               />
             ))}
             
@@ -253,12 +276,18 @@ function ReviewTriageItem({
   catSuggestions,
   onMakeRecurring,
   toast,
+  filteredExpenseCategories,
+  filteredIncomeCategories,
+  filteredContextTags,
 }: {
   entry: EntryDoc;
   onUpdate: (args: UpdateEntryArgs) => Promise<unknown>;
   catSuggestions: string[];
   onMakeRecurring?: () => void;
   toast: ToastApi;
+  filteredExpenseCategories: readonly string[];
+  filteredIncomeCategories: readonly string[];
+  filteredContextTags: readonly string[];
 }) {
   const [category, setCategory] = useState(entry.category ?? "");
   const [contextTags, setContextTags] = useState<string[]>(entry.contextTags ?? []);
@@ -273,9 +302,9 @@ function ReviewTriageItem({
 
   // Quick suggestions for category
   const quickCategories = useMemo(() => {
-    const base = entry.type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
+    const base = entry.type === "income" ? filteredIncomeCategories : filteredExpenseCategories;
     return (base as unknown as string[]).slice(0, 5);
-  }, [entry.type]);
+  }, [entry.type, filteredExpenseCategories, filteredIncomeCategories]);
 
   async function markResolved() {
     setBusy(true);
@@ -547,7 +576,7 @@ function ReviewTriageItem({
               Context
             </label>
             <div className="flex flex-wrap gap-2">
-              {CONTEXT_TAGS.map((tag) => {
+              {filteredContextTags.map((tag) => {
                 const isSelected = contextTags.includes(tag);
                 const Icon = CONTEXT_TAG_ICONS[tag] || Lucide.Tag;
                 return (

@@ -39,6 +39,9 @@ export default function LogPage() {
   const goalsData = useQuery(api.goals.listGoals, {}) as
     | Doc<"goals">[]
     | undefined;
+  
+  // Fetch user preferences for hidden categories/tags
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
 
   // Build account options
   const accounts: AccountOption[] = useMemo(() => {
@@ -211,6 +214,9 @@ export default function LogPage() {
             tagsCatalog={tagsCatalog}
             goals={goals}
             onSubmit={handleSubmit}
+            hiddenExpenseCategories={userPrefs?.hiddenExpenseCategories ?? []}
+            hiddenIncomeCategories={userPrefs?.hiddenIncomeCategories ?? []}
+            hiddenContextTags={userPrefs?.hiddenContextTags ?? []}
           />
         </div>
       </SignedIn>

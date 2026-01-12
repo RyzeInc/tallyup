@@ -17,6 +17,9 @@ export default function ReviewWizardPage() {
   const toast = useToast();
   const inbox = useQuery(api.entries.listInbox, { limit: 80 }) as Doc<"entries">[] | undefined;
   const updateEntry = useMutation(api.entries.updateEntry);
+  
+  // Fetch user preferences for hidden categories/tags
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [step, setStep] = useState<Step>("confirm");
@@ -100,11 +103,24 @@ export default function ReviewWizardPage() {
     );
   }, []);
 
-  // Get category options based on entry type
+  // Get category options based on entry type, filtered by user preferences
   const categoryOptions = useMemo(() => {
     if (!currentEntry) return [];
-    return currentEntry.type === "income" ? [...INCOME_SPACES] : [...EXPENSE_SPACES];
-  }, [currentEntry]);
+    const isIncome = currentEntry.type === "income";
+    const baseCategories = isIncome ? [...INCOME_SPACES] : [...EXPENSE_SPACES];
+    const hiddenSet = new Set(
+      isIncome 
+        ? (userPrefs?.hiddenIncomeCategories ?? [])
+        : (userPrefs?.hiddenExpenseCategories ?? [])
+    );
+    return baseCategories.filter(cat => !hiddenSet.has(cat));
+  }, [currentEntry, userPrefs?.hiddenExpenseCategories, userPrefs?.hiddenIncomeCategories]);
+  
+  // Get context tags filtered by user preferences
+  const filteredContextTags = useMemo(() => {
+    const hiddenSet = new Set((userPrefs?.hiddenContextTags ?? []).map(t => t.toLowerCase()));
+    return CONTEXT_TAGS.filter(tag => !hiddenSet.has(tag.toLowerCase()));
+  }, [userPrefs?.hiddenContextTags]);
 
   if (!inbox) {
     return (
@@ -434,7 +450,7 @@ export default function ReviewWizardPage() {
                 </p>
 
                 <div className="flex flex-wrap gap-2 mb-6">
-                  {CONTEXT_TAGS.map((tag) => {
+                  {filteredContextTags.map((tag) => {
                     const isSelected = pendingTags.includes(tag);
                     return (
                       <button

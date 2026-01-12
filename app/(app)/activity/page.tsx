@@ -103,6 +103,7 @@ export default function ActivityPage() {
     return p.toString();
   };
   const prevFilterParams = useRef(getFilterParams(searchParams));
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional sync from URL params */
   useEffect(() => {
     const currentFilterParams = getFilterParams(searchParams);
     // Only sync state if filter params actually changed (ignore edit param changes)
@@ -137,6 +138,7 @@ export default function ActivityPage() {
       }
     }
   }, [searchParams]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Track if this is initial mount to avoid URL sync loops
   const isInitialMount = useRef(true);
@@ -212,30 +214,90 @@ export default function ActivityPage() {
     cursorDate: currentCursor,
   }) as EntriesPage | undefined;
 
+  // Use refs to track state and avoid stale closure issues in effects
+  const seenIdsRef = useRef<Record<string, boolean>>({});
+  const cursorListRef = useRef<Array<number | undefined>>([undefined]);
+  const pagesRef = useRef<EntryDoc[][]>([]);
+
   // when filters change, reset pages
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional pagination reset */
   useEffect(() => {
     setPages([]);
     setNextCursor(undefined);
     setCursorList([undefined]);
     setSeenIds({});
+    // Also reset refs immediately for the next pageResult effect
+    seenIdsRef.current = {};
+    cursorListRef.current = [undefined];
+    pagesRef.current = [];
   }, [type, startDate, endDate, selectedCategories, selectedTags, reviewOnly, q]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    seenIdsRef.current = seenIds;
+  }, [seenIds]);
+  
+  useEffect(() => {
+    cursorListRef.current = cursorList;
+  }, [cursorList]);
+  
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
 
   // append page result when it arrives
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional sync from Convex query */
   useEffect(() => {
     if (!pageResult?.rows) return;
+    
+    // Use refs for latest values to avoid stale closure
+    const currentSeenIds = seenIdsRef.current;
+    const currentCursorList = cursorListRef.current;
+    const currentPages = pagesRef.current;
+    
     const newRows: EntryDoc[] = [];
-    const seen = { ...seenIds };
+    const seen = { ...currentSeenIds };
+    
     for (const r of pageResult.rows) {
       if (!seen[r._id]) {
         newRows.push(r);
         seen[r._id] = true;
       }
     }
-    if (newRows.length) setPages((p) => [...p, newRows]);
+    
+    if (newRows.length) {
+      // Check if this is a real-time update (new entries at the front)
+      // vs a pagination load (new entries at the end)
+      const isFirstPage = currentCursorList.length === 1 && currentCursorList[0] === undefined;
+      
+      if (isFirstPage && currentPages.length > 0) {
+        // Real-time update: merge new entries into the first page
+        // This handles the case where a new entry was added to the database
+        setPages((p) => {
+          const existingFirstPage = p[0] || [];
+          const combined = [...newRows, ...existingFirstPage];
+          // Deduplicate by ID (in case of race conditions)
+          const deduped: EntryDoc[] = [];
+          const ids = new Set<string>();
+          for (const row of combined) {
+            if (!ids.has(row._id)) {
+              ids.add(row._id);
+              deduped.push(row);
+            }
+          }
+          return [deduped, ...p.slice(1)];
+        });
+      } else {
+        // Normal pagination: append as a new page
+        setPages((p) => [...p, newRows]);
+      }
+    }
+    
     setSeenIds(seen);
     setNextCursor(pageResult.nextCursor);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pageResult]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Sort and filter entries
   const allEntries = useMemo(() => {
@@ -297,6 +359,7 @@ export default function ActivityPage() {
   const isClosingModal = useRef(false);
 
   // Load entry for editing when editId changes
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional sync from URL edit param */
   useEffect(() => {
     // Don't reopen if we're in the process of closing
     if (isClosingModal.current) {
@@ -313,6 +376,7 @@ export default function ActivityPage() {
       setEditEntry(null);
     }
   }, [editId, allEntries]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Close edit modal and clear URL param
   function closeEditModal() {
@@ -351,6 +415,7 @@ export default function ActivityPage() {
   }, [selectedCategories, selectedTags, selectedMethods, selectedAccountIds, minAmount, maxAmount, activeFilterCount]);
 
   // Measure spacer width and decide if chips fit inline
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional layout measurement sync */
   useEffect(() => {
     if (!spacerRef.current || activeFilterCount === 0) {
       setChipsInline(false);
@@ -371,6 +436,7 @@ export default function ActivityPage() {
     
     return () => observer.disconnect();
   }, [estimatedChipsWidth, activeFilterCount]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Clear a specific filter
   function clearCategory(cat: string) {

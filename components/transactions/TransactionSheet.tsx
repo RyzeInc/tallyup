@@ -66,6 +66,26 @@ export default function TransactionSheet({
   const recentEntries = useQuery(api.entries.listEntries, { limit: 80 }) as
     | Doc<"entries">[]
     | undefined;
+  
+  // Fetch user preferences for hidden categories/tags
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
+  
+  // Get filtered context tags based on user preferences
+  const filteredContextTags = useMemo(() => {
+    const hiddenSet = new Set((userPrefs?.hiddenContextTags ?? []).map(t => t.toLowerCase()));
+    return CONTEXT_TAGS.filter(tag => !hiddenSet.has(tag.toLowerCase()));
+  }, [userPrefs?.hiddenContextTags]);
+  
+  // Get filtered expense/income categories
+  const filteredExpenseCategories = useMemo(() => {
+    const hiddenSet = new Set(userPrefs?.hiddenExpenseCategories ?? []);
+    return EXPENSE_SPACES.filter(cat => !hiddenSet.has(cat));
+  }, [userPrefs?.hiddenExpenseCategories]);
+  
+  const filteredIncomeCategories = useMemo(() => {
+    const hiddenSet = new Set(userPrefs?.hiddenIncomeCategories ?? []);
+    return INCOME_SPACES.filter(cat => !hiddenSet.has(cat));
+  }, [userPrefs?.hiddenIncomeCategories]);
 
   const [type, setType] = useState<TransactionType>("expense");
   const [amountStr, setAmountStr] = useState("");
@@ -139,9 +159,9 @@ export default function TransactionSheet({
   }, [open]);
 
   const categoryOptions = useMemo(() => {
-    const base = type === "income" ? INCOME_SPACES : EXPENSE_SPACES;
+    const base = type === "income" ? filteredIncomeCategories : filteredExpenseCategories;
     return [...base];
-  }, [type]);
+  }, [type, filteredExpenseCategories, filteredIncomeCategories]);
 
   const categorySuggestions = useMemo(() => {
     const suggestions: string[] = [];
@@ -482,7 +502,7 @@ export default function TransactionSheet({
           <div className="mb-5">
             <div className="text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>Context</div>
             <div className="flex flex-wrap gap-2">
-              {CONTEXT_TAGS.map((tag) => {
+              {filteredContextTags.map((tag) => {
                 const selected = contextTags.includes(tag);
                 return (
                   <button

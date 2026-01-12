@@ -64,6 +64,11 @@ export type QuickLogFormProps = {
 
   // optional:
   onClose?: () => void;
+
+  // Hidden categories/tags from user preferences (filter out from UI)
+  hiddenExpenseCategories?: string[];
+  hiddenIncomeCategories?: string[];
+  hiddenContextTags?: string[];
 };
 
 export function QuickLogForm(props: QuickLogFormProps) {
@@ -76,10 +81,16 @@ export function QuickLogForm(props: QuickLogFormProps) {
     })
   );
 
-  // Determine categories based on txType
+  // Determine categories based on txType, filtering out hidden ones
   const categories = React.useMemo(() => {
-    return state.draft.type === "received" ? RECEIVED_CATEGORIES : SPENT_CATEGORIES;
-  }, [state.draft.type]);
+    const baseCategories = state.draft.type === "received" ? RECEIVED_CATEGORIES : SPENT_CATEGORIES;
+    const hiddenSet = new Set(
+      state.draft.type === "received" 
+        ? (props.hiddenIncomeCategories ?? [])
+        : (props.hiddenExpenseCategories ?? [])
+    );
+    return baseCategories.filter(cat => !hiddenSet.has(cat.id));
+  }, [state.draft.type, props.hiddenExpenseCategories, props.hiddenIncomeCategories]);
 
   // keep mode/existing in sync if parent changes (dialog re-open, etc.)
   React.useEffect(() => {
@@ -310,6 +321,7 @@ export function QuickLogForm(props: QuickLogFormProps) {
           onToggleContextFlag={(flag: ContextFlag) =>
             dispatch({ type: "TOGGLE_CONTEXT_FLAG", flag })
           }
+          hiddenContextTags={props.hiddenContextTags}
           // Intent
           intent={state.draft.intent}
           onSetIntent={(patch: Partial<Intent>) =>

@@ -70,6 +70,9 @@ type DetailsExpanderProps = {
   
   // Goal creation callback (optional)
   onGoalCreated?: (goalId: string, goalName: string) => void;
+
+  // Hidden context tags from user preferences (optional)
+  hiddenContextTags?: string[];
 };
 
 // ============================================
@@ -223,11 +226,35 @@ export function DetailsExpander(props: DetailsExpanderProps) {
     onSetGoal,
     onAccountCreated,
     onGoalCreated,
+    hiddenContextTags,
   } = props;
 
   const [tagSearch, setTagSearch] = React.useState("");
   const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false);
   const [showAddGoalDialog, setShowAddGoalDialog] = React.useState(false);
+
+  // Create hidden tags set (lowercase for case-insensitive comparison)
+  const hiddenTagsSet = React.useMemo(() => {
+    return new Set((hiddenContextTags ?? []).map(t => t.toLowerCase()));
+  }, [hiddenContextTags]);
+
+  // Filter scope options based on hidden tags
+  const filteredScopeOptions = React.useMemo(() => {
+    return SCOPE_OPTIONS.filter(opt => !hiddenTagsSet.has(opt.label.toLowerCase()));
+  }, [hiddenTagsSet]);
+
+  // Filter flag options based on hidden tags
+  // Note: "Tax-Ded." maps to "Tax-Deductible" in stored preferences
+  const filteredFlagOptions = React.useMemo(() => {
+    return FLAG_OPTIONS.filter(opt => {
+      // Check both the display label and the full form for Tax-Deductible
+      const labelLower = opt.label.toLowerCase();
+      if (opt.value === "tax_deductible") {
+        return !hiddenTagsSet.has("tax-deductible") && !hiddenTagsSet.has("tax-ded.");
+      }
+      return !hiddenTagsSet.has(labelLower);
+    });
+  }, [hiddenTagsSet]);
 
   // Filter tags catalog
   const filteredTags = React.useMemo(() => {
@@ -308,7 +335,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
       <ExpandableSection isExpanded={expandedSection === "context"}>
         <SectionLabel>Who&apos;s this for?</SectionLabel>
         <div className="flex flex-wrap gap-1.5 mb-1">
-          {SCOPE_OPTIONS.map((opt) => {
+          {filteredScopeOptions.map((opt) => {
             const isSelected = contextScope === opt.value;
             return (
               <button
@@ -338,7 +365,7 @@ export function DetailsExpander(props: DetailsExpanderProps) {
         <div className="mt-3">
           <SectionLabel>Additional Flags</SectionLabel>
           <div className="flex flex-wrap gap-1.5">
-            {FLAG_OPTIONS.map((opt) => {
+            {filteredFlagOptions.map((opt) => {
               const isSelected = contextFlags.includes(opt.value);
               return (
                 <button

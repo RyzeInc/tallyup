@@ -39,6 +39,26 @@ export default function ActivityTable({
   const toast = useToast();
   const router = useRouter();
   
+  // Fetch user preferences for hidden categories/tags
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
+  
+  // Get filtered context tags based on user preferences
+  const filteredContextTags = useMemo(() => {
+    const hiddenSet = new Set((userPrefs?.hiddenContextTags ?? []).map(t => t.toLowerCase()));
+    return CONTEXT_TAGS.filter(tag => !hiddenSet.has(tag.toLowerCase()));
+  }, [userPrefs?.hiddenContextTags]);
+  
+  // Get filtered expense/income categories
+  const filteredExpenseCategories = useMemo(() => {
+    const hiddenSet = new Set(userPrefs?.hiddenExpenseCategories ?? []);
+    return EXPENSE_SPACES.filter(cat => !hiddenSet.has(cat));
+  }, [userPrefs?.hiddenExpenseCategories]);
+  
+  const filteredIncomeCategories = useMemo(() => {
+    const hiddenSet = new Set(userPrefs?.hiddenIncomeCategories ?? []);
+    return INCOME_SPACES.filter(cat => !hiddenSet.has(cat));
+  }, [userPrefs?.hiddenIncomeCategories]);
+  
   // Fetch custom categories to resolve IDs to names
   const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
   const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
@@ -223,10 +243,10 @@ export default function ActivityTable({
   const categoryOptions = useMemo(() => {
     const hasExpense = selectedIds.some((id) => entries.find((e) => e._id === id)?.type === "expense");
     const hasIncome = selectedIds.some((id) => entries.find((e) => e._id === id)?.type === "income");
-    if (hasExpense && hasIncome) return [...EXPENSE_SPACES, ...INCOME_SPACES];
-    if (hasIncome) return [...INCOME_SPACES];
-    return [...EXPENSE_SPACES];
-  }, [selectedIds, entries]);
+    if (hasExpense && hasIncome) return [...filteredExpenseCategories, ...filteredIncomeCategories];
+    if (hasIncome) return [...filteredIncomeCategories];
+    return [...filteredExpenseCategories];
+  }, [selectedIds, entries, filteredExpenseCategories, filteredIncomeCategories]);
 
   return (
     <div className="space-y-3 flex flex-col min-h-0 max-h-full">
@@ -759,7 +779,7 @@ export default function ActivityTable({
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {CONTEXT_TAGS.map((tag) => (
+              {filteredContextTags.map((tag) => (
                 <button
                   key={tag}
                   onClick={() => handleBulkAddTag(tag)}
