@@ -1,15 +1,14 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import RecurringModal from "@/components/RecurringModal";
 import { 
   centsToDollars, 
   uniqCaseInsensitive,
-  EXPENSE_SPACES,
-  INCOME_SPACES,
+  getCategoryDisplayName,
 } from "@/components/utils";
 import { CONTEXT_TAGS } from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
@@ -39,6 +38,7 @@ type UpdateEntryArgs = {
   category?: string;
   contextTags?: string[];
   methodOrAccount?: string;
+  accountId?: Id<"accounts">;
   needsReview?: boolean;
 };
 type ToastApi = ReturnType<typeof useToast>;
@@ -78,6 +78,7 @@ export default function UnifiedReviewPage() {
   const [step, setStep] = useState<Step>("confirm");
   const [pendingCategory, setPendingCategory] = useState("");
   const [pendingTags, setPendingTags] = useState<string[]>([]);
+  const [pendingAccountId, setPendingAccountId] = useState<Id<"accounts"> | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [completed, setCompleted] = useState(0);
 
@@ -86,15 +87,22 @@ export default function UnifiedReviewPage() {
   // Fetch user preferences for hidden categories/tags
   const userPrefs = useQuery(api.preferences.getUserPreferences, {});
 
-  // Use both types for suggestions
-  const expenseCats = useQuery(api.entries.listCategories, { type: "expense", bucket: undefined }) as
-    | string[]
+  const ensureSystemCategories = useMutation(api.categories.ensureSystemCategories);
+  const expenseCategoryOptions = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
+    | { _id: string; name: string }[]
     | undefined;
-  const incomeCats = useQuery(api.entries.listCategories, { type: "income", bucket: undefined }) as
-    | string[]
+  const incomeCategoryOptions = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string }[]
+    | undefined;
+  const accounts = useQuery(api.accounts.listAccounts, {}) as
+    | { _id: Id<"accounts">; name: string }[]
     | undefined;
 
   const updateEntry = useMutation(api.entries.updateEntry);
+
+  useEffect(() => {
+    ensureSystemCategories().catch(() => {});
+  }, [ensureSystemCategories]);
   
   // Get context tags filtered by user preferences
   const filteredContextTags = useMemo(() => {
@@ -104,22 +112,30 @@ export default function UnifiedReviewPage() {
   
   // Get filtered expense/income categories
   const filteredExpenseCategories = useMemo(() => {
-    const hiddenSet = new Set(userPrefs?.hiddenExpenseCategories ?? []);
-    return EXPENSE_SPACES.filter(cat => !hiddenSet.has(cat));
-  }, [userPrefs?.hiddenExpenseCategories]);
+    const hiddenSet = new Set((userPrefs?.hiddenExpenseCategories ?? []).map((c) => c.toLowerCase()));
+    return (expenseCategoryOptions ?? [])
+      .map((c) => c.name)
+      .filter((name) => !hiddenSet.has(name.toLowerCase()));
+  }, [expenseCategoryOptions, userPrefs?.hiddenExpenseCategories]);
   
   const filteredIncomeCategories = useMemo(() => {
-    const hiddenSet = new Set(userPrefs?.hiddenIncomeCategories ?? []);
-    return INCOME_SPACES.filter(cat => !hiddenSet.has(cat));
-  }, [userPrefs?.hiddenIncomeCategories]);
+    const hiddenSet = new Set((userPrefs?.hiddenIncomeCategories ?? []).map((c) => c.toLowerCase()));
+    return (incomeCategoryOptions ?? [])
+      .map((c) => c.name)
+      .filter((name) => !hiddenSet.has(name.toLowerCase()));
+  }, [incomeCategoryOptions, userPrefs?.hiddenIncomeCategories]);
+
+  const allCategoryOptions = useMemo(() => {
+    return [...(expenseCategoryOptions ?? []), ...(incomeCategoryOptions ?? [])];
+  }, [expenseCategoryOptions, incomeCategoryOptions]);
 
   // Categorize entries by what they're missing (for triage tabs)
   const categorizedEntries = useMemo(() => {
     if (!inbox) return { category: [], context: [], account: [], all: [] };
     
-    const needsCategory = inbox.filter(e => !e.category);
+    const needsCategory = inbox.filter(e => !e.category && !e.categoryId);
     const needsContext = inbox.filter(e => !e.contextTags || e.contextTags.length === 0);
-    const needsAccount = inbox.filter(e => !e.methodOrAccount);
+    const needsAccount = inbox.filter(e => !e.accountId);
     
     return {
       category: needsCategory,
@@ -133,12 +149,10 @@ export default function UnifiedReviewPage() {
 
   const catSuggestions = useMemo(() => {
     return uniqCaseInsensitive([
-      ...((expenseCats ?? []) as string[]),
-      ...((incomeCats ?? []) as string[]),
       ...(filteredExpenseCategories as unknown as string[]),
       ...(filteredIncomeCategories as unknown as string[]),
     ]).slice(0, 30);
-  }, [expenseCats, incomeCats, filteredExpenseCategories, filteredIncomeCategories]);
+  }, [filteredExpenseCategories, filteredIncomeCategories]);
 
   // Tab counts
   const tabCounts = {
@@ -151,6 +165,11 @@ export default function UnifiedReviewPage() {
   // Guided mode helpers
   const currentEntry = inbox?.[currentIndex] ?? null;
   const totalCount = inbox?.length ?? 0;
+  const guidedNeedsAccount = !!currentEntry && !currentEntry.accountId;
+
+  useEffect(() => {
+    setPendingAccountId(currentEntry?.accountId ?? undefined);
+  }, [currentEntry?.accountId, currentEntry?._id]);
 
   const resetForNextEntry = useCallback(() => {
     setPendingCategory("");
@@ -172,14 +191,18 @@ export default function UnifiedReviewPage() {
   }, [goToNext]);
 
   const confirmAndContinue = useCallback(() => {
-    if (currentEntry?.category) {
-      setPendingCategory(currentEntry.category);
+    if (currentEntry?.category || currentEntry?.categoryId) {
+      const display = getCategoryDisplayName(
+        currentEntry.categoryId ?? currentEntry.category,
+        allCategoryOptions
+      );
+      setPendingCategory(display);
     }
     if (currentEntry?.tags?.length) {
       setPendingTags(currentEntry.tags);
     }
     setStep("category");
-  }, [currentEntry]);
+  }, [currentEntry, allCategoryOptions]);
 
   const selectCategory = useCallback((cat: string) => {
     setPendingCategory(cat);
@@ -191,11 +214,17 @@ export default function UnifiedReviewPage() {
 
     setSaving(true);
     try {
+      const accountName = pendingAccountId
+        ? accounts?.find((a) => a._id === pendingAccountId)?.name
+        : undefined;
+      const needsAccount = !currentEntry.accountId && !pendingAccountId;
       await updateEntry({
         id: currentEntry._id,
         category: pendingCategory || undefined,
         tags: pendingTags.length > 0 ? pendingTags : undefined,
-        needsReview: false,
+        accountId: pendingAccountId ?? undefined,
+        methodOrAccount: accountName ?? undefined,
+        needsReview: needsAccount ? undefined : false,
       });
       setCompleted((c) => c + 1);
       toast.success("Entry reviewed", { description: pendingCategory ? `Categorized as ${pendingCategory}` : undefined });
@@ -206,7 +235,7 @@ export default function UnifiedReviewPage() {
     } finally {
       setSaving(false);
     }
-  }, [currentEntry, pendingCategory, pendingTags, updateEntry, goToNext, toast]);
+  }, [currentEntry, pendingCategory, pendingTags, pendingAccountId, updateEntry, goToNext, toast, accounts]);
 
   const toggleTag = useCallback((tag: string) => {
     setPendingTags((prev) =>
@@ -217,14 +246,8 @@ export default function UnifiedReviewPage() {
   const categoryOptions = useMemo(() => {
     if (!currentEntry) return [];
     const isIncome = currentEntry.type === "income";
-    const baseCategories = isIncome ? [...INCOME_SPACES] : [...EXPENSE_SPACES];
-    const hiddenSet = new Set(
-      isIncome 
-        ? (userPrefs?.hiddenIncomeCategories ?? [])
-        : (userPrefs?.hiddenExpenseCategories ?? [])
-    );
-    return baseCategories.filter(cat => !hiddenSet.has(cat));
-  }, [currentEntry, userPrefs?.hiddenExpenseCategories, userPrefs?.hiddenIncomeCategories]);
+    return isIncome ? filteredIncomeCategories : filteredExpenseCategories;
+  }, [currentEntry, filteredExpenseCategories, filteredIncomeCategories]);
 
   // Reset guided mode when switching to it
   const handleModeChange = (newMode: ReviewMode) => {
@@ -431,6 +454,8 @@ export default function UnifiedReviewPage() {
                     filteredExpenseCategories={filteredExpenseCategories}
                     filteredIncomeCategories={filteredIncomeCategories}
                     filteredContextTags={filteredContextTags}
+                    accounts={accounts ?? []}
+                    allCategoryOptions={allCategoryOptions}
                   />
                 ))}
                 
@@ -614,6 +639,33 @@ export default function UnifiedReviewPage() {
                       </div>
                     </div>
 
+                    {guidedNeedsAccount && (accounts ?? []).length > 0 && (
+                      <div className="mb-6">
+                        <div className="text-meta mb-2" style={{ color: "var(--text-secondary)" }}>
+                          Choose an account
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(accounts ?? []).map((account) => {
+                            const isSelected = pendingAccountId === account._id;
+                            return (
+                              <button
+                                key={account._id}
+                                onClick={() => setPendingAccountId(account._id)}
+                                className="px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+                                style={{
+                                  backgroundColor: isSelected ? "var(--primary)" : "var(--surface-2)",
+                                  color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                                  border: isSelected ? "none" : "1px solid var(--border)",
+                                }}
+                              >
+                                {account.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex gap-3">
                       <button
                         onClick={skipEntry}
@@ -767,6 +819,8 @@ function ReviewTriageItem({
   filteredExpenseCategories,
   filteredIncomeCategories,
   filteredContextTags,
+  accounts,
+  allCategoryOptions,
 }: {
   entry: EntryDoc;
   onUpdate: (args: UpdateEntryArgs) => Promise<unknown>;
@@ -776,17 +830,26 @@ function ReviewTriageItem({
   filteredExpenseCategories: readonly string[];
   filteredIncomeCategories: readonly string[];
   filteredContextTags: readonly string[];
+  accounts: Array<{ _id: Id<"accounts">; name: string }>;
+  allCategoryOptions: Array<{ _id: string; name: string }>;
 }) {
-  const [category, setCategory] = useState(entry.category ?? "");
+  const initialCategory = useMemo(() => {
+    return getCategoryDisplayName(
+      entry.categoryId ?? entry.category,
+      allCategoryOptions
+    );
+  }, [entry.categoryId, entry.category, allCategoryOptions]);
+  const [category, setCategory] = useState(initialCategory);
   const [contextTags, setContextTags] = useState<string[]>(entry.contextTags ?? []);
   const [methodOrAccount, setMethodOrAccount] = useState(entry.methodOrAccount ?? "");
+  const [accountId, setAccountId] = useState<Id<"accounts"> | undefined>(entry.accountId ?? undefined);
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   // Determine what needs attention
-  const needsCategory = !entry.category;
+  const needsCategory = !entry.category && !entry.categoryId;
   const needsContext = !entry.contextTags || entry.contextTags.length === 0;
-  const needsAccount = !entry.methodOrAccount;
+  const needsAccount = !entry.accountId;
 
   // Quick suggestions for category
   const quickCategories = useMemo(() => {
@@ -804,7 +867,15 @@ function ReviewTriageItem({
       
       if (category.trim()) updates.category = category.trim();
       if (contextTags.length > 0) updates.contextTags = contextTags;
-      if (methodOrAccount.trim()) updates.methodOrAccount = methodOrAccount.trim();
+      if (accountId) {
+        updates.accountId = accountId;
+        const accountName = accounts.find((a) => a._id === accountId)?.name;
+        if (accountName) {
+          updates.methodOrAccount = accountName;
+        }
+      } else if (methodOrAccount.trim()) {
+        updates.methodOrAccount = methodOrAccount.trim();
+      }
       
       await onUpdate(updates);
       toast.success("Resolved");
@@ -848,15 +919,18 @@ function ReviewTriageItem({
     }
   }
 
-  async function quickSetAccount(account: string) {
+  async function quickSetAccount(account: { _id: Id<"accounts">; name: string }) {
     setBusy(true);
     try {
       await onUpdate({
         id: entry._id,
-        methodOrAccount: account,
+        accountId: account._id,
+        methodOrAccount: account.name,
         needsReview: false,
       });
-      toast.success(`Set account to ${account}`);
+      setAccountId(account._id);
+      setMethodOrAccount(account.name);
+      toast.success(`Set account to ${account.name}`);
     } catch (e: unknown) {
       toast.error("Failed to update", { description: errorMessage(e) });
     } finally {
@@ -1001,11 +1075,11 @@ function ReviewTriageItem({
       )}
 
       {/* Quick account chips - always visible if needed */}
-      {needsAccount && !needsCategory && !needsContext && !expanded && (
+      {needsAccount && !needsCategory && !needsContext && !expanded && accounts.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
-          {["Cash", "Checking", "Credit Card", "Savings"].map((account) => (
+          {accounts.slice(0, 6).map((account) => (
             <button
-              key={account}
+              key={account._id}
               onClick={() => quickSetAccount(account)}
               disabled={busy}
               className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
@@ -1015,7 +1089,7 @@ function ReviewTriageItem({
                 border: "1px solid var(--border)",
               }}
             >
-              {account}
+              {account.name}
             </button>
           ))}
         </div>
@@ -1045,17 +1119,9 @@ function ReviewTriageItem({
                 </button>
               ))}
             </div>
-            <input
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="Or type a custom category..."
-              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-              style={{
-                backgroundColor: "var(--surface-2)",
-                border: "1px solid var(--border)",
-                color: "var(--text)",
-              }}
-            />
+            <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+              Manage categories in Settings to add or rename options.
+            </div>
           </div>
 
           {/* Context tags */}
@@ -1096,31 +1162,26 @@ function ReviewTriageItem({
               Account / Method
             </label>
             <div className="flex flex-wrap gap-2">
-              {["Cash", "Checking", "Savings", "Credit Card"].map((account) => (
-                <button
-                  key={account}
-                  onClick={() => setMethodOrAccount(account)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
-                  style={{
-                    backgroundColor: methodOrAccount === account ? "var(--primary)" : "var(--surface-2)",
-                    color: methodOrAccount === account ? "var(--primary-foreground)" : "var(--text)",
-                    border: methodOrAccount === account ? "none" : "1px solid var(--border)",
-                  }}
-                >
-                  {account}
-                </button>
-              ))}
-              <input
-                value={!["Cash", "Checking", "Savings", "Credit Card"].includes(methodOrAccount) ? methodOrAccount : ""}
-                onChange={(e) => setMethodOrAccount(e.target.value)}
-                placeholder="Other..."
-                className="flex-1 min-w-[80px] rounded-full px-3 py-1.5 text-xs outline-none"
-                style={{
-                  backgroundColor: "var(--surface-2)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text)",
-                }}
-              />
+              {(accounts ?? []).map((account) => {
+                const isSelected = accountId === account._id;
+                return (
+                  <button
+                    key={account._id}
+                    onClick={() => {
+                      setAccountId(account._id);
+                      setMethodOrAccount(account.name);
+                    }}
+                    className="px-3 py-1.5 rounded-full text-xs font-medium transition-colors"
+                    style={{
+                      backgroundColor: isSelected ? "var(--primary)" : "var(--surface-2)",
+                      color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                      border: isSelected ? "none" : "1px solid var(--border)",
+                    }}
+                  >
+                    {account.name}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

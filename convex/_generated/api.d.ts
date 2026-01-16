@@ -11,9 +11,12 @@
 import type * as accounts from "../accounts.js";
 import type * as analytics from "../analytics.js";
 import type * as budgetEngine from "../budgetEngine.js";
+import type * as budgetMatcher from "../budgetMatcher.js";
 import type * as budgetWorker from "../budgetWorker.js";
 import type * as budgets from "../budgets.js";
 import type * as categories from "../categories.js";
+import type * as categoryCatalog from "../categoryCatalog.js";
+import type * as categoryResolver from "../categoryResolver.js";
 import type * as crons from "../crons.js";
 import type * as detector from "../detector.js";
 import type * as entries from "../entries.js";
@@ -39,9 +42,12 @@ declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
   analytics: typeof analytics;
   budgetEngine: typeof budgetEngine;
+  budgetMatcher: typeof budgetMatcher;
   budgetWorker: typeof budgetWorker;
   budgets: typeof budgets;
   categories: typeof categories;
+  categoryCatalog: typeof categoryCatalog;
+  categoryResolver: typeof categoryResolver;
   crons: typeof crons;
   detector: typeof detector;
   entries: typeof entries;

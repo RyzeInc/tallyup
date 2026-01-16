@@ -131,7 +131,9 @@ export default function AccountsPage() {
   // Mutations
   const createAccount = useMutation(api.accounts.createAccount);
   const updateAccount = useMutation(api.accounts.updateAccount);
+  const deleteAccount = useMutation(api.accounts.deleteAccount);
   const addSnapshot = useMutation(api.accounts.addAccountSnapshot);
+  const [deleting, setDeleting] = useState(false);
 
   function errorMessage(error: unknown): string | undefined {
     if (error instanceof Error) return error.message;
@@ -828,6 +830,34 @@ export default function AccountsPage() {
                   >
                     {saving ? "Saving..." : "Save Changes"}
                   </button>
+                </div>
+
+                {/* Delete Account */}
+                <div className="pt-4 mt-4 border-t" style={{ borderColor: "var(--border)" }}>
+                  <button
+                    onClick={async () => {
+                      if (!editingAccount) return;
+                      if (!confirm(`Are you sure you want to delete "${editingAccount.name}"? This cannot be undone.`)) return;
+                      setDeleting(true);
+                      try {
+                        await deleteAccount({ id: editingAccount._id });
+                        toast.success("Account deleted");
+                        setEditingAccount(null);
+                      } catch (e: unknown) {
+                        toast.error("Failed to delete account", { description: errorMessage(e) });
+                      } finally {
+                        setDeleting(false);
+                      }
+                    }}
+                    disabled={deleting}
+                    className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                    style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
+                  >
+                    {deleting ? "Deleting..." : "Delete Account"}
+                  </button>
+                  <p className="text-xs text-center mt-2" style={{ color: "var(--text-tertiary)" }}>
+                    Only accounts without transactions can be deleted. Plaid-linked accounts must be unlinked first.
+                  </p>
                 </div>
               </div>
             </div>

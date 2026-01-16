@@ -205,6 +205,9 @@ export const exchangePublicToken = action({
           institutionName: instName,
           last4: account.mask || undefined,
           creditLimit: account.balances.limit ? Math.round(account.balances.limit * 100) : undefined,
+          initialBalanceCents: account.balances.current !== null && account.balances.current !== undefined
+            ? Math.round(account.balances.current * 100)
+            : undefined,
           isLinked: true,
           plaidAccountId: account.account_id,
         });
@@ -477,6 +480,15 @@ export const refreshBalances = action({
           balanceLimit: account.balances.limit ?? undefined,
           lastSyncedAt: now,
         });
+
+        if (account.balances.current !== null && account.balances.current !== undefined) {
+          await ctx.runMutation(internal.accounts.addAccountSnapshotInternal, {
+            userId: identity.subject,
+            accountId: plaidAccount.accountId,
+            balanceCents: Math.round(account.balances.current * 100),
+            asOf: now,
+          });
+        }
       }
       
       return {
@@ -485,7 +497,40 @@ export const refreshBalances = action({
       };
     } catch (error: unknown) {
       console.error("Error refreshing balances:", error);
-      const message = error instanceof Error ? error.message : "Unknown error";
+      
+      // Extract Plaid error details if available
+      let errorCode: string | undefined;
+      let message = "Unknown error";
+      
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as { response?: { data?: { error_code?: string; error_message?: string } } };
+        errorCode = axiosError.response?.data?.error_code;
+        message = axiosError.response?.data?.error_message || message;
+        
+        // If the item needs re-authentication, update the status
+        if (errorCode === "ITEM_LOGIN_REQUIRED") {
+          await ctx.runMutation(internal.plaid.updatePlaidItemStatus, {
+            id: plaidItemId,
+            status: "needs_reauth",
+            errorCode,
+            errorMessage: message,
+          });
+          throw new Error("Bank connection needs re-authentication. Please reconnect this account.");
+        }
+        
+        // Handle invalid access token (sandbox expired or revoked)
+        if (errorCode === "INVALID_ACCESS_TOKEN") {
+          await ctx.runMutation(internal.plaid.updatePlaidItemStatus, {
+            id: plaidItemId,
+            status: "error",
+            errorCode,
+            errorMessage: message,
+          });
+          throw new Error("Bank connection is invalid. Please unlink and reconnect this account.");
+        }
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
       throw new Error(`Failed to refresh balances: ${message}`);
     }
   },

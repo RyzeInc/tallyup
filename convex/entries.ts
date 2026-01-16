@@ -3,13 +3,16 @@ import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { Entry as DetectorEntry, Candidate as DetectorCandidate } from "./detector";
 import { v } from "convex/values";
-import { getReviewReason } from "../lib/constants";
+import { getReviewReason, REVIEW_REASONS } from "../lib/constants";
 import { internal } from "./_generated/api";
 import { normalizeMerchant } from "./merchant";
+import { resolveCategoryId } from "./categoryResolver";
+import { resolveBudgetCategoryId } from "./budgetMatcher";
 
 type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
 type EntryDoc = Doc<"entries">;
 type BudgetCategoryId = Id<"budgetCategories">;
+type GoalId = Id<"goals">;
 
 function isDetectorEntry(entry: EntryDoc): entry is EntryDoc & { type: "expense" | "income" } {
   return entry.type === "expense" || entry.type === "income";
@@ -71,6 +74,31 @@ async function enqueueBudgetDirty(
   });
 }
 
+async function applyGoalDelta(
+  ctx: MutationCtx,
+  userId: string,
+  goalId: GoalId,
+  deltaAmountCents: number
+) {
+  const goal = await ctx.db.get(goalId);
+  if (!goal || goal.userId !== userId) return;
+  const nextAmount = Math.max(0, goal.currentAmountCents + deltaAmountCents);
+  await ctx.db.patch(goalId, {
+    currentAmountCents: nextAmount,
+    updatedAt: Date.now(),
+  });
+}
+
+async function getGoalContributionByEntry(
+  ctx: MutationCtx,
+  entryId: Id<"entries">
+) {
+  return await ctx.db
+    .query("goalContributions")
+    .withIndex("by_entry", (q) => q.eq("entryId", entryId))
+    .first();
+}
+
 // Helper to get effective category from entry (handles migration from bucket)
 function getEffectiveCategory(entry: Pick<EntryDoc, "category" | "bucket">): string | undefined {
   return entry.category ?? entry.bucket;
@@ -87,6 +115,7 @@ export const addEntry = mutation({
   args: {
     type: v.union(v.literal("expense"), v.literal("income")),
     category: v.optional(v.string()),
+    categoryId: v.optional(v.id("categories")),
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
@@ -126,10 +155,27 @@ export const addEntry = mutation({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
 
+    let categoryFromId: string | undefined;
+    let categoryIdInput: Id<"categories"> | undefined;
+    if (args.categoryId) {
+      const found = await ctx.db.get(args.categoryId);
+      if (found && found.userId === userId) {
+        categoryFromId = found.name;
+        categoryIdInput = found._id;
+      }
+    }
+
     // Accept either category or bucket, prefer category
-    const categoryValue = cleanStr(args.category) ?? cleanStr(args.bucket);
+    const categoryValue = categoryFromId ?? cleanStr(args.category) ?? cleanStr(args.bucket);
     const category = categoryValue;
     const bucket = categoryValue ? (cleanStr(args.bucket) ?? categoryValue) : cleanStr(args.bucket);
+    const categoryId = await resolveCategoryId(
+      ctx,
+      userId,
+      category,
+      args.type === "income" ? "income" : "expense",
+      { createIfMissing: false }
+    );
 
     const amountCents = Math.round(args.amountCents);
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
@@ -143,6 +189,13 @@ export const addEntry = mutation({
     const tags = cleanTags(args.tags);
     const contextTags = cleanTags(args.contextTags);
     const intentTags = cleanTags(args.intentTags);
+    const budgetCategoryId =
+      args.budgetCategoryId ??
+      (await resolveBudgetCategoryId(ctx, userId, {
+        category,
+        merchant,
+        tags,
+      }));
 
     const now = Date.now();
     const reviewReason = getReviewReason({
@@ -152,7 +205,9 @@ export const addEntry = mutation({
       amountCents,
       methodOrAccount,
     });
-    const needsReview = args.needsReview ?? !!reviewReason;
+    const missingCanonicalCategory = !!category && !(categoryIdInput ?? categoryId);
+    const effectiveReviewReason = missingCanonicalCategory ? REVIEW_REASONS.NEEDS_CATEGORY : reviewReason;
+    const needsReview = args.needsReview ?? !!effectiveReviewReason;
     const transactionType = args.type === "income" ? "RECEIVED" : "SPENT";
 
     const excludeFromTotals = args.excludeFromTotals ?? false;
@@ -163,6 +218,7 @@ export const addEntry = mutation({
       transactionType,
       bucket,
       category,
+      categoryId: categoryIdInput ?? categoryId,
       tags,
       note,
       merchant,
@@ -181,7 +237,7 @@ export const addEntry = mutation({
       splitParts: args.splitParts,
       currency: args.currency,
       needsReview,
-      reviewReason: reviewReason ?? undefined,
+      reviewReason: effectiveReviewReason ?? undefined,
       excludeFromTotals,
       occurredAt: args.date,
       enteredAt: now,
@@ -192,11 +248,23 @@ export const addEntry = mutation({
       platformType: args.platformType,
       // Linking fields (stored as strings, validated on read)
       goalId: args.goalId,
-      budgetCategoryId: args.budgetCategoryId,
+      budgetCategoryId,
     });
 
+    if (args.goalId) {
+      await applyGoalDelta(ctx, userId, args.goalId, amountCents);
+      await ctx.db.insert("goalContributions", {
+        userId,
+        goalId: args.goalId,
+        amountCents,
+        date: args.date,
+        entryId: insertedId,
+        createdAt: now,
+      });
+    }
+
     if (shouldAffectBudgets({ type: args.type, excludeFromBudgets: false, excludeFromTotals: excludeFromTotals, status: args.status ?? "posted", entryType: args.entryType })) {
-      await enqueueBudgetDirty(ctx, userId, args.date, args.budgetCategoryId, "entry_created");
+      await enqueueBudgetDirty(ctx, userId, args.date, budgetCategoryId, "entry_created");
     }
 
     // Autolink: delegate to deterministic recurring matcher.
@@ -215,6 +283,7 @@ export const updateEntry = mutation({
   args: {
     id: v.id("entries"),
     category: v.optional(v.string()),
+    categoryId: v.optional(v.union(v.id("categories"), v.null())),
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
@@ -258,15 +327,31 @@ export const updateEntry = mutation({
 
     const patch: Partial<EntryDoc> & { updatedAt: number } = { updatedAt: Date.now() };
 
+    let categoryTouched = false;
     if (args.category !== undefined) {
       const cat = args.category.trim();
       if (cat) {
         patch.category = cat;
         patch.bucket = args.bucket?.trim() || cat;
+        categoryTouched = true;
       }
     }
     if (args.bucket !== undefined && args.category === undefined) {
       patch.bucket = args.bucket.trim();
+      categoryTouched = true;
+    }
+    if (args.categoryId !== undefined) {
+      categoryTouched = true;
+      if (args.categoryId === null) {
+        patch.categoryId = undefined;
+      } else {
+        const found = await ctx.db.get(args.categoryId);
+        if (found && found.userId === userId) {
+          patch.categoryId = found._id;
+          patch.category = found.name;
+          patch.bucket = args.bucket?.trim() || found.name;
+        }
+      }
     }
     if (args.tags !== undefined) patch.tags = cleanTags(args.tags);
     if (args.note !== undefined) patch.note = cleanStr(args.note);
@@ -319,6 +404,38 @@ export const updateEntry = mutation({
       patch.recurringRuleId = args.recurringRuleId === null ? undefined : args.recurringRuleId;
     }
 
+    if (categoryTouched) {
+      const nextCategoryValue = getEffectiveCategory({
+        category: patch.category ?? existing.category,
+        bucket: patch.bucket ?? existing.bucket,
+      });
+      patch.categoryId = await resolveCategoryId(
+        ctx,
+        userId,
+        nextCategoryValue,
+        existing.type === "income" ? "income" : "expense",
+        { createIfMissing: false }
+      );
+    }
+
+    if (
+      args.budgetCategoryId === undefined &&
+      existing.budgetCategoryId === undefined &&
+      (categoryTouched || args.tags !== undefined || args.merchant !== undefined)
+    ) {
+      const nextCategoryValue = getEffectiveCategory({
+        category: patch.category ?? existing.category,
+        bucket: patch.bucket ?? existing.bucket,
+      });
+      const nextMerchant = patch.merchant ?? existing.merchant;
+      const nextTags = patch.tags ?? existing.tags;
+      patch.budgetCategoryId = await resolveBudgetCategoryId(ctx, userId, {
+        category: nextCategoryValue,
+        merchant: nextMerchant,
+        tags: nextTags,
+      });
+    }
+
     const next = { ...existing, ...patch };
     if (next.type === "transfer") {
       patch.reviewReason = undefined;
@@ -332,13 +449,15 @@ export const updateEntry = mutation({
         amountCents: next.amountCents,
         methodOrAccount: next.methodOrAccount,
       });
-      patch.reviewReason = reviewReason ?? undefined;
+      const missingCanonicalCategory = !!next.category && !next.categoryId;
+      const effectiveReviewReason = missingCanonicalCategory ? REVIEW_REASONS.NEEDS_CATEGORY : reviewReason;
+      patch.reviewReason = effectiveReviewReason ?? undefined;
       // Honor explicit needsReview: false from client (user clicked "Resolve")
       // Only auto-compute needsReview if client didn't explicitly set it to false
       if (args.needsReview === false) {
         patch.needsReview = false;
       } else {
-        patch.needsReview = !!reviewReason;
+        patch.needsReview = !!effectiveReviewReason;
       }
       if (!patch.transactionType) {
         patch.transactionType = next.type === "income" ? "RECEIVED" : "SPENT";
@@ -374,6 +493,45 @@ export const updateEntry = mutation({
         await enqueueBudgetDirty(ctx, userId, nextEntry.date, nextEntry.budgetCategoryId, "entry_updated_new");
       }
     }
+
+    if (existing.goalId || nextEntry.goalId) {
+      const contribution = await getGoalContributionByEntry(ctx, args.id);
+      const prevGoalId = existing.goalId;
+      const nextGoalId = nextEntry.goalId;
+      const prevAmount = contribution?.amountCents ?? existing.amountCents;
+      const nextAmount = nextEntry.amountCents;
+
+      if (prevGoalId && (!nextGoalId || nextGoalId !== prevGoalId || prevAmount !== nextAmount)) {
+        await applyGoalDelta(ctx, userId, prevGoalId, -prevAmount);
+      }
+
+      if (nextGoalId) {
+        const delta =
+          prevGoalId && nextGoalId === prevGoalId ? nextAmount - prevAmount : nextAmount;
+        if (delta !== 0) {
+          await applyGoalDelta(ctx, userId, nextGoalId, delta);
+        }
+
+        if (contribution) {
+          await ctx.db.patch(contribution._id, {
+            goalId: nextGoalId,
+            amountCents: nextAmount,
+            date: nextEntry.date,
+          });
+        } else {
+          await ctx.db.insert("goalContributions", {
+            userId,
+            goalId: nextGoalId,
+            amountCents: nextAmount,
+            date: nextEntry.date,
+            entryId: args.id,
+            createdAt: Date.now(),
+          });
+        }
+      } else if (contribution) {
+        await ctx.db.delete(contribution._id);
+      }
+    }
     return { ok: true };
   },
 });
@@ -385,6 +543,15 @@ export const deleteEntry = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
     await ctx.db.delete(args.id);
+
+    if (existing.goalId) {
+      const contribution = await getGoalContributionByEntry(ctx, args.id);
+      const amount = contribution?.amountCents ?? existing.amountCents;
+      await applyGoalDelta(ctx, userId, existing.goalId, -amount);
+      if (contribution) {
+        await ctx.db.delete(contribution._id);
+      }
+    }
 
     if (shouldAffectBudgets(existing)) {
       await enqueueBudgetDirty(ctx, userId, existing.date, existing.budgetCategoryId, "entry_deleted");
@@ -523,7 +690,11 @@ export const listEntriesPaged = query({
 
     // server-side filtering for fields that can't be indexed
     const bucketsSet = args.buckets?.map((s: string) => s.trim().toLowerCase());
-    const categoriesSet = args.categories?.map((s: string) => s.trim().toLowerCase());
+    const categoryFilters = args.categories?.map((s: string) => s.trim()) ?? [];
+    const categoryFilterSet = new Set(categoryFilters.filter(Boolean));
+    const categoryFilterLowerSet = new Set(
+      categoryFilters.map((s: string) => s.toLowerCase()).filter(Boolean)
+    );
     const tagsSet = args.tags?.map((s: string) => s.trim().toLowerCase());
     const search = args.search?.trim().toLowerCase();
 
@@ -535,9 +706,15 @@ export const listEntriesPaged = query({
         const b = (r.bucket ?? "").toLowerCase();
         if (!bucketsSet.includes(b)) continue;
       }
-      if (categoriesSet && categoriesSet.length) {
-        const c = (r.category ?? "").toLowerCase();
-        if (!categoriesSet.includes(c)) continue;
+      if (categoryFilters.length) {
+        const categoryId = r.categoryId ? String(r.categoryId) : "";
+        const categoryValue = (r.category ?? "").toLowerCase();
+        const bucketValue = (r.bucket ?? "").toLowerCase();
+        const matchesId = categoryId && categoryFilterSet.has(categoryId);
+        const matchesName =
+          (!!categoryValue && categoryFilterLowerSet.has(categoryValue)) ||
+          (!!bucketValue && categoryFilterLowerSet.has(bucketValue));
+        if (!matchesId && !matchesName) continue;
       }
       if (tagsSet && tagsSet.length) {
         const rs = [

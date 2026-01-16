@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc, Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
-import { centsToDollars, CONTEXT_TAGS, EXPENSE_SPACES, INCOME_SPACES, getCategoryDisplayName } from "@/components/utils";
+import { centsToDollars, CONTEXT_TAGS, getCategoryDisplayName } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -48,18 +48,7 @@ export default function ActivityTable({
     return CONTEXT_TAGS.filter(tag => !hiddenSet.has(tag.toLowerCase()));
   }, [userPrefs?.hiddenContextTags]);
   
-  // Get filtered expense/income categories
-  const filteredExpenseCategories = useMemo(() => {
-    const hiddenSet = new Set(userPrefs?.hiddenExpenseCategories ?? []);
-    return EXPENSE_SPACES.filter(cat => !hiddenSet.has(cat));
-  }, [userPrefs?.hiddenExpenseCategories]);
-  
-  const filteredIncomeCategories = useMemo(() => {
-    const hiddenSet = new Set(userPrefs?.hiddenIncomeCategories ?? []);
-    return INCOME_SPACES.filter(cat => !hiddenSet.has(cat));
-  }, [userPrefs?.hiddenIncomeCategories]);
-  
-  // Fetch custom categories to resolve IDs to names
+  // Fetch categories to resolve IDs to names
   const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
   const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
   const allCustomCategories = useMemo(() => {
@@ -67,6 +56,21 @@ export default function ActivityTable({
     const income = (incomeCategories ?? []) as { _id: string; name: string }[];
     return [...expense, ...income];
   }, [expenseCategories, incomeCategories]);
+
+  // Get filtered expense/income categories
+  const filteredExpenseCategories = useMemo(() => {
+    const hiddenSet = new Set((userPrefs?.hiddenExpenseCategories ?? []).map((c) => c.toLowerCase()));
+    return ((expenseCategories ?? []) as { _id: string; name: string }[])
+      .map((c) => c.name)
+      .filter((name) => !hiddenSet.has(name.toLowerCase()));
+  }, [expenseCategories, userPrefs?.hiddenExpenseCategories]);
+  
+  const filteredIncomeCategories = useMemo(() => {
+    const hiddenSet = new Set((userPrefs?.hiddenIncomeCategories ?? []).map((c) => c.toLowerCase()));
+    return ((incomeCategories ?? []) as { _id: string; name: string }[])
+      .map((c) => c.name)
+      .filter((name) => !hiddenSet.has(name.toLowerCase()));
+  }, [incomeCategories, userPrefs?.hiddenIncomeCategories]);
   
   // Fetch goals for goal column
   const goals = useQuery(api.goals.listGoals, {}) as { _id: string; name: string }[] | undefined;
@@ -326,10 +330,21 @@ export default function ActivityTable({
             <div style={{ width: 80, flexShrink: 0 }}>Goal</div>
           </div>
           {entries.map((r, i) => {
+            const isTransfer = r.type === "transfer";
             const isIncome = r.type === "income";
-            const amountColor = isIncome ? "var(--success)" : "var(--text)";
-            const amountPrefix = isIncome ? "+" : "−";
-            const categoryLabel = getCategoryDisplayName(r.category || r.bucket, allCustomCategories);
+            const isTransferIn = isTransfer && r.isTransferSource === false;
+            const amountColor = isTransfer
+              ? isTransferIn
+                ? "var(--success)"
+                : "var(--text)"
+              : isIncome
+              ? "var(--success)"
+              : "var(--text)";
+            const amountPrefix = isTransfer ? (isTransferIn ? "+" : "−") : isIncome ? "+" : "−";
+            const categoryLabel = getCategoryDisplayName(
+              r.categoryId ?? r.category ?? r.bucket,
+              allCustomCategories
+            );
             const accountName = getAccountName(r.accountId as string | undefined) || r.methodOrAccount || "—";
             const goalName = getGoalName(r.goalId as string | undefined);
             const contextTags = r.contextTags ?? [];
@@ -470,12 +485,23 @@ export default function ActivityTable({
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
         {entries.map((r, i) => {
+          const isTransfer = r.type === "transfer";
           const isIncome = r.type === "income";
-          const amountColor = isIncome ? "var(--success)" : "var(--text)";
-          const amountPrefix = isIncome ? "+" : "−";
+          const isTransferIn = isTransfer && r.isTransferSource === false;
+          const amountColor = isTransfer
+            ? isTransferIn
+              ? "var(--success)"
+              : "var(--text)"
+            : isIncome
+            ? "var(--success)"
+            : "var(--text)";
+          const amountPrefix = isTransfer ? (isTransferIn ? "+" : "−") : isIncome ? "+" : "−";
           
           // Build secondary line: Category · Tags (as short chips)
-          const categoryLabel = getCategoryDisplayName(r.category || r.bucket, allCustomCategories);
+          const categoryLabel = getCategoryDisplayName(
+            r.categoryId ?? r.category ?? r.bucket,
+            allCustomCategories
+          );
           const tagLabels = r.tags?.slice(0, 2) || [];
           const offset = swipeOffset[r._id] ?? 0;
           

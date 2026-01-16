@@ -64,8 +64,10 @@ export function CategoryCombobox({
     return options.some((o) => normalize(o.label) === q);
   }, [options, valueText]);
 
+  const canCreate = !!onCreate;
+  const showCreateOption = canCreate && !hasExactMatch && valueText.trim().length > 0;
   // Total items including "Create" option
-  const totalItems = filtered.length + (!hasExactMatch && valueText.trim().length > 0 ? 1 : 0);
+  const totalItems = filtered.length + (showCreateOption ? 1 : 0);
 
   // Reset highlighted index when filtered list changes
   React.useEffect(() => {
@@ -125,7 +127,7 @@ export function CategoryCombobox({
     if (!q && filtered.length === 0) return;
 
     // If highlighted is the "Create" option (last item when no exact match)
-    const isCreateOption = !hasExactMatch && valueText.trim().length > 0 && highlightedIndex === filtered.length;
+    const isCreateOption = showCreateOption && highlightedIndex === filtered.length;
     if (isCreateOption) {
       void handleCreate(q);
       return;
@@ -141,7 +143,7 @@ export function CategoryCombobox({
     const exact = options.find((o) => normalize(o.label) === normalize(q));
     if (exact) {
       void handleSelectExisting(exact);
-    } else if (q) {
+    } else if (q && canCreate) {
       void handleCreate(q);
     }
   }
@@ -258,7 +260,7 @@ export function CategoryCombobox({
             );
           })}
 
-          {!hasExactMatch && valueText.trim().length > 0 && (
+          {showCreateOption && (
             <div
               data-combobox-item
               role="option"

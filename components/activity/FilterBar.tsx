@@ -25,12 +25,26 @@ export default function FilterBar() {
   // Get review count for badge
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
   const reviewCount = inbox?.length ?? 0;
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
 
-  // fetch categories (type is optional on the server)
-  const categories = useQuery(api.entries.listCategories, {
-    type: type === "all" ? undefined : type,
-    bucket: undefined,
-  }) as string[] | undefined;
+  const categories = useQuery(api.categories.listCategories, {
+    categoryType: type === "all" ? undefined : type,
+  }) as { _id: string; name: string }[] | undefined;
+  const hiddenNames = React.useMemo(() => {
+    if (type === "expense") return userPrefs?.hiddenExpenseCategories ?? [];
+    if (type === "income") return userPrefs?.hiddenIncomeCategories ?? [];
+    return [
+      ...(userPrefs?.hiddenExpenseCategories ?? []),
+      ...(userPrefs?.hiddenIncomeCategories ?? []),
+    ];
+  }, [type, userPrefs?.hiddenExpenseCategories, userPrefs?.hiddenIncomeCategories]);
+  const hiddenSet = React.useMemo(
+    () => new Set(hiddenNames.map((c) => c.toLowerCase())),
+    [hiddenNames]
+  );
+  const visibleCategories = React.useMemo(() => {
+    return (categories ?? []).filter((c) => !hiddenSet.has(c.name.toLowerCase()));
+  }, [categories, hiddenSet]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -191,22 +205,25 @@ export default function FilterBar() {
       </div>
 
       {/* Category Pills (scrollable) */}
-      {((categories ?? []) as string[]).length > 0 && (
+      {visibleCategories.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-          {((categories ?? []) as string[]).slice(0, 8).map((c) => (
+          {visibleCategories.slice(0, 8).map((c) => {
+            const isSelected = category === c._id || category === c.name;
+            return (
             <button
-              key={c}
-              onClick={() => setCategoryAndPush(category === c ? "" : c)}
+              key={c._id}
+              onClick={() => setCategoryAndPush(isSelected ? "" : c._id)}
               className="shrink-0 rounded-full px-3 py-1.5 text-sm font-medium transition-colors"
               style={{
-                backgroundColor: category === c ? "var(--accent)" : "var(--surface)",
-                color: category === c ? "var(--accent-foreground)" : "var(--text-secondary)",
-                border: category === c ? "none" : "1px solid var(--border)",
+                backgroundColor: isSelected ? "var(--accent)" : "var(--surface)",
+                color: isSelected ? "var(--accent-foreground)" : "var(--text-secondary)",
+                border: isSelected ? "none" : "1px solid var(--border)",
               }}
             >
-              {c}
+              {c.name}
             </button>
-          ))}
+          );
+          })}
         </div>
       )}
 

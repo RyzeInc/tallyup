@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { SYSTEM_CATEGORIES } from "./categoryCatalog";
 
 // ============================================
 // CATEGORIES QUERIES & MUTATIONS
@@ -40,6 +41,45 @@ export const listCategories = query({
       if (orderA !== orderB) return orderA - orderB;
       return a.name.localeCompare(b.name);
     });
+  },
+});
+
+/**
+ * Ensure system categories exist for the user
+ */
+export const ensureSystemCategories = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const existing = await ctx.db
+      .query("categories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    const existingSlugs = new Set(
+      existing.map((c) => (c.slug ?? "").toLowerCase()).filter(Boolean)
+    );
+
+    const now = Date.now();
+    let created = 0;
+    for (const system of SYSTEM_CATEGORIES) {
+      if (existingSlugs.has(system.slug.toLowerCase())) continue;
+      await ctx.db.insert("categories", {
+        userId,
+        name: system.name,
+        slug: system.slug,
+        categoryType: system.categoryType,
+        isSystem: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      created += 1;
+    }
+
+    return { created };
   },
 });
 

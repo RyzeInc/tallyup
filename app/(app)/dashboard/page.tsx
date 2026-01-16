@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
-import { centsToDollars, formatMoney, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
+import { centsToDollars, formatMoney, getCategoryDisplayName, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
@@ -74,6 +74,13 @@ export default function DashboardPage() {
 
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Entry[] | undefined;
+  const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
+  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
+  const allCustomCategories = useMemo(() => {
+    const expense = (expenseCategories ?? []) as { _id: string; name: string }[];
+    const income = (incomeCategories ?? []) as { _id: string; name: string }[];
+    return [...expense, ...income];
+  }, [expenseCategories, incomeCategories]);
 
   const recentEntries = useMemo(() => {
     if (!entries) return [];
@@ -100,8 +107,9 @@ export default function DashboardPage() {
       if (e.type === "expense") {
         const b = (e.bucket ?? "Other").trim() || "Other";
         bucketSpend.set(b, (bucketSpend.get(b) ?? 0) + e.amountCents);
-        const c = (e.category ?? "Uncategorized").trim() || "Uncategorized";
-        categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
+        const categoryKey = e.categoryId ?? e.category ?? e.bucket;
+        const categoryLabel = getCategoryDisplayName(categoryKey, allCustomCategories);
+        categorySpend.set(categoryLabel, (categorySpend.get(categoryLabel) ?? 0) + e.amountCents);
       }
     }
 
@@ -111,7 +119,7 @@ export default function DashboardPage() {
     const bucketFinal = otherTotal > 0 ? [...bucketRows, ["Other", otherTotal] as const] : bucketRows;
     const topCategory = [...categorySpend.entries()].sort((a, b) => b[1] - a[1])[0];
     return { income, expense, net, bucketFinal, topCategory };
-  }, [entries]);
+  }, [entries, allCustomCategories]);
 
   const reviewCount = inbox?.length ?? 0;
 
@@ -326,7 +334,10 @@ export default function DashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <div className="text-body font-medium truncate" style={{ color: "var(--text)" }}>
-                      {entry.category || entry.bucket || entry.note || "Uncategorized"}
+                      {getCategoryDisplayName(
+                        entry.categoryId ?? entry.category ?? entry.bucket ?? entry.note,
+                        allCustomCategories
+                      )}
                     </div>
                     <div className="text-meta" style={{ color: "var(--text-tertiary)" }}>
                       {new Date(entry.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}

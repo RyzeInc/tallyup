@@ -81,6 +81,7 @@ export default function SettingsPage() {
   const customIncomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" });
   const createCategory = useMutation(api.categories.createCategory);
   const deleteCategory = useMutation(api.categories.deleteCategory);
+  const ensureSystemCategories = useMutation(api.categories.ensureSystemCategories);
 
   // Category/tag management state - synced with Convex or localStorage fallback
   const [pinnedExpense, setPinnedExpense] = useState<ExpenseSpace[]>([]);
@@ -108,6 +109,7 @@ export default function SettingsPage() {
 
   // Load from Convex prefs when available, fallback to localStorage
   useEffect(() => {
+    ensureSystemCategories().catch(() => {});
     if (userPrefs) {
       // Use Convex data
       setPinnedExpense((userPrefs.pinnedExpenseCategories ?? []).filter(isExpenseSpace));

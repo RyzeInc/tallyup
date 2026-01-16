@@ -34,8 +34,9 @@ type TypeFilter = "all" | "income" | "expense";
 
 interface Entry {
   _id: string;
-  type: "expense" | "income";
+  type: "expense" | "income" | "transfer";
   category?: string;
+  categoryId?: string;
   tags?: string[];
   note?: string;
   amountCents: number;
@@ -295,7 +296,10 @@ export default function InsightsPage() {
         income += e.amountCents;
       } else {
         expense += e.amountCents;
-        const c = getCategoryDisplayName(e.category, allCustomCategories);
+        const c = getCategoryDisplayName(
+          e.categoryId ?? e.category,
+          allCustomCategories
+        );
         categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
         categoryCount.set(c, (categoryCount.get(c) ?? 0) + 1);
 
@@ -406,7 +410,10 @@ export default function InsightsPage() {
         income += e.amountCents;
       } else {
         expense += e.amountCents;
-        const c = getCategoryDisplayName(e.category, allCustomCategories);
+        const c = getCategoryDisplayName(
+          e.categoryId ?? e.category,
+          allCustomCategories
+        );
         categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
       }
     }

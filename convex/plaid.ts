@@ -11,6 +11,152 @@
 
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { getReviewReason } from "../lib/constants";
+import { resolveCategoryId } from "./categoryResolver";
+import { resolveBudgetCategoryId } from "./budgetMatcher";
+import { normalizeMerchant } from "./merchant";
+
+type EntryKind = "expense" | "income" | "transfer";
+
+type PlaidCategoryInput = {
+  primary?: string | null;
+  detailed?: string | null;
+};
+
+const PLAID_CATEGORY_TO_SLUG: Record<string, string> = {
+  INCOME_DIVIDENDS: "investment_income",
+  INCOME_INTEREST_EARNED: "investment_income",
+  INCOME_RETIREMENT_PENSION: "wages_salary",
+  INCOME_TAX_REFUND: "wages_salary",
+  INCOME_UNEMPLOYMENT: "wages_salary",
+  INCOME_WAGES: "wages_salary",
+  INCOME_OTHER_INCOME: "business_revenue",
+  FOOD_AND_DRINK_GROCERIES: "groceries",
+  FOOD_AND_DRINK_RESTAURANT: "food",
+  FOOD_AND_DRINK_FAST_FOOD: "food",
+  FOOD_AND_DRINK_COFFEE: "food",
+  FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR: "food",
+  FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK: "food",
+  TRANSPORTATION_GAS: "transportation",
+  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "transportation",
+  TRANSPORTATION_PUBLIC_TRANSIT: "transportation",
+  TRANSPORTATION_PARKING: "transportation",
+  TRANSPORTATION_TOLLS: "transportation",
+  TRANSPORTATION_BIKES_AND_SCOOTERS: "transportation",
+  TRANSPORTATION_OTHER_TRANSPORTATION: "transportation",
+  TRAVEL_FLIGHTS: "transportation",
+  TRAVEL_LODGING: "transportation",
+  TRAVEL_RENTAL_CARS: "transportation",
+  TRAVEL_OTHER_TRAVEL: "transportation",
+  RENT_AND_UTILITIES_RENT: "housing",
+  RENT_AND_UTILITIES_GAS_AND_ELECTRICITY: "utilities",
+  RENT_AND_UTILITIES_WATER: "utilities",
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
+  RENT_AND_UTILITIES_TELEPHONE: "utilities",
+  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "utilities",
+  RENT_AND_UTILITIES_OTHER_UTILITIES: "utilities",
+  HOME_IMPROVEMENT_FURNITURE: "housing",
+  HOME_IMPROVEMENT_HARDWARE: "housing",
+  HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE: "housing",
+  HOME_IMPROVEMENT_SECURITY: "housing",
+  HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT: "housing",
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "personal_care",
+  PERSONAL_CARE_HAIR_AND_BEAUTY: "personal_care",
+  PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING: "personal_care",
+  PERSONAL_CARE_OTHER_PERSONAL_CARE: "personal_care",
+  ENTERTAINMENT_MUSIC_AND_AUDIO: "entertainment",
+  ENTERTAINMENT_TV_AND_MOVIES: "entertainment",
+  ENTERTAINMENT_MOVIES_AND_DVS: "entertainment",
+  ENTERTAINMENT_VIDEO_GAMES: "entertainment",
+  ENTERTAINMENT_GAMES: "entertainment",
+  ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS: "entertainment",
+  ENTERTAINMENT_CASINOS_AND_GAMBLING: "entertainment",
+  ENTERTAINMENT_OTHER_ENTERTAINMENT: "entertainment",
+  GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES: "miscellaneous",
+  GENERAL_MERCHANDISE_DEPARTMENT_STORES: "miscellaneous",
+  GENERAL_MERCHANDISE_DISCOUNT_STORES: "miscellaneous",
+  GENERAL_MERCHANDISE_SUPERSTORES: "miscellaneous",
+  GENERAL_MERCHANDISE_ONLINE_MARKETPLACES: "miscellaneous",
+  GENERAL_MERCHANDISE_ELECTRONICS: "miscellaneous",
+  GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS: "miscellaneous",
+  GENERAL_MERCHANDISE_CONVENIENCE_STORES: "miscellaneous",
+  GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE: "miscellaneous",
+  GENERAL_MERCHANDISE_PET_SUPPLIES: "miscellaneous",
+  GENERAL_MERCHANDISE_SPORTING_GOODS: "miscellaneous",
+  GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES: "gifts_giving",
+  GENERAL_MERCHANDISE_OFFICE_SUPPLIES: "work",
+  GENERAL_MERCHANDISE_TOBACCO_AND_VAPE: "miscellaneous",
+  MEDICAL_DENTAL_CARE: "health",
+  MEDICAL_EYE_CARE: "health",
+  MEDICAL_HOSPITALS_AND_CLINICS: "health",
+  MEDICAL_PHARMACIES_AND_SUPPLEMENTS: "health",
+  MEDICAL_PRIMARY_CARE: "health",
+  MEDICAL_VETERINARY_SERVICES: "health",
+  MEDICAL_OTHER_MEDICAL: "health",
+  GENERAL_SERVICES_EDUCATION: "education",
+  BANK_FEES_ATM_FEES: "miscellaneous",
+  BANK_FEES_FOREIGN_TRANSACTION_FEES: "miscellaneous",
+  BANK_FEES_INSUFFICIENT_FUNDS: "miscellaneous",
+  BANK_FEES_OVERDRAFT_FEES: "miscellaneous",
+  BANK_FEES_OTHER_BANK_FEES: "miscellaneous",
+  BANK_FEES_INTEREST_CHARGE: "debt",
+  LOAN_PAYMENTS_CAR_PAYMENT: "debt",
+  LOAN_PAYMENTS_CREDIT_CARD_PAYMENT: "debt",
+  LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT: "debt",
+  LOAN_PAYMENTS_MORTGAGE_PAYMENT: "debt",
+  LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT: "debt",
+  LOAN_PAYMENTS_OTHER_PAYMENT: "debt",
+  GOVERNMENT_AND_NON_PROFIT_DONATIONS: "gifts_giving",
+  GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "miscellaneous",
+  GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT: "miscellaneous",
+  GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES: "miscellaneous",
+};
+
+function isTransferCategory(category: PlaidCategoryInput): boolean {
+  const detailed = category.detailed?.toUpperCase() ?? "";
+  const primary = category.primary?.toUpperCase() ?? "";
+  if (detailed.startsWith("TRANSFER_")) return true;
+  if (primary.startsWith("TRANSFER")) return true;
+  return false;
+}
+
+function mapPlaidCategoryToSlug(category: PlaidCategoryInput): string | undefined {
+  if (isTransferCategory(category)) return "transfers";
+  const detailed = category.detailed?.toUpperCase() ?? "";
+  if (detailed && PLAID_CATEGORY_TO_SLUG[detailed]) return PLAID_CATEGORY_TO_SLUG[detailed];
+  const primary = category.primary?.toUpperCase() ?? "";
+
+  if (primary.startsWith("FOOD_AND_DRINK")) return "food";
+  if (primary.startsWith("TRANSPORTATION")) return "transportation";
+  if (primary.startsWith("TRAVEL")) return "transportation";
+  if (primary.startsWith("RENT_AND_UTILITIES")) return "utilities";
+  if (primary.startsWith("HOME_IMPROVEMENT")) return "housing";
+  if (primary.startsWith("PERSONAL_CARE")) return "personal_care";
+  if (primary.startsWith("ENTERTAINMENT")) return "entertainment";
+  if (primary.startsWith("GENERAL_MERCHANDISE")) return "miscellaneous";
+  if (primary.startsWith("MEDICAL")) return "health";
+  if (primary.startsWith("EDUCATION")) return "education";
+  if (primary.startsWith("BANK_FEES")) return "miscellaneous";
+  if (primary.startsWith("LOAN_PAYMENTS")) return "debt";
+  if (primary.startsWith("INCOME")) return "wages_salary";
+
+  return undefined;
+}
+
+function deriveEntryType(amount: number, category: PlaidCategoryInput): { type: EntryKind; entryType: "purchase" | "income" | "transfer" | "fee" } {
+  const transfer = isTransferCategory(category);
+  if (transfer) return { type: "transfer", entryType: "transfer" };
+  if (category.detailed?.toUpperCase().startsWith("BANK_FEES_")) return { type: "expense", entryType: "fee" };
+  const isExpense = amount > 0;
+  return { type: isExpense ? "expense" : "income", entryType: isExpense ? "purchase" : "income" };
+}
+
+function cleanStr(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}
 
 // ============================================
 // INTERNAL QUERIES (for actions to use)
@@ -198,14 +344,40 @@ export const createTallyUpAccount = internalMutation({
     institutionName: v.optional(v.string()),
     last4: v.optional(v.string()),
     creditLimit: v.optional(v.number()),
+    initialBalanceCents: v.optional(v.number()),
     isLinked: v.boolean(),
     plaidAccountId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    return await ctx.db.insert("accounts", {
+    
+    // Check if an account with this plaidAccountId already exists (prevent duplicates)
+    if (args.plaidAccountId) {
+      const existingAccounts = await ctx.db
+        .query("accounts")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId))
+        .collect();
+      
+      const existingLinked = existingAccounts.find((a) => a.plaidAccountId === args.plaidAccountId);
+      if (existingLinked) {
+        // Account already exists, return its ID
+        return existingLinked._id;
+      }
+    }
+    
+    // Build the account name - include last4 if provided to make it unique
+    // Also include institution name if provided
+    let accountName = args.name;
+    if (args.last4) {
+      accountName = `${args.name} (...${args.last4})`;
+    }
+    if (args.institutionName && !accountName.toLowerCase().includes(args.institutionName.toLowerCase())) {
+      accountName = `${args.institutionName} ${accountName}`;
+    }
+    
+    const accountId = await ctx.db.insert("accounts", {
       userId: args.userId,
-      name: args.name,
+      name: accountName,
       type: args.type,
       institutionName: args.institutionName,
       last4: args.last4,
@@ -216,6 +388,18 @@ export const createTallyUpAccount = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    if (args.initialBalanceCents !== undefined) {
+      await ctx.db.insert("accountSnapshots", {
+        userId: args.userId,
+        accountId,
+        asOf: now,
+        balance: Math.round(args.initialBalanceCents),
+        createdAt: now,
+      });
+    }
+
+    return accountId;
   },
 });
 
@@ -586,32 +770,112 @@ export const importPlaidTransaction = mutation({
       parseInt(dateParts[2])
     );
     const dateTs = dateObj.getTime();
-    
-    // Determine transaction type (Plaid: positive = outflow/expense)
-    const isExpense = plaidTxn.amount > 0;
+
     const amountCents = Math.round(Math.abs(plaidTxn.amount) * 100);
-    
-    // Create the entry
+    const categoryInput = cleanStr(args.category);
+    const categoryFromPlaid = mapPlaidCategoryToSlug({
+      primary: plaidTxn.category,
+      detailed: plaidTxn.categoryDetailed,
+    });
+    const { type, entryType } = deriveEntryType(plaidTxn.amount, {
+      primary: plaidTxn.category,
+      detailed: plaidTxn.categoryDetailed,
+    });
+    const isTransfer = type === "transfer";
+    const stableId = plaidTxn.pendingTransactionId || plaidTxn.plaidTransactionId;
+    const merchantLabel = plaidTxn.merchantName || plaidTxn.name;
+    const merchantNormalized = normalizeMerchant(merchantLabel);
+    const existingEntry = stableId
+      ? await ctx.db
+          .query("entries")
+          .withIndex("by_user_stableId", (q) =>
+            q.eq("userId", identity.subject).eq("stableId", stableId)
+          )
+          .first()
+      : null;
+    const resolvedCategory =
+      categoryInput ?? existingEntry?.category ?? categoryFromPlaid;
+    const resolvedTags = args.tags ?? existingEntry?.tags;
+    const resolvedNote = cleanStr(args.note) ?? existingEntry?.note ?? plaidTxn.name;
+    const categoryId = isTransfer
+      ? undefined
+      : existingEntry?.categoryId ??
+        (await resolveCategoryId(
+          ctx,
+          identity.subject,
+          resolvedCategory,
+          type === "income" ? "income" : "expense",
+          { createIfMissing: false }
+        ));
+    let budgetCategoryId = existingEntry?.budgetCategoryId;
+    if (!isTransfer && (!budgetCategoryId || categoryInput)) {
+      budgetCategoryId = await resolveBudgetCategoryId(ctx, identity.subject, {
+        category: resolvedCategory,
+        merchant: merchantLabel,
+        tags: resolvedTags,
+      });
+    }
+    const reviewReason = isTransfer
+      ? null
+      : getReviewReason({
+          category: resolvedCategory,
+          contextTags: undefined,
+          intentTags: undefined,
+          amountCents,
+          methodOrAccount: plaidAccount.name,
+        });
+    const needsReview = existingEntry
+      ? existingEntry.needsReview
+      : isTransfer
+      ? false
+      : !!reviewReason;
+    const reviewReasonValue =
+      existingEntry?.reviewReason ?? reviewReason ?? undefined;
+
+    // Create or update the entry
     const now = Date.now();
-    const entryId = await ctx.db.insert("entries", {
+    const entryBase = {
       userId: identity.subject,
-      type: isExpense ? "expense" : "income",
-      category: args.category || plaidTxn.category || "Uncategorized",
-      tags: args.tags,
-      note: args.note || plaidTxn.name,
-      merchant: plaidTxn.merchantName || plaidTxn.name,
+      type,
+      transactionType: isTransfer
+        ? "TRANSFER"
+        : type === "income"
+        ? "RECEIVED"
+        : "SPENT",
+      entryType,
+      category: resolvedCategory,
+      categoryId,
+      budgetCategoryId,
+      tags: resolvedTags,
+      note: resolvedNote,
+      merchant: merchantLabel,
       merchantRaw: plaidTxn.name,
-      merchantNormalized: plaidTxn.merchantName,
+      merchantNormalized,
+      methodOrAccount: plaidAccount.name,
       amountCents,
       status: plaidTxn.pending ? "pending" : "posted",
       date: dateTs,
       occurredAt: plaidTxn.datetime ? new Date(plaidTxn.datetime).getTime() : dateTs,
       enteredAt: now,
       accountId: plaidAccount.accountId,
-      needsReview: !args.category,
-      createdAt: now,
+      stableId,
+      needsReview,
+      reviewReason: reviewReasonValue,
+      excludeFromTotals: isTransfer ? true : undefined,
+      excludeFromBudgets: isTransfer ? true : undefined,
+      excludeFromCashFlow: isTransfer ? true : undefined,
+      ignoredForBudgets: isTransfer ? true : undefined,
+      ignoredForInsights: isTransfer ? true : undefined,
+      isTransferSource: isTransfer ? plaidTxn.amount > 0 : undefined,
       updatedAt: now,
-    });
+    } as const;
+    let entryId: Id<"entries">;
+    if (existingEntry) {
+      await ctx.db.patch(existingEntry._id, entryBase);
+      entryId = existingEntry._id;
+    } else {
+      entryId = await ctx.db.insert("entries", { ...entryBase, createdAt: now });
+    }
     
     // Update the Plaid transaction
     await ctx.db.patch(args.plaidTransactionId, {
@@ -667,28 +931,108 @@ export const bulkImportPlaidTransactions = mutation({
         );
         const dateTs = dateObj.getTime();
         
-        const isExpense = plaidTxn.amount > 0;
         const amountCents = Math.round(Math.abs(plaidTxn.amount) * 100);
-        
+        const categoryFromPlaid = mapPlaidCategoryToSlug({
+          primary: plaidTxn.category,
+          detailed: plaidTxn.categoryDetailed,
+        });
+        const { type, entryType } = deriveEntryType(plaidTxn.amount, {
+          primary: plaidTxn.category,
+          detailed: plaidTxn.categoryDetailed,
+        });
+        const isTransfer = type === "transfer";
+        const stableId = plaidTxn.pendingTransactionId || plaidTxn.plaidTransactionId;
+        const merchantLabel = plaidTxn.merchantName || plaidTxn.name;
+        const merchantNormalized = normalizeMerchant(merchantLabel);
+        const existingEntry = stableId
+          ? await ctx.db
+              .query("entries")
+              .withIndex("by_user_stableId", (q) =>
+                q.eq("userId", identity.subject).eq("stableId", stableId)
+              )
+              .first()
+          : null;
+        const resolvedCategory = existingEntry?.category ?? categoryFromPlaid;
+        const resolvedTags = existingEntry?.tags;
+        const resolvedNote = existingEntry?.note ?? plaidTxn.name;
+        const categoryId = isTransfer
+          ? undefined
+          : existingEntry?.categoryId ??
+            (await resolveCategoryId(
+              ctx,
+              identity.subject,
+              resolvedCategory,
+              type === "income" ? "income" : "expense",
+              { createIfMissing: false }
+            ));
+        let budgetCategoryId = existingEntry?.budgetCategoryId;
+        if (!isTransfer && !budgetCategoryId) {
+          budgetCategoryId = await resolveBudgetCategoryId(ctx, identity.subject, {
+            category: resolvedCategory,
+            merchant: merchantLabel,
+          });
+        }
+        const reviewReason = isTransfer
+          ? null
+          : getReviewReason({
+              category: resolvedCategory,
+              contextTags: undefined,
+              intentTags: undefined,
+              amountCents,
+              methodOrAccount: plaidAccount.name,
+            });
+        const needsReview = existingEntry
+          ? existingEntry.needsReview
+          : isTransfer
+          ? false
+          : !!reviewReason;
+        const reviewReasonValue =
+          existingEntry?.reviewReason ?? reviewReason ?? undefined;
+
         const now = Date.now();
-        const entryId = await ctx.db.insert("entries", {
+        const entryBase = {
           userId: identity.subject,
-          type: isExpense ? "expense" : "income",
-          category: plaidTxn.category || "Uncategorized",
-          note: plaidTxn.name,
-          merchant: plaidTxn.merchantName || plaidTxn.name,
+          type,
+          transactionType: isTransfer
+            ? "TRANSFER"
+            : type === "income"
+            ? "RECEIVED"
+            : "SPENT",
+          entryType,
+          category: resolvedCategory,
+          categoryId,
+          budgetCategoryId,
+          tags: resolvedTags,
+          note: resolvedNote,
+          merchant: merchantLabel,
           merchantRaw: plaidTxn.name,
-          merchantNormalized: plaidTxn.merchantName,
+          merchantNormalized,
+          methodOrAccount: plaidAccount.name,
           amountCents,
           status: plaidTxn.pending ? "pending" : "posted",
           date: dateTs,
           occurredAt: plaidTxn.datetime ? new Date(plaidTxn.datetime).getTime() : dateTs,
           enteredAt: now,
           accountId: plaidAccount.accountId,
-          needsReview: true, // Mark for review
-          createdAt: now,
+          stableId,
+          needsReview,
+          reviewReason: reviewReasonValue,
+          excludeFromTotals: isTransfer ? true : undefined,
+          excludeFromBudgets: isTransfer ? true : undefined,
+          excludeFromCashFlow: isTransfer ? true : undefined,
+          ignoredForBudgets: isTransfer ? true : undefined,
+          ignoredForInsights: isTransfer ? true : undefined,
+          isTransferSource: isTransfer ? plaidTxn.amount > 0 : undefined,
           updatedAt: now,
-        });
+        } as const;
+
+        let entryId: Id<"entries">;
+        if (existingEntry) {
+          await ctx.db.patch(existingEntry._id, entryBase);
+          entryId = existingEntry._id;
+        } else {
+          entryId = await ctx.db.insert("entries", { ...entryBase, createdAt: now });
+        }
         
         await ctx.db.patch(txnId, {
           importStatus: "imported",

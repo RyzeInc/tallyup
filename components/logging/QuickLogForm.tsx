@@ -16,37 +16,6 @@ import {
   StickyFooter,
 } from "./ui";
 
-// ============================================
-// Fixed Category Options
-// ============================================
-const SPENT_CATEGORIES: CategoryOption[] = [
-  { id: "housing", name: "Housing" },
-  { id: "utilities", name: "Utilities" },
-  { id: "groceries", name: "Groceries" },
-  { id: "food", name: "Food & Dining" },
-  { id: "transportation", name: "Transportation" },
-  { id: "health", name: "Health" },
-  { id: "supplements", name: "Supplements", description: "Vitamins, protein, health supplements" },
-  { id: "insurance", name: "Insurance" },
-  { id: "debt", name: "Debt" },
-  { id: "subscriptions", name: "Subscriptions", description: "Recurring digital/media services" },
-  { id: "work", name: "Work / Business" },
-  { id: "personal_care", name: "Personal Care" },
-  { id: "entertainment", name: "Entertainment" },
-  { id: "education", name: "Education" },
-  { id: "gifts_giving", name: "Gifts & Giving" },
-  { id: "savings_investing", name: "Savings & Investing" },
-  { id: "miscellaneous", name: "Miscellaneous" },
-];
-
-const RECEIVED_CATEGORIES: CategoryOption[] = [
-  { id: "wages_salary", name: "Wages & Salary" },
-  { id: "contract_freelance", name: "Contract / Freelance" },
-  { id: "business_revenue", name: "Business Revenue" },
-  { id: "investment_income", name: "Investment Income" },
-  { id: "transfers", name: "Transfers" },
-];
-
 export type QuickLogFormProps = {
   mode: LogMode;
   nowDateISO: string;
@@ -58,6 +27,8 @@ export type QuickLogFormProps = {
   accounts: AccountOption[];
   tagsCatalog: string[];
   goals: GoalOption[];
+  expenseCategories: CategoryOption[];
+  incomeCategories: CategoryOption[];
 
   // persist:
   onSubmit: (draft: TxDraft) => Promise<{ ok: true; txId: string } | { ok: false; error: string }>;
@@ -83,14 +54,27 @@ export function QuickLogForm(props: QuickLogFormProps) {
 
   // Determine categories based on txType, filtering out hidden ones
   const categories = React.useMemo(() => {
-    const baseCategories = state.draft.type === "received" ? RECEIVED_CATEGORIES : SPENT_CATEGORIES;
+    const baseCategories =
+      state.draft.type === "received"
+        ? props.incomeCategories
+        : props.expenseCategories;
     const hiddenSet = new Set(
-      state.draft.type === "received" 
-        ? (props.hiddenIncomeCategories ?? [])
-        : (props.hiddenExpenseCategories ?? [])
+      (
+        state.draft.type === "received"
+          ? props.hiddenIncomeCategories
+          : props.hiddenExpenseCategories
+      )?.map((c) => c.toLowerCase())
     );
-    return baseCategories.filter(cat => !hiddenSet.has(cat.id));
-  }, [state.draft.type, props.hiddenExpenseCategories, props.hiddenIncomeCategories]);
+    return baseCategories.filter(
+      (cat) => !hiddenSet.has(cat.name.toLowerCase())
+    );
+  }, [
+    state.draft.type,
+    props.expenseCategories,
+    props.incomeCategories,
+    props.hiddenExpenseCategories,
+    props.hiddenIncomeCategories,
+  ]);
 
   // keep mode/existing in sync if parent changes (dialog re-open, etc.)
   React.useEffect(() => {
@@ -266,7 +250,6 @@ export function QuickLogForm(props: QuickLogFormProps) {
             onChange={(id) => dispatch({ type: "SET_CATEGORY", categoryId: id })}
             required={props.mode === "resolve"}
             showError={showValidationErrors && missing.includes("category")}
-            categoryType={state.draft.type === "received" ? "income" : "expense"}
           />
         </div>
 

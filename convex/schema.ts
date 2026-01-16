@@ -14,6 +14,8 @@ export default defineSchema({
 
     // Primary field: Category (expense) or Source (income) in UI
     category: v.optional(v.string()),
+    // Canonical category reference (resolves to categories table)
+    categoryId: v.optional(v.id("categories")),
     // Legacy field: will be migrated to category
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
@@ -118,6 +120,7 @@ export default defineSchema({
     .index("by_user_date", ["userId", "date"])
     .index("by_user_type_date", ["userId", "type", "date"])
     .index("by_user_needsReview_date", ["userId", "needsReview", "date"])
+    .index("by_user_stableId", ["userId", "stableId"])
     .index("by_user_recurring", ["userId", "recurringRuleId"])
     .index("by_user_goal", ["userId", "goalId"])
     .index("by_user_budget", ["userId", "budgetCategoryId"])
@@ -603,6 +606,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_goal", ["goalId"])
+    .index("by_entry", ["entryId"])
     .index("by_user_date", ["userId", "date"]),
 
   // ============================================
@@ -757,6 +761,9 @@ export default defineSchema({
     
     // Category name
     name: v.string(),
+
+    // Stable slug for system categories
+    slug: v.optional(v.string()),
     
     // Type: expense, income, or transfer
     categoryType: v.union(
@@ -788,7 +795,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_type", ["userId", "categoryType"]),
+    .index("by_user_type", ["userId", "categoryType"])
+    .index("by_user_slug", ["userId", "slug"]),
 
   // ============================================
   // CATEGORY RULES - Auto-categorization

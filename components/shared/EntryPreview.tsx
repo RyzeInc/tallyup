@@ -91,7 +91,8 @@ export function EntryPreview({
   const isIncome = entry.type === "income";
   const amountColor = isIncome ? "var(--success)" : "var(--text)";
   const amountPrefix = isIncome ? "+" : "−";
-  const categoryLabel = getCategoryDisplayName(entry.category || entry.bucket, allCustomCategories);
+  const categoryKey = entry.categoryId ?? entry.category ?? entry.bucket;
+  const categoryLabel = getCategoryDisplayName(categoryKey, allCustomCategories);
   const contextTags = entry.contextTags ?? [];
   const tags = entry.tags ?? [];
 

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
@@ -249,6 +249,30 @@ export const addAccountSnapshot = mutation({
   },
 });
 
+export const addAccountSnapshotInternal = internalMutation({
+  args: {
+    userId: v.string(),
+    accountId: v.id("accounts"),
+    balanceCents: v.number(),
+    asOf: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.accountId);
+    if (!account || account.userId !== args.userId) {
+      throw new Error("Account not found");
+    }
+    const now = Date.now();
+    await ctx.db.insert("accountSnapshots", {
+      userId: args.userId,
+      accountId: args.accountId,
+      asOf: args.asOf ?? now,
+      balance: Math.round(args.balanceCents),
+      createdAt: now,
+    });
+    return { ok: true };
+  },
+});
+
 export const addAccountSnapshots = mutation({
   args: {
     asOf: v.optional(v.number()),
@@ -456,5 +480,49 @@ export const getAccountsOverview = query({
         debtChangePct,
       },
     };
+  },
+});
+
+// Delete an account and its snapshots (only if not linked to Plaid)
+export const deleteAccount = mutation({
+  args: {
+    id: v.id("accounts"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const account = await ctx.db.get(args.id);
+    if (!account || account.userId !== userId) {
+      throw new Error("Account not found");
+    }
+
+    // Check if this account is linked to Plaid
+    if (account.isLinked) {
+      throw new Error("Cannot delete a Plaid-linked account. Please unlink the account first.");
+    }
+
+    // Check for entries linked to this account
+    const entries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_account", (q) => q.eq("userId", userId).eq("accountId", args.id))
+      .take(1);
+    
+    if (entries.length > 0) {
+      throw new Error("Cannot delete account with transactions. Archive it instead.");
+    }
+
+    // Delete all snapshots for this account
+    const snapshots = await ctx.db
+      .query("accountSnapshots")
+      .withIndex("by_account_asOf", (q) => q.eq("accountId", args.id))
+      .collect();
+    
+    for (const snapshot of snapshots) {
+      await ctx.db.delete(snapshot._id);
+    }
+
+    // Delete the account
+    await ctx.db.delete(args.id);
+    
+    return { ok: true };
   },
 });

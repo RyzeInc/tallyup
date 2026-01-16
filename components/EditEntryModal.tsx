@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { QuickLogForm } from "@/components/logging";
-import type { TxDraft, AccountOption, GoalOption, ContextFlag } from "@/components/logging/types";
+import type { TxDraft, AccountOption, GoalOption, ContextFlag, CategoryOption } from "@/components/logging/types";
 import { amountToCents, todayISO } from "@/components/logging/machine";
 import { yyyymmddToLocalMidnightTs } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
@@ -16,6 +16,7 @@ interface Entry {
   amountCents: number;
   date: number;
   category?: string;
+  categoryId?: Id<"categories">;
   bucket?: string;
   note?: string;
   merchant?: string;
@@ -47,9 +48,21 @@ export default function EditEntryModal({
   const toast = useToast();
   const updateEntry = useMutation(api.entries.updateEntry);
   const deleteEntry = useMutation(api.entries.deleteEntry);
+  const ensureSystemCategories = useMutation(api.categories.ensureSystemCategories);
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
 
   // Fetch goals for linking
   const goals = useQuery(api.goals.listGoals, {}) as { _id: string; name: string }[] | undefined;
+  const expenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
+    | { _id: string; name: string }[]
+    | undefined;
+  const incomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string }[]
+    | undefined;
+
+  useEffect(() => {
+    ensureSystemCategories().catch(() => {});
+  }, [ensureSystemCategories]);
 
   // Only keep state needed for deletion and errors; editing is handled by QuickLogForm
   const [deleting, setDeleting] = useState(false);
@@ -69,6 +82,16 @@ export default function EditEntryModal({
   const goalsList: GoalOption[] = useMemo(() => {
     return (goals || []).map((g) => ({ id: g._id as Id<"goals">, name: g.name }));
   }, [goals]);
+
+  const expenseCategories: CategoryOption[] = useMemo(() => {
+    if (!expenseCategoriesData) return [];
+    return expenseCategoriesData.map((c) => ({ id: c._id, name: c.name }));
+  }, [expenseCategoriesData]);
+
+  const incomeCategories: CategoryOption[] = useMemo(() => {
+    if (!incomeCategoriesData) return [];
+    return incomeCategoriesData.map((c) => ({ id: c._id, name: c.name }));
+  }, [incomeCategoriesData]);
 
   // Tags catalog (kept small and consistent with QuickLogModal)
   const tagsCatalog = useMemo(() => {
@@ -151,7 +174,7 @@ export default function EditEntryModal({
       dateISO,
       merchant: entry.merchant ?? undefined,
       note: entry.note ?? undefined,
-      categoryId: entry.category ?? entry.bucket ?? undefined,
+      categoryId: entry.categoryId ?? undefined,
       contextScope,
       contextFlags: flags,
       intent,
@@ -195,7 +218,7 @@ export default function EditEntryModal({
 
       await updateEntry({
         id: entry._id as Id<"entries">,
-        category: draft.categoryId || undefined,
+        categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
         amountCents,
         date: dateTs,
         note: draft.note?.trim() || undefined,
@@ -269,8 +292,13 @@ export default function EditEntryModal({
             accounts={accounts}
             tagsCatalog={tagsCatalog}
             goals={goalsList}
+            expenseCategories={expenseCategories}
+            incomeCategories={incomeCategories}
             onSubmit={handleResolveSubmit}
             onClose={onClose}
+            hiddenExpenseCategories={userPrefs?.hiddenExpenseCategories ?? []}
+            hiddenIncomeCategories={userPrefs?.hiddenIncomeCategories ?? []}
+            hiddenContextTags={userPrefs?.hiddenContextTags ?? []}
           />
         </div>
       </div>

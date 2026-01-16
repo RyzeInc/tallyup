@@ -81,7 +81,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     pathname?.startsWith("/budgeting/") || pathname?.startsWith("/recurring/") || 
                     pathname?.startsWith("/goals/") || pathname?.startsWith("/insights/") ||
                     pathname?.startsWith("/help/") || pathname?.startsWith("/more/") ||
-                    pathname?.startsWith("/review/") || pathname?.startsWith("/accounts/") ||
+                    pathname?.startsWith("/review/") ||
                     pathname?.startsWith("/calendar/");
 
   return (

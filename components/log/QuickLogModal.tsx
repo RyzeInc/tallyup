@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Doc } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import { QuickLogDialog } from "@/components/logging";
 import {
   todayISO,
   amountToCents,
 } from "@/components/logging/machine";
-import { yyyymmddToLocalMidnightTs } from "@/components/utils";
-import type { TxDraft, AccountOption, GoalOption } from "@/components/logging/types";
+import { getCategoryDisplayName, yyyymmddToLocalMidnightTs } from "@/components/utils";
+import type { TxDraft, AccountOption, GoalOption, CategoryOption } from "@/components/logging/types";
 import { useQuickLog } from "./QuickLogProvider";
 
 export default function QuickLogModal({
@@ -23,6 +23,7 @@ export default function QuickLogModal({
   const quickLog = useQuickLog();
   const addEntry = useMutation(api.entries.addEntry);
   const createTransfer = useMutation(api.transfers.createTransfer);
+  const ensureSystemCategories = useMutation(api.categories.ensureSystemCategories);
 
   // Fetch data for pickers
   const accountsData = useQuery(api.accounts.listAccounts, {}) as
@@ -31,9 +32,19 @@ export default function QuickLogModal({
   const goalsData = useQuery(api.goals.listGoals, {}) as
     | Doc<"goals">[]
     | undefined;
+  const expenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
+    | { _id: string; name: string }[]
+    | undefined;
+  const incomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string }[]
+    | undefined;
   
   // Fetch user preferences for hidden categories/tags
   const userPrefs = useQuery(api.preferences.getUserPreferences, {});
+  
+  useEffect(() => {
+    ensureSystemCategories().catch(() => {});
+  }, [ensureSystemCategories]);
 
   // Build account options
   const accounts: AccountOption[] = useMemo(() => {
@@ -53,6 +64,21 @@ export default function QuickLogModal({
       name: g.name,
     }));
   }, [goalsData]);
+
+  const expenseCategories: CategoryOption[] = useMemo(() => {
+    if (!expenseCategoriesData) return [];
+    return expenseCategoriesData.map((c) => ({ id: c._id, name: c.name }));
+  }, [expenseCategoriesData]);
+
+  const incomeCategories: CategoryOption[] = useMemo(() => {
+    if (!incomeCategoriesData) return [];
+    return incomeCategoriesData.map((c) => ({ id: c._id, name: c.name }));
+  }, [incomeCategoriesData]);
+
+  const allCategories = useMemo(
+    () => [...(expenseCategoriesData ?? []), ...(incomeCategoriesData ?? [])],
+    [expenseCategoriesData, incomeCategoriesData]
+  );
 
   // Build tags catalog
   const tagsCatalog = useMemo(() => {
@@ -135,7 +161,7 @@ export default function QuickLogModal({
 
       const res = await addEntry({
         type: entryType,
-        category: draft.categoryId || undefined,
+        categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
         note: draft.note?.trim() || undefined,
         merchant: draft.merchant?.trim() || undefined,
         methodOrAccount: draft.account.method?.trim() || undefined,
@@ -156,7 +182,9 @@ export default function QuickLogModal({
       const amountStr = `$${(amountCents / 100).toFixed(2)}`;
       const recap = draft.needsReview
         ? `Saved to Review: ${typeLabel} ${amountStr}`
-        : `Saved: ${typeLabel} ${amountStr}${draft.categoryId ? ` • ${draft.categoryId}` : ""}`;
+        : `Saved: ${typeLabel} ${amountStr}${
+            draft.categoryId ? ` • ${getCategoryDisplayName(draft.categoryId, allCategories)}` : ""
+          }`;
       quickLog.showToast(recap);
 
       return { ok: true, txId: res.id };
@@ -177,6 +205,8 @@ export default function QuickLogModal({
       accounts={accounts}
       tagsCatalog={tagsCatalog}
       goals={goals}
+      expenseCategories={expenseCategories}
+      incomeCategories={incomeCategories}
       onSubmit={handleSubmit}
       hiddenExpenseCategories={userPrefs?.hiddenExpenseCategories ?? []}
       hiddenIncomeCategories={userPrefs?.hiddenIncomeCategories ?? []}

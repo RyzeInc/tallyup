@@ -11,7 +11,7 @@ import ActivityTable from "@/components/activity/ActivityTable";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import EmptyState from "@/components/ui/EmptyState";
-import { EntryType, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
+import { EntryType, CONTEXT_TAGS, getCategoryDisplayName } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Doc } from "convex/_generated/dataModel";
 
@@ -83,6 +83,13 @@ export default function ActivityPage() {
 
   // Get user's accounts for filtering
   const accounts = useQuery(api.accounts.listAccounts, {}) as Doc<"accounts">[] | undefined;
+  const userPrefs = useQuery(api.preferences.getUserPreferences, {});
+  const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
+    | { _id: string; name: string }[]
+    | undefined;
+  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string }[]
+    | undefined;
 
   // Focus search on mount if requested
   useEffect(() => {
@@ -398,6 +405,20 @@ export default function ActivityPage() {
     setCursorList((c) => [...c, nextCursor]);
   }
 
+  const allCategories = useMemo(() => {
+    const expense = (expenseCategories ?? []) as { _id: string; name: string }[];
+    const income = (incomeCategories ?? []) as { _id: string; name: string }[];
+    return [...expense, ...income];
+  }, [expenseCategories, incomeCategories]);
+
+  const categoryLabelLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const cat of allCategories) {
+      map.set(cat._id, cat.name);
+    }
+    return map;
+  }, [allCategories]);
+
   // Count active filters
   const activeFilterCount = selectedCategories.length + selectedTags.length + selectedMethods.length + selectedAccountIds.length + (minAmount ? 1 : 0) + (maxAmount ? 1 : 0);
 
@@ -405,14 +426,17 @@ export default function ActivityPage() {
   const estimatedChipsWidth = useMemo(() => {
     // Each chip is roughly: padding (24px) + text (~8px per char) + X icon (12px) + gap (8px)
     let width = 0;
-    selectedCategories.forEach((cat) => { width += 24 + cat.length * 7 + 12 + 8; });
+    selectedCategories.forEach((cat) => {
+      const label = categoryLabelLookup.get(cat) ?? getCategoryDisplayName(cat, allCategories);
+      width += 24 + label.length * 7 + 12 + 8;
+    });
     selectedTags.forEach((tag) => { width += 24 + tag.length * 7 + 12 + 8; });
     selectedMethods.forEach((m) => { width += 24 + (m === "__unspecified__" ? 11 : m.length) * 7 + 12 + 8; });
     selectedAccountIds.forEach(() => { width += 24 + 10 * 7 + 12 + 8; }); // ~10 chars avg
     if (minAmount || maxAmount) width += 24 + 12 * 7 + 8; // amount range
     if (activeFilterCount > 0) width += 60; // "Clear all" link
     return width;
-  }, [selectedCategories, selectedTags, selectedMethods, selectedAccountIds, minAmount, maxAmount, activeFilterCount]);
+  }, [selectedCategories, selectedTags, selectedMethods, selectedAccountIds, minAmount, maxAmount, activeFilterCount, categoryLabelLookup, allCategories]);
 
   // Measure spacer width and decide if chips fit inline
   /* eslint-disable react-hooks/set-state-in-effect -- intentional layout measurement sync */
@@ -480,10 +504,18 @@ export default function ActivityPage() {
 
   // Category options based on type
   const categoryOptions = useMemo(() => {
-    if (type === "income") return [...INCOME_SPACES];
-    if (type === "expense") return [...EXPENSE_SPACES];
-    return [...INCOME_SPACES, ...EXPENSE_SPACES];
-  }, [type]);
+    const hiddenExpense = new Set((userPrefs?.hiddenExpenseCategories ?? []).map((c) => c.toLowerCase()));
+    const hiddenIncome = new Set((userPrefs?.hiddenIncomeCategories ?? []).map((c) => c.toLowerCase()));
+    const expense = ((expenseCategories ?? []) as { _id: string; name: string }[]).filter(
+      (c) => !hiddenExpense.has(c.name.toLowerCase())
+    );
+    const income = ((incomeCategories ?? []) as { _id: string; name: string }[]).filter(
+      (c) => !hiddenIncome.has(c.name.toLowerCase())
+    );
+    if (type === "income") return income;
+    if (type === "expense") return expense;
+    return [...income, ...expense];
+  }, [type, expenseCategories, incomeCategories, userPrefs?.hiddenExpenseCategories, userPrefs?.hiddenIncomeCategories]);
 
   // Data-driven method/account options from user's entries
   const methodOptions = useMemo(() => {
@@ -659,28 +691,31 @@ export default function ActivityPage() {
           <div ref={spacerRef} style={{ flex: 1, minWidth: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)", justifyContent: "flex-end" }}>
             {chipsInline && activeFilterCount > 0 && (
               <>
-                {selectedCategories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => clearCategory(cat)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      padding: "4px 10px",
-                      borderRadius: "var(--radius-full)",
-                      fontSize: "var(--text-micro)",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                      backgroundColor: "var(--accent-subtle)",
-                      color: "var(--primary)",
-                      border: "none",
-                    }}
-                  >
-                    {cat}
-                    <Lucide.X className="h-3 w-3" />
-                  </button>
-                ))}
+                {selectedCategories.map((cat) => {
+                  const label = categoryLabelLookup.get(cat) ?? getCategoryDisplayName(cat, allCategories);
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => clearCategory(cat)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "4px 10px",
+                        borderRadius: "var(--radius-full)",
+                        fontSize: "var(--text-micro)",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        backgroundColor: "var(--accent-subtle)",
+                        color: "var(--primary)",
+                        border: "none",
+                      }}
+                    >
+                      {label}
+                      <Lucide.X className="h-3 w-3" />
+                    </button>
+                  );
+                })}
                 {selectedTags.map((tag) => (
                   <button
                     key={tag}
@@ -870,28 +905,31 @@ export default function ActivityPage() {
         {/* Active filter pills - separate row when they don't fit inline */}
         {activeFilterCount > 0 && !chipsInline && (
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-2)", padding: "0 var(--space-4)", marginBottom: "var(--space-2)" }}>
-            {selectedCategories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => clearCategory(cat)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "6px 12px",
-                  borderRadius: "var(--radius-full)",
-                  fontSize: "var(--text-micro)",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  backgroundColor: "var(--accent-subtle)",
-                  color: "var(--primary)",
-                  border: "none",
-                }}
-              >
-                {cat}
-                <Lucide.X className="h-3 w-3" />
-              </button>
-            ))}
+            {selectedCategories.map((cat) => {
+              const label = categoryLabelLookup.get(cat) ?? getCategoryDisplayName(cat, allCategories);
+              return (
+                <button
+                  key={cat}
+                  onClick={() => clearCategory(cat)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    borderRadius: "var(--radius-full)",
+                    fontSize: "var(--text-micro)",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    backgroundColor: "var(--accent-subtle)",
+                    color: "var(--primary)",
+                    border: "none",
+                  }}
+                >
+                  {label}
+                  <Lucide.X className="h-3 w-3" />
+                </button>
+              );
+            })}
             {selectedTags.map((tag) => (
               <button
                 key={tag}
@@ -1134,15 +1172,19 @@ export default function ActivityPage() {
                   <h3 style={{ fontSize: "var(--text-meta)", fontWeight: 500, marginBottom: "var(--space-2)", color: "var(--text)" }}>Category</h3>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                     {categoryOptions.map((cat) => {
-                      const isSelected = selectedCategories.includes(cat);
+                      const isSelected =
+                        selectedCategories.includes(cat._id) ||
+                        selectedCategories.includes(cat.name);
                       return (
                         <button
-                          key={cat}
+                          key={cat._id}
                           onClick={() => {
                             if (isSelected) {
-                              setSelectedCategories((prev) => prev.filter((c) => c !== cat));
+                              setSelectedCategories((prev) =>
+                                prev.filter((c) => c !== cat._id && c !== cat.name)
+                              );
                             } else {
-                              setSelectedCategories((prev) => [...prev, cat]);
+                              setSelectedCategories((prev) => [...prev, cat._id]);
                             }
                           }}
                           style={{
@@ -1156,7 +1198,7 @@ export default function ActivityPage() {
                             border: isSelected ? "none" : "1px solid var(--border)",
                           }}
                         >
-                          {cat}
+                          {cat.name}
                         </button>
                       );
                     })}

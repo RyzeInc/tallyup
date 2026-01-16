@@ -7,7 +7,7 @@
  * Uses react-plaid-link to handle the Plaid Link flow.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { usePlaidLink, PlaidLinkOnSuccess, PlaidLinkOnExit, PlaidLinkOptions } from "react-plaid-link";
 import { useAction } from "convex/react";
 import { api } from "convex/_generated/api";
@@ -43,10 +43,12 @@ export function PlaidLinkButton({
     setIsLoading(true);
     
     try {
+      console.log("[PlaidLink] Creating link token...");
       const result = await createLinkToken({});
+      console.log("[PlaidLink] Link token created:", result.linkToken ? "SUCCESS" : "FAILED");
       setLinkToken(result.linkToken);
     } catch (err) {
-      console.error("Error creating link token:", err);
+      console.error("[PlaidLink] Error creating link token:", err);
       toast.error("Failed to connect to Plaid. Please try again.");
     } finally {
       setIsLoading(false);
@@ -96,7 +98,7 @@ export function PlaidLinkButton({
     [onExit]
   );
   
-  // Configure Plaid Link
+  // Configure Plaid Link - usePlaidLink requires token to be null (not conditional object)
   const config: PlaidLinkOptions = {
     token: linkToken,
     onSuccess: handleSuccess,
@@ -104,6 +106,24 @@ export function PlaidLinkButton({
   };
   
   const { open, ready } = usePlaidLink(config);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log("[PlaidLink] State:", { linkToken: !!linkToken, ready, isLoading });
+  }, [linkToken, ready, isLoading]);
+  
+  // Auto-open Plaid Link when token is ready
+  useEffect(() => {
+    if (linkToken && ready) {
+      console.log("[PlaidLink] Opening Plaid Link modal...");
+      try {
+        open();
+        console.log("[PlaidLink] Modal opened successfully");
+      } catch (err) {
+        console.error("[PlaidLink] Error opening modal:", err);
+      }
+    }
+  }, [linkToken, ready, open]);
   
   // Handle button click
   const handleClick = async () => {
@@ -113,12 +133,6 @@ export function PlaidLinkButton({
       await initializeLink();
     }
   };
-  
-  // Open Plaid Link when token is ready
-  if (linkToken && ready) {
-    // Auto-open when token is ready
-    setTimeout(() => open(), 0);
-  }
   
   // Button styles
   const baseStyles = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
@@ -261,6 +275,13 @@ export function PlaidReauthButton({ plaidItemId, institutionName, onSuccess, onC
   
   const { open, ready } = usePlaidLink(config);
   
+  // Auto-open Plaid Link when token is ready
+  useEffect(() => {
+    if (linkToken && ready) {
+      open();
+    }
+  }, [linkToken, ready, open]);
+  
   // Handle button click
   const handleClick = async () => {
     if (linkToken && ready) {
@@ -269,11 +290,6 @@ export function PlaidReauthButton({ plaidItemId, institutionName, onSuccess, onC
       await initializeLink();
     }
   };
-  
-  // Open Plaid Link when token is ready
-  if (linkToken && ready) {
-    setTimeout(() => open(), 0);
-  }
   
   return (
     <button

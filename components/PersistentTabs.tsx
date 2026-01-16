@@ -51,7 +51,7 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     if (path.startsWith("/insights")) return "insights";
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/review")) return "review";
-    if (path.startsWith("/accounts")) return "accounts";
+    if (path === "/accounts") return "accounts";
     if (path.startsWith("/help") || path.startsWith("/learn")) return "help";
     if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) return "more";
     return "dashboard"; // default to dashboard
@@ -99,7 +99,7 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     else if (path.startsWith("/insights")) nextTab = "insights";
     else if (path.startsWith("/calendar")) nextTab = "calendar";
     else if (path.startsWith("/review")) nextTab = "review";
-    else if (path.startsWith("/accounts")) nextTab = "accounts";
+    else if (path === "/accounts") nextTab = "accounts";
     else if (path.startsWith("/help") || path.startsWith("/learn")) nextTab = "help";
     else if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) nextTab = "more";
 
