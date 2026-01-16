@@ -1,6 +1,10 @@
 {
   "name": "spendlog",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:RyzeInc/tallyup.git"
+  },
   "private": true,
   "scripts": {
     "dev": "next dev",
