@@ -24,13 +24,18 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
+    "app/**/*",
+    "components/**/*",
+    "lib/**/*",
+    "types/**/*",
+    "convex/_generated/**/*",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
@@ -40,6 +45,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/__tests__",
-    "convex/__tests__"
+    "convex/__tests__",
+    "convex"
   ]
 }

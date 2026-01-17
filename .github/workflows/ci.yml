@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json','package.json') }}
+
+      - name: Cache Convex tsbuildinfo
+        uses: actions/cache@v4
+        with:
+          path: ./.convex-tsbuildinfo
+          key: ${{ runner.os }}-convex-tsbuildinfo-${{ hashFiles('convex/**/*.ts','convex/tsconfig.json') }}
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Generate Convex client types
+        run: npx convex generate || npx convex dev --no-open --headless
+
+      - name: Convex type-check
+        run: npm run type:convex
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build (frontend)
+        run: npm run build
+
+      - name: Upload build artifacts (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: .next
