@@ -59,6 +59,7 @@ interface LinkedInstitutionProps {
     status: "active" | "needs_reauth" | "revoked" | "error";
     lastSyncedAt?: number;
     errorMessage?: string;
+    products?: string[];
   };
   accounts: Array<{
     _id: Id<"plaidAccounts">;
@@ -85,16 +86,67 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
   const toast = useToast();
   const syncTransactions = useAction(api.plaidActions.syncTransactions);
   const refreshBalances = useAction(api.plaidActions.refreshBalances);
+  const syncInvestments = useAction(api.plaidActions.syncInvestments);
+  const syncInvestmentTransactions = useAction(api.plaidActions.syncInvestmentTransactions);
+  const syncLiabilities = useAction(api.plaidActions.syncLiabilities);
   const hideUnhidePlaidAccount = useMutation(api.plaid.hideUnhidePlaidAccount);
   const unlinkPlaidItem = useMutation(api.plaid.unlinkPlaidItem);
   
   const handleSync = async () => {
     setIsSyncing(true);
+    const results: string[] = [];
+    const errors: string[] = [];
+    
     try {
-      const result = await syncTransactions({ plaidItemId: item._id });
+      // Always sync transactions and balances
+      const txResult = await syncTransactions({ plaidItemId: item._id });
       await refreshBalances({ plaidItemId: item._id });
+      results.push(`${txResult.added} transaction(s)`);
       
-      toast.success(`Synced ${result.added} new transaction(s)`);
+      // Check which products are enabled for this item
+      const products = item.products || [];
+      const hasInvestments = products.includes("investments");
+      const hasLiabilities = products.includes("liabilities");
+      
+      // Sync investments if enabled
+      if (hasInvestments) {
+        try {
+          const invResult = await syncInvestments({ plaidItemId: item._id });
+          if (invResult.holdingsCount > 0 || invResult.securitiesCount > 0) {
+            results.push(`${invResult.holdingsCount} holding(s)`);
+          }
+          
+          // Also sync investment transactions
+          const invTxResult = await syncInvestmentTransactions({ plaidItemId: item._id });
+          if (invTxResult.added > 0) {
+            results.push(`${invTxResult.added} investment tx(s)`);
+          }
+        } catch (invErr) {
+          console.error("Investment sync error:", invErr);
+          errors.push("investments");
+        }
+      }
+      
+      // Sync liabilities if enabled
+      if (hasLiabilities) {
+        try {
+          const liabResult = await syncLiabilities({ plaidItemId: item._id });
+          if (liabResult.count > 0) {
+            results.push(`${liabResult.count} liabilit${liabResult.count === 1 ? "y" : "ies"}`);
+          }
+        } catch (liabErr) {
+          console.error("Liabilities sync error:", liabErr);
+          errors.push("liabilities");
+        }
+      }
+      
+      // Show success message
+      const successMsg = `Synced ${results.join(", ")}`;
+      if (errors.length > 0) {
+        toast.warning(`${successMsg} (failed: ${errors.join(", ")})`);
+      } else {
+        toast.success(successMsg);
+      }
       onRefresh();
     } catch (err) {
       console.error("Sync error:", err);
