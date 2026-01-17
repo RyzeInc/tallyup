@@ -9,7 +9,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { Doc } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import {
   Configuration,
   PlaidApi,
@@ -53,19 +53,47 @@ export const createLinkToken = action({
   args: {
     // Optional: for update mode (reconnecting an existing item)
     accessToken: v.optional(v.string()),
+    // Optional: specific products to request (defaults to transactions + investments + liabilities)
+    products: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, { accessToken }) => {
+  handler: async (ctx, { accessToken, products: requestedProducts }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     
     const plaidClient = getPlaidClient();
+    
+    // Default products: Transactions, Investments, Liabilities
+    // Note: Income requires additional user consent flow
+    // Note: Enrich is a separate API call, not a Link product
+    let productsToRequest: Products[] = [
+      Products.Transactions,
+      Products.Investments,
+      Products.Liabilities,
+    ];
+    
+    // Allow caller to override products
+    if (requestedProducts && requestedProducts.length > 0) {
+      const productMap: Record<string, Products> = {
+        "transactions": Products.Transactions,
+        "investments": Products.Investments,
+        "liabilities": Products.Liabilities,
+        "auth": Products.Auth,
+        "identity": Products.Identity,
+        "assets": Products.Assets,
+        "income": Products.Income,
+        "income_verification": Products.IncomeVerification,
+      };
+      productsToRequest = requestedProducts
+        .map(p => productMap[p.toLowerCase()])
+        .filter((p): p is Products => p !== undefined);
+    }
     
     const request: Parameters<typeof plaidClient.linkTokenCreate>[0] = {
       user: {
         client_user_id: identity.subject,
       },
       client_name: "TallyUp",
-      products: accessToken ? [] : [Products.Transactions],
+      products: accessToken ? [] : productsToRequest,
       country_codes: [CountryCode.Us],
       language: "en",
     };
@@ -85,8 +113,8 @@ export const createLinkToken = action({
     }
     
     try {
-      // Diagnostic: log whether we intend to include redirect_uri (no secrets)
-      console.info("[plaid] createLinkToken: enableOauth=", enableOauth, "redirectUriSet=", !!redirectUri);
+      // Diagnostic: log which products we're requesting
+      console.info("[plaid] createLinkToken: products=", productsToRequest.map(p => String(p)));
       const response = await plaidClient.linkTokenCreate(request);
       
       return {
@@ -257,6 +285,98 @@ export const exchangePublicToken = action({
 // TRANSACTION SYNC
 // ============================================
 
+// Helper to extract transaction data from Plaid response
+function extractTransactionData(txn: {
+  transaction_id: string;
+  account_id: string;
+  amount: number;
+  date: string;
+  datetime?: string | null;
+  authorized_date?: string | null;
+  authorized_datetime?: string | null;
+  name: string;
+  merchant_name?: string | null;
+  pending: boolean;
+  pending_transaction_id?: string | null;
+  personal_finance_category?: {
+    primary?: string;
+    detailed?: string;
+    confidence_level?: string;
+  } | null;
+  personal_finance_category_icon_url?: string;
+  payment_channel: string;
+  transaction_type?: string | null;
+  transaction_code?: string | null;
+  check_number?: string | null;
+  location?: {
+    city?: string | null;
+    region?: string | null;
+    country?: string | null;
+    postal_code?: string | null;
+    address?: string | null;
+    lat?: number | null;
+    lon?: number | null;
+    store_number?: string | null;
+  } | null;
+  logo_url?: string | null;
+  website?: string | null;
+  merchant_entity_id?: string | null;
+  counterparties?: Array<{
+    name?: string | null;
+    type?: string | null;
+    logo_url?: string | null;
+    website?: string | null;
+    entity_id?: string | null;
+    phone_number?: string | null;
+    confidence_level?: string | null;
+  }> | null;
+  iso_currency_code?: string | null;
+  unofficial_currency_code?: string | null;
+}) {
+  return {
+    plaidTransactionId: txn.transaction_id,
+    pendingTransactionId: txn.pending_transaction_id || undefined,
+    amount: txn.amount,
+    date: txn.date,
+    datetime: txn.datetime || undefined,
+    authorizedDate: txn.authorized_date || undefined,
+    authorizedDatetime: txn.authorized_datetime || undefined,
+    name: txn.name,
+    merchantName: txn.merchant_name || undefined,
+    pending: txn.pending,
+    category: txn.personal_finance_category?.primary,
+    categoryDetailed: txn.personal_finance_category?.detailed,
+    categoryConfidence: txn.personal_finance_category?.confidence_level ?? undefined,
+    categoryIconUrl: txn.personal_finance_category_icon_url || undefined,
+    paymentChannel: txn.payment_channel,
+    transactionType: txn.transaction_type || undefined,
+    transactionCode: txn.transaction_code || undefined,
+    checkNumber: txn.check_number || undefined,
+    locationCity: txn.location?.city || undefined,
+    locationRegion: txn.location?.region || undefined,
+    locationCountry: txn.location?.country || undefined,
+    locationPostalCode: txn.location?.postal_code || undefined,
+    locationAddress: txn.location?.address || undefined,
+    locationLat: txn.location?.lat ?? undefined,
+    locationLon: txn.location?.lon ?? undefined,
+    locationStoreNumber: txn.location?.store_number || undefined,
+    logoUrl: txn.logo_url || undefined,
+    website: txn.website || undefined,
+    merchantEntityId: txn.merchant_entity_id || undefined,
+    counterparties: txn.counterparties?.map(cp => ({
+      name: cp.name || undefined,
+      type: cp.type || undefined,
+      logoUrl: cp.logo_url || undefined,
+      website: cp.website || undefined,
+      entityId: cp.entity_id || undefined,
+      phoneNumber: cp.phone_number || undefined,
+      confidenceLevel: cp.confidence_level || undefined,
+    })),
+    isoCurrencyCode: txn.iso_currency_code || undefined,
+    unofficialCurrencyCode: txn.unofficial_currency_code || undefined,
+  };
+}
+
 export const syncTransactions = action({
   args: {
     plaidItemId: v.id("plaidItems"),
@@ -318,25 +438,11 @@ export const syncTransactions = action({
           const plaidAccountIdInternal = accountIdMap.get(txn.account_id);
           if (!plaidAccountIdInternal) continue;
           
+          const txnData = extractTransactionData(txn as Parameters<typeof extractTransactionData>[0]);
           await ctx.runMutation(internal.plaid.upsertPlaidTransaction, {
             userId: identity.subject,
             plaidAccountId: plaidAccountIdInternal,
-            plaidTransactionId: txn.transaction_id,
-            pendingTransactionId: txn.pending_transaction_id || undefined,
-            amount: txn.amount,
-            date: txn.date,
-            datetime: txn.datetime || undefined,
-            name: txn.name,
-            merchantName: txn.merchant_name || undefined,
-            pending: txn.pending,
-            category: txn.personal_finance_category?.primary,
-            categoryDetailed: txn.personal_finance_category?.detailed,
-            categoryConfidence: txn.personal_finance_category?.confidence_level ?? undefined,
-            paymentChannel: txn.payment_channel,
-            transactionType: txn.transaction_type || undefined,
-            locationCity: txn.location?.city || undefined,
-            locationRegion: txn.location?.region || undefined,
-            locationCountry: txn.location?.country || undefined,
+            ...txnData,
           });
           added++;
         }
@@ -346,25 +452,11 @@ export const syncTransactions = action({
           const plaidAccountIdInternal = accountIdMap.get(txn.account_id);
           if (!plaidAccountIdInternal) continue;
           
+          const txnData = extractTransactionData(txn as Parameters<typeof extractTransactionData>[0]);
           await ctx.runMutation(internal.plaid.upsertPlaidTransaction, {
             userId: identity.subject,
             plaidAccountId: plaidAccountIdInternal,
-            plaidTransactionId: txn.transaction_id,
-            pendingTransactionId: txn.pending_transaction_id || undefined,
-            amount: txn.amount,
-            date: txn.date,
-            datetime: txn.datetime || undefined,
-            name: txn.name,
-            merchantName: txn.merchant_name || undefined,
-            pending: txn.pending,
-            category: txn.personal_finance_category?.primary,
-            categoryDetailed: txn.personal_finance_category?.detailed,
-            categoryConfidence: txn.personal_finance_category?.confidence_level ?? undefined,
-            paymentChannel: txn.payment_channel,
-            transactionType: txn.transaction_type || undefined,
-            locationCity: txn.location?.city || undefined,
-            locationRegion: txn.location?.region || undefined,
-            locationCountry: txn.location?.country || undefined,
+            ...txnData,
           });
           modified++;
         }
@@ -630,6 +722,526 @@ export const createUpdateLinkToken = action({
       console.error("Error creating update link token:", error);
       const message = error instanceof Error ? error.message : "Unknown error";
       throw new Error(`Failed to create update link token: ${message}`);
+    }
+  },
+});
+
+// ============================================
+// INVESTMENTS SYNC
+// ============================================
+
+// Security type mapping from Plaid to TallyUp asset types
+// Exported for use in investment sync and UI components
+export const PLAID_SECURITY_TYPE_MAP: Record<string, string> = {
+  "cash": "cash",
+  "cryptocurrency": "crypto",
+  "derivative": "other",
+  "equity": "stock",
+  "etf": "etf",
+  "fixed income": "bond",
+  "loan": "other",
+  "mutual fund": "mutual_fund",
+  "other": "other",
+};
+
+export const syncInvestments = action({
+  args: {
+    plaidItemId: v.id("plaidItems"),
+  },
+  handler: async (ctx, { plaidItemId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    const plaidClient = getPlaidClient();
+    
+    // Get the Plaid item
+    const items = await ctx.runQuery(internal.plaid.getUserPlaidItems, {
+      userId: identity.subject,
+    }) as PlaidItem[];
+    
+    const item = items.find((i: PlaidItem) => i._id === plaidItemId);
+    if (!item) throw new Error("Plaid item not found");
+    
+    // Get linked accounts for mapping
+    const plaidAccounts = await ctx.runQuery(internal.plaid.getPlaidAccountsByItem, {
+      plaidItemId,
+    }) as PlaidAccount[];
+    
+    const accountIdMap = new Map(
+      plaidAccounts.map((a: PlaidAccount) => [a.plaidAccountId, a._id])
+    );
+    
+    try {
+      // Fetch investment holdings
+      const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+        access_token: item.accessToken,
+      });
+      
+      const { holdings, securities, accounts } = holdingsResponse.data;
+      
+      // First, upsert all securities
+      const securityIdMap = new Map<string, string>(); // Plaid security_id -> our _id
+      
+      for (const security of securities) {
+        const plaidSecurityId = await ctx.runMutation(internal.plaid.upsertPlaidSecurity, {
+          securityId: security.security_id,
+          isin: security.isin || undefined,
+          cusip: security.cusip || undefined,
+          sedol: security.sedol || undefined,
+          institutionSecurityId: security.institution_security_id || undefined,
+          institutionId: security.institution_id || undefined,
+          tickerSymbol: security.ticker_symbol || undefined,
+          name: security.name || "Unknown Security",
+          securityType: security.type || "other",
+          isCashEquivalent: security.is_cash_equivalent ?? undefined,
+          closePrice: security.close_price ?? undefined,
+          closePriceAsOf: security.close_price_as_of || undefined,
+          isoCurrencyCode: security.iso_currency_code || undefined,
+          unofficialCurrencyCode: security.unofficial_currency_code || undefined,
+        });
+        securityIdMap.set(security.security_id, plaidSecurityId);
+      }
+      
+      // Update account balances
+      for (const account of accounts) {
+        const plaidAccountIdInternal = accountIdMap.get(account.account_id);
+        if (!plaidAccountIdInternal) continue;
+        
+        await ctx.runMutation(internal.plaid.updatePlaidAccountBalances, {
+          id: plaidAccountIdInternal,
+          balanceCurrent: account.balances.current ?? undefined,
+          balanceAvailable: account.balances.available ?? undefined,
+          balanceLimit: account.balances.limit ?? undefined,
+          lastSyncedAt: Date.now(),
+        });
+      }
+      
+      // Upsert holdings
+      let holdingsCount = 0;
+      for (const holding of holdings) {
+        const plaidAccountIdInternal = accountIdMap.get(holding.account_id);
+        if (!plaidAccountIdInternal) continue;
+        
+        const plaidSecurityIdInternal = securityIdMap.get(holding.security_id);
+        if (!plaidSecurityIdInternal) continue;
+        
+        await ctx.runMutation(internal.plaid.upsertPlaidHolding, {
+          userId: identity.subject,
+          plaidAccountId: plaidAccountIdInternal,
+          plaidSecurityId: plaidSecurityIdInternal as Id<"plaidSecurities">,
+          quantity: holding.quantity,
+          institutionPrice: holding.institution_price,
+          institutionPriceAsOf: holding.institution_price_as_of || undefined,
+          institutionPriceDatetime: holding.institution_price_datetime || undefined,
+          institutionValue: holding.institution_value ?? undefined,
+          costBasis: holding.cost_basis ?? undefined,
+          vestedQuantity: holding.vested_quantity ?? undefined,
+          vestedValue: holding.vested_value ?? undefined,
+          unvestedQuantity: holding.unvested_quantity ?? undefined,
+          unvestedValue: holding.unvested_value ?? undefined,
+          isoCurrencyCode: holding.iso_currency_code || undefined,
+        });
+        holdingsCount++;
+      }
+      
+      // Update sync state
+      await ctx.runMutation(internal.plaid.updatePlaidItemInvestmentsSyncState, {
+        id: plaidItemId,
+        lastInvestmentsSyncAt: Date.now(),
+      });
+      
+      return {
+        success: true,
+        securitiesCount: securities.length,
+        holdingsCount,
+        accountsCount: accounts.length,
+      };
+    } catch (error: unknown) {
+      console.error("Error syncing investments:", error);
+      
+      // Extract Plaid error details
+      let errorCode: string | undefined;
+      let message = "Unknown error";
+      
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as { response?: { data?: { error_code?: string; error_message?: string } } };
+        errorCode = axiosError.response?.data?.error_code;
+        message = axiosError.response?.data?.error_message || message;
+        
+        if (errorCode === "ITEM_LOGIN_REQUIRED") {
+          await ctx.runMutation(internal.plaid.updatePlaidItemStatus, {
+            id: plaidItemId,
+            status: "needs_reauth",
+            errorCode,
+            errorMessage: message,
+          });
+          throw new Error("Bank connection needs re-authentication. Please reconnect this account.");
+        }
+        
+        // PRODUCTS_NOT_SUPPORTED means investments not available for this item
+        if (errorCode === "PRODUCTS_NOT_SUPPORTED") {
+          console.info("Investments not supported for this item");
+          return {
+            success: false,
+            error: "Investments product not available for this institution",
+          };
+        }
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      
+      throw new Error(`Failed to sync investments: ${message}`);
+    }
+  },
+});
+
+export const syncInvestmentTransactions = action({
+  args: {
+    plaidItemId: v.id("plaidItems"),
+    startDate: v.optional(v.string()), // YYYY-MM-DD format
+    endDate: v.optional(v.string()),   // YYYY-MM-DD format
+  },
+  handler: async (ctx, { plaidItemId, startDate, endDate }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    const plaidClient = getPlaidClient();
+    
+    // Get the Plaid item
+    const items = await ctx.runQuery(internal.plaid.getUserPlaidItems, {
+      userId: identity.subject,
+    }) as PlaidItem[];
+    
+    const item = items.find((i: PlaidItem) => i._id === plaidItemId);
+    if (!item) throw new Error("Plaid item not found");
+    
+    // Get linked accounts
+    const plaidAccounts = await ctx.runQuery(internal.plaid.getPlaidAccountsByItem, {
+      plaidItemId,
+    }) as PlaidAccount[];
+    
+    const accountIdMap = new Map(
+      plaidAccounts.map((a: PlaidAccount) => [a.plaidAccountId, a._id])
+    );
+    
+    // Default date range: last 30 days
+    const end = endDate || new Date().toISOString().split("T")[0];
+    const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    
+    try {
+      const response = await plaidClient.investmentsTransactionsGet({
+        access_token: item.accessToken,
+        start_date: start,
+        end_date: end,
+      });
+      
+      const { investment_transactions, securities } = response.data;
+      
+      // First, ensure all securities are in the database
+      const securityIdMap = new Map<string, string>();
+      
+      for (const security of securities) {
+        const plaidSecurityId = await ctx.runMutation(internal.plaid.upsertPlaidSecurity, {
+          securityId: security.security_id,
+          isin: security.isin || undefined,
+          cusip: security.cusip || undefined,
+          sedol: security.sedol || undefined,
+          institutionSecurityId: security.institution_security_id || undefined,
+          institutionId: security.institution_id || undefined,
+          tickerSymbol: security.ticker_symbol || undefined,
+          name: security.name || "Unknown Security",
+          securityType: security.type || "other",
+          isCashEquivalent: security.is_cash_equivalent ?? undefined,
+          closePrice: security.close_price ?? undefined,
+          closePriceAsOf: security.close_price_as_of || undefined,
+          isoCurrencyCode: security.iso_currency_code || undefined,
+          unofficialCurrencyCode: security.unofficial_currency_code || undefined,
+        });
+        securityIdMap.set(security.security_id, plaidSecurityId);
+      }
+      
+      // Upsert investment transactions
+      let transactionsCount = 0;
+      for (const txn of investment_transactions) {
+        const plaidAccountIdInternal = accountIdMap.get(txn.account_id);
+        if (!plaidAccountIdInternal) continue;
+        
+        const plaidSecurityIdInternal = txn.security_id 
+          ? securityIdMap.get(txn.security_id) 
+          : undefined;
+        
+        await ctx.runMutation(internal.plaid.upsertPlaidInvestmentTransaction, {
+          userId: identity.subject,
+          plaidAccountId: plaidAccountIdInternal,
+          plaidSecurityId: plaidSecurityIdInternal as Id<"plaidSecurities"> | undefined,
+          investmentTransactionId: txn.investment_transaction_id,
+          date: txn.date,
+          name: txn.name,
+          quantity: txn.quantity,
+          amount: txn.amount,
+          price: txn.price,
+          fees: txn.fees ?? undefined,
+          transactionType: txn.type,
+          subtype: txn.subtype || undefined,
+          isoCurrencyCode: txn.iso_currency_code || undefined,
+        });
+        transactionsCount++;
+      }
+      
+      return {
+        success: true,
+        transactionsCount,
+        securitiesCount: securities.length,
+      };
+    } catch (error: unknown) {
+      console.error("Error syncing investment transactions:", error);
+      
+      let message = "Unknown error";
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as { response?: { data?: { error_code?: string; error_message?: string } } };
+        const errorCode = axiosError.response?.data?.error_code;
+        message = axiosError.response?.data?.error_message || message;
+        
+        if (errorCode === "PRODUCTS_NOT_SUPPORTED") {
+          return {
+            success: false,
+            error: "Investment transactions not available for this institution",
+          };
+        }
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      
+      throw new Error(`Failed to sync investment transactions: ${message}`);
+    }
+  },
+});
+
+// ============================================
+// LIABILITIES SYNC
+// ============================================
+
+export const syncLiabilities = action({
+  args: {
+    plaidItemId: v.id("plaidItems"),
+  },
+  handler: async (ctx, { plaidItemId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    const plaidClient = getPlaidClient();
+    
+    // Get the Plaid item
+    const items = await ctx.runQuery(internal.plaid.getUserPlaidItems, {
+      userId: identity.subject,
+    }) as PlaidItem[];
+    
+    const item = items.find((i: PlaidItem) => i._id === plaidItemId);
+    if (!item) throw new Error("Plaid item not found");
+    
+    // Get linked accounts
+    const plaidAccounts = await ctx.runQuery(internal.plaid.getPlaidAccountsByItem, {
+      plaidItemId,
+    }) as PlaidAccount[];
+    
+    const accountMap = new Map(
+      plaidAccounts.map((a: PlaidAccount) => [a.plaidAccountId, a])
+    );
+    
+    try {
+      const response = await plaidClient.liabilitiesGet({
+        access_token: item.accessToken,
+      });
+      
+      const { liabilities, accounts } = response.data;
+      
+      // Update account balances
+      for (const account of accounts) {
+        const plaidAccount = accountMap.get(account.account_id);
+        if (!plaidAccount) continue;
+        
+        await ctx.runMutation(internal.plaid.updatePlaidAccountBalances, {
+          id: plaidAccount._id,
+          balanceCurrent: account.balances.current ?? undefined,
+          balanceAvailable: account.balances.available ?? undefined,
+          balanceLimit: account.balances.limit ?? undefined,
+          lastSyncedAt: Date.now(),
+        });
+      }
+      
+      let creditCount = 0;
+      let mortgageCount = 0;
+      let studentCount = 0;
+      
+      // Process credit card liabilities
+      if (liabilities.credit) {
+        for (const credit of liabilities.credit) {
+          const plaidAccount = accountMap.get(credit.account_id || "");
+          if (!plaidAccount) continue;
+          
+          await ctx.runMutation(internal.plaid.upsertPlaidLiability, {
+            userId: identity.subject,
+            plaidAccountId: plaidAccount._id,
+            accountId: plaidAccount.accountId,
+            liabilityType: "credit",
+            isOverdue: credit.is_overdue ?? undefined,
+            lastPaymentAmount: credit.last_payment_amount ?? undefined,
+            lastPaymentDate: credit.last_payment_date || undefined,
+            lastStatementIssueDate: credit.last_statement_issue_date || undefined,
+            lastStatementBalance: credit.last_statement_balance ?? undefined,
+            minimumPaymentAmount: credit.minimum_payment_amount ?? undefined,
+            nextPaymentDueDate: credit.next_payment_due_date || undefined,
+            aprs: credit.aprs?.map((apr) => ({
+              aprPercentage: apr.apr_percentage,
+              aprType: apr.apr_type,
+              balanceSubjectToApr: apr.balance_subject_to_apr ?? undefined,
+              interestChargeAmount: apr.interest_charge_amount ?? undefined,
+            })),
+          });
+          creditCount++;
+        }
+      }
+      
+      // Process mortgage liabilities
+      if (liabilities.mortgage) {
+        for (const mortgage of liabilities.mortgage) {
+          const plaidAccount = accountMap.get(mortgage.account_id);
+          if (!plaidAccount) continue;
+          
+          await ctx.runMutation(internal.plaid.upsertPlaidLiability, {
+            userId: identity.subject,
+            plaidAccountId: plaidAccount._id,
+            accountId: plaidAccount.accountId,
+            liabilityType: "mortgage",
+            accountNumber: mortgage.account_number || undefined,
+            currentLateFee: mortgage.current_late_fee ?? undefined,
+            escrowBalance: mortgage.escrow_balance ?? undefined,
+            hasPmi: mortgage.has_pmi ?? undefined,
+            hasPrepaymentPenalty: mortgage.has_prepayment_penalty ?? undefined,
+            interestRate: mortgage.interest_rate ? {
+              percentage: mortgage.interest_rate.percentage,
+              type: mortgage.interest_rate.type,
+            } : undefined,
+            lastPaymentAmount: mortgage.last_payment_amount ?? undefined,
+            lastPaymentDate: mortgage.last_payment_date || undefined,
+            loanTerm: mortgage.loan_term || undefined,
+            loanTypeDescription: mortgage.loan_type_description || undefined,
+            maturityDate: mortgage.maturity_date || undefined,
+            nextMonthlyPayment: mortgage.next_monthly_payment ?? undefined,
+            nextPaymentDueDate: mortgage.next_payment_due_date || undefined,
+            originationDate: mortgage.origination_date || undefined,
+            originationPrincipalAmount: mortgage.origination_principal_amount ?? undefined,
+            pastDueAmount: mortgage.past_due_amount ?? undefined,
+            propertyAddress: mortgage.property_address ? {
+              city: mortgage.property_address.city || undefined,
+              region: mortgage.property_address.region || undefined,
+              street: mortgage.property_address.street || undefined,
+              postalCode: mortgage.property_address.postal_code || undefined,
+              country: mortgage.property_address.country || undefined,
+            } : undefined,
+            ytdInterestPaid: mortgage.ytd_interest_paid ?? undefined,
+            ytdPrincipalPaid: mortgage.ytd_principal_paid ?? undefined,
+          });
+          mortgageCount++;
+        }
+      }
+      
+      // Process student loan liabilities
+      if (liabilities.student) {
+        for (const student of liabilities.student) {
+          const plaidAccount = accountMap.get(student.account_id || "");
+          if (!plaidAccount) continue;
+          
+          await ctx.runMutation(internal.plaid.upsertPlaidLiability, {
+            userId: identity.subject,
+            plaidAccountId: plaidAccount._id,
+            accountId: plaidAccount.accountId,
+            liabilityType: "student",
+            accountNumber: student.account_number || undefined,
+            disbursementDates: student.disbursement_dates || undefined,
+            expectedPayoffDate: student.expected_payoff_date || undefined,
+            guarantor: student.guarantor || undefined,
+            interestRatePercentage: student.interest_rate_percentage ?? undefined,
+            isOverdue: student.is_overdue ?? undefined,
+            lastPaymentAmount: student.last_payment_amount ?? undefined,
+            lastPaymentDate: student.last_payment_date || undefined,
+            lastStatementIssueDate: student.last_statement_issue_date || undefined,
+            loanName: student.loan_name || undefined,
+            loanStatus: student.loan_status ? {
+              type: student.loan_status.type || "unknown",
+              endDate: student.loan_status.end_date || undefined,
+            } : undefined,
+            minimumPaymentAmount: student.minimum_payment_amount ?? undefined,
+            nextPaymentDueDate: student.next_payment_due_date || undefined,
+            originationDate: student.origination_date || undefined,
+            originationPrincipalAmount: student.origination_principal_amount ?? undefined,
+            outstandingInterestAmount: student.outstanding_interest_amount ?? undefined,
+            paymentReferenceNumber: student.payment_reference_number || undefined,
+            pslfStatus: student.pslf_status ? {
+              estimatedEligibilityDate: student.pslf_status.estimated_eligibility_date || undefined,
+              paymentsMade: student.pslf_status.payments_made ?? undefined,
+              paymentsRemaining: student.pslf_status.payments_remaining ?? undefined,
+            } : undefined,
+            repaymentPlan: student.repayment_plan ? {
+              type: student.repayment_plan.type || "unknown",
+              description: student.repayment_plan.description || undefined,
+            } : undefined,
+            sequenceNumber: student.sequence_number || undefined,
+            servicerAddress: student.servicer_address ? {
+              city: student.servicer_address.city || undefined,
+              region: student.servicer_address.region || undefined,
+              street: student.servicer_address.street || undefined,
+              postalCode: student.servicer_address.postal_code || undefined,
+              country: student.servicer_address.country || undefined,
+            } : undefined,
+          });
+          studentCount++;
+        }
+      }
+      
+      // Update sync state
+      await ctx.runMutation(internal.plaid.updatePlaidItemLiabilitiesSyncState, {
+        id: plaidItemId,
+        lastLiabilitiesSyncAt: Date.now(),
+      });
+      
+      return {
+        success: true,
+        creditCount,
+        mortgageCount,
+        studentCount,
+        totalCount: creditCount + mortgageCount + studentCount,
+      };
+    } catch (error: unknown) {
+      console.error("Error syncing liabilities:", error);
+      
+      let message = "Unknown error";
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as { response?: { data?: { error_code?: string; error_message?: string } } };
+        const errorCode = axiosError.response?.data?.error_code;
+        message = axiosError.response?.data?.error_message || message;
+        
+        if (errorCode === "PRODUCTS_NOT_SUPPORTED") {
+          return {
+            success: false,
+            error: "Liabilities product not available for this institution",
+          };
+        }
+        
+        if (errorCode === "ITEM_LOGIN_REQUIRED") {
+          await ctx.runMutation(internal.plaid.updatePlaidItemStatus, {
+            id: plaidItemId,
+            status: "needs_reauth",
+            errorCode,
+            errorMessage: message,
+          });
+          throw new Error("Bank connection needs re-authentication. Please reconnect this account.");
+        }
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      
+      throw new Error(`Failed to sync liabilities: ${message}`);
     }
   },
 });

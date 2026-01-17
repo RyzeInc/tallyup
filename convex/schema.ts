@@ -109,6 +109,12 @@ export default defineSchema({
     merchantRaw: v.optional(v.string()), // original merchant string
     merchantNormalized: v.optional(v.string()), // cleaned/mapped merchant name
 
+    // Plaid enrichment data
+    logoUrl: v.optional(v.string()),        // Merchant/transaction logo
+    paymentChannel: v.optional(v.string()), // online, in store, other
+    authorizedDate: v.optional(v.number()), // When the transaction was authorized
+    plaidCategoryConfidence: v.optional(v.string()), // VERY_HIGH, HIGH, MEDIUM, LOW, UNKNOWN
+
     // Review reason - why this entry is in the inbox
     reviewReason: v.optional(v.string()), // "NEEDS_CATEGORY", "NEEDS_CONTEXT", "NEEDS_ACCOUNT"
 
@@ -709,16 +715,42 @@ export default defineSchema({
       v.literal("other")
     ),
 
+    // Account subtype (from Plaid - more granular than type)
+    subtype: v.optional(v.string()), // checking, savings, 401k, mortgage, credit card, etc.
+
     // Institution details
     institutionName: v.optional(v.string()),
     logoKey: v.optional(v.string()),
     last4: v.optional(v.string()),
+
+    // Currency
+    currency: v.optional(v.string()), // ISO currency code
 
     // Credit/debt fields
     creditLimit: v.optional(v.number()),
     apr: v.optional(v.number()),
     interestRate: v.optional(v.number()),
     minPayment: v.optional(v.number()),
+
+    // Liability fields (from Plaid Liabilities)
+    isOverdue: v.optional(v.boolean()),
+    minimumPaymentCents: v.optional(v.number()),
+    nextPaymentDueDate: v.optional(v.number()),
+    lastPaymentDate: v.optional(v.number()),
+    lastPaymentAmountCents: v.optional(v.number()),
+
+    // Mortgage-specific fields
+    loanTerm: v.optional(v.string()),         // "30 year", "15 year"
+    maturityDate: v.optional(v.number()),
+    originationDate: v.optional(v.number()),
+    originationPrincipalCents: v.optional(v.number()),
+    escrowBalanceCents: v.optional(v.number()),
+    hasPmi: v.optional(v.boolean()),
+
+    // Student loan-specific fields
+    loanStatus: v.optional(v.string()),       // repayment, in school, etc.
+    repaymentPlan: v.optional(v.string()),    // standard, income-based, etc.
+    expectedPayoffDate: v.optional(v.number()),
 
     // Investment display mode
     valuationMode: v.optional(v.union(v.literal("totalOnly"))),
@@ -729,6 +761,7 @@ export default defineSchema({
     // Plaid link status
     isLinked: v.optional(v.boolean()), // true if connected via Plaid
     plaidAccountId: v.optional(v.string()), // Plaid's account ID for linking
+    persistentPlaidAccountId: v.optional(v.string()), // Stable across re-links
     lastPlaidSync: v.optional(v.number()), // Last time balances were synced
 
     // Soft-delete
@@ -738,7 +771,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_archived", ["userId", "isArchived"]),
+    .index("by_user_archived", ["userId", "isArchived"])
+    .index("by_plaidAccountId", ["plaidAccountId"]),
 
   // ============================================
   // ACCOUNT SNAPSHOTS - Balance history
@@ -925,6 +959,10 @@ export default defineSchema({
     // Account holding this investment
     accountId: v.optional(v.id("accounts")),
     
+    // Plaid links (for synced investments)
+    plaidSecurityId: v.optional(v.id("plaidSecurities")),
+    plaidHoldingId: v.optional(v.id("plaidHoldings")),
+    
     // Ticker symbol
     symbol: v.optional(v.string()),
     
@@ -943,15 +981,30 @@ export default defineSchema({
       v.literal("other")
     ),
     
+    // Security identifiers
+    isin: v.optional(v.string()),
+    cusip: v.optional(v.string()),
+    
+    // Classification
+    sector: v.optional(v.string()),
+    industry: v.optional(v.string()),
+    
     // Holdings
     quantity: v.number(),
     costBasisCents: v.number(),
+    
+    // Vesting (RSUs, options)
+    vestedQuantity: v.optional(v.number()),
+    unvestedQuantity: v.optional(v.number()),
     
     // Current valuation
     currentPriceCents: v.optional(v.number()),
     currentValueCents: v.optional(v.number()),
     priceAsOf: v.optional(v.number()),
     valuationAsOf: v.optional(v.number()),
+    
+    // Currency
+    isoCurrencyCode: v.optional(v.string()),
     
     // Unrealized gain/loss
     unrealizedGainCents: v.optional(v.number()),
@@ -967,7 +1020,9 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
-    .index("by_account", ["accountId"]),
+    .index("by_account", ["accountId"])
+    .index("by_plaidSecurity", ["plaidSecurityId"])
+    .index("by_plaidHolding", ["plaidHoldingId"]),
 
   // ============================================
   // PLAID INTEGRATION - Financial Aggregation
@@ -987,6 +1042,12 @@ export default defineSchema({
     institutionLogo: v.optional(v.string()),
     institutionColor: v.optional(v.string()),
     
+    // Products enabled on this item
+    products: v.optional(v.array(v.string())),           // Products user linked with
+    availableProducts: v.optional(v.array(v.string())), // Products available but not enabled
+    billedProducts: v.optional(v.array(v.string())),    // Products being billed
+    consentedProducts: v.optional(v.array(v.string())), // Products user consented to
+    
     // Consent expiration (for European institutions)
     consentExpirationTime: v.optional(v.number()),
     
@@ -1000,9 +1061,18 @@ export default defineSchema({
     errorCode: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     
+    // Update mode
+    updateType: v.optional(v.string()), // background, user_present_required
+    
     // Sync state
     lastSyncedAt: v.optional(v.number()),
     transactionCursor: v.optional(v.string()),
+    investmentsCursor: v.optional(v.string()),   // For investments sync
+    lastInvestmentsSyncAt: v.optional(v.number()),
+    lastLiabilitiesSyncAt: v.optional(v.number()),
+    
+    // Webhook
+    webhookUrl: v.optional(v.string()),
     
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1065,6 +1135,8 @@ export default defineSchema({
     amount: v.number(), // In dollars (Plaid convention: positive = outflow)
     date: v.string(), // YYYY-MM-DD
     datetime: v.optional(v.string()),
+    authorizedDate: v.optional(v.string()),      // When authorized
+    authorizedDatetime: v.optional(v.string()),  // Authorization timestamp
     name: v.string(),
     merchantName: v.optional(v.string()),
     pending: v.boolean(),
@@ -1072,16 +1144,44 @@ export default defineSchema({
     // Categories
     category: v.optional(v.string()),
     categoryDetailed: v.optional(v.string()),
-    categoryConfidence: v.optional(v.string()),
+    categoryConfidence: v.optional(v.string()), // VERY_HIGH, HIGH, MEDIUM, LOW, UNKNOWN
+    categoryIconUrl: v.optional(v.string()),
     
     // Payment details
     paymentChannel: v.string(), // "online", "in store", "other"
     transactionType: v.optional(v.string()),
+    transactionCode: v.optional(v.string()),
+    checkNumber: v.optional(v.string()),
     
-    // Location
+    // Location (expanded)
     locationCity: v.optional(v.string()),
     locationRegion: v.optional(v.string()),
     locationCountry: v.optional(v.string()),
+    locationPostalCode: v.optional(v.string()),
+    locationAddress: v.optional(v.string()),
+    locationLat: v.optional(v.number()),
+    locationLon: v.optional(v.number()),
+    locationStoreNumber: v.optional(v.string()),
+    
+    // Merchant enrichment
+    logoUrl: v.optional(v.string()),
+    website: v.optional(v.string()),
+    merchantEntityId: v.optional(v.string()),
+    
+    // Counterparties (for marketplace/payment platforms)
+    counterparties: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      type: v.optional(v.string()), // merchant, marketplace, payment_terminal
+      logoUrl: v.optional(v.string()),
+      website: v.optional(v.string()),
+      entityId: v.optional(v.string()),
+      phoneNumber: v.optional(v.string()),
+      confidenceLevel: v.optional(v.string()),
+    }))),
+    
+    // Currency
+    isoCurrencyCode: v.optional(v.string()),
+    unofficialCurrencyCode: v.optional(v.string()),
     
     // Import status
     importStatus: v.union(
@@ -1103,7 +1203,7 @@ export default defineSchema({
     .index("by_user_importStatus", ["userId", "importStatus"])
     .index("by_user_date", ["userId", "date"]),
 
-  // Plaid Sync Log (audit trail for syncs)
+    // Plaid Sync Log (audit trail for syncs)
   plaidSyncLogs: defineTable({
     userId: v.string(),
     plaidItemId: v.id("plaidItems"),
@@ -1137,4 +1237,232 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_plaidItem", ["plaidItemId"])
     .index("by_user_status", ["userId", "status"]),
+
+  // ============================================
+  // PLAID SECURITIES - Stock/fund metadata from Plaid
+  // ============================================
+  plaidSecurities: defineTable({
+    // Plaid identifiers
+    securityId: v.string(),                         // Primary Plaid security ID
+    isin: v.optional(v.string()),                   // ISIN code
+    cusip: v.optional(v.string()),                  // CUSIP code
+    sedol: v.optional(v.string()),                  // SEDOL code
+    institutionSecurityId: v.optional(v.string()),  // Institution's internal ID
+    institutionId: v.optional(v.string()),          // Institution
+    tickerSymbol: v.optional(v.string()),           // Ticker (AAPL, etc.)
+    
+    // Security info
+    name: v.string(),
+    securityType: v.string(),                       // cash, cryptocurrency, derivative, equity, etf, fixed income, loan, mutual fund, other
+    isCashEquivalent: v.optional(v.boolean()),
+    
+    // Pricing
+    closePrice: v.optional(v.number()),
+    closePriceAsOf: v.optional(v.string()),
+    
+    // Classification
+    sector: v.optional(v.string()),
+    industry: v.optional(v.string()),
+    
+    // Currency
+    isoCurrencyCode: v.optional(v.string()),
+    unofficialCurrencyCode: v.optional(v.string()),
+    marketIdentifierCode: v.optional(v.string()),
+    
+    // Option contract details (if applicable)
+    optionContract: v.optional(v.object({
+      contractType: v.optional(v.string()),
+      expirationDate: v.optional(v.string()),
+      strikePrice: v.optional(v.number()),
+      underlyingSecurityId: v.optional(v.string()),
+      underlyingSecurityTicker: v.optional(v.string()),
+    })),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_securityId", ["securityId"])
+    .index("by_ticker", ["tickerSymbol"])
+    .index("by_isin", ["isin"])
+    .index("by_cusip", ["cusip"]),
+
+  // ============================================
+  // PLAID HOLDINGS - Investment positions from Plaid
+  // ============================================
+  plaidHoldings: defineTable({
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    plaidSecurityId: v.id("plaidSecurities"),
+    
+    // TallyUp link
+    investmentId: v.optional(v.id("investments")),
+    
+    // Holding details
+    quantity: v.number(),
+    institutionPrice: v.number(),
+    institutionPriceAsOf: v.optional(v.string()),
+    institutionPriceDatetime: v.optional(v.string()),
+    institutionValue: v.optional(v.number()),
+    costBasis: v.optional(v.number()),
+    
+    // Vesting (RSUs, options)
+    vestedQuantity: v.optional(v.number()),
+    vestedValue: v.optional(v.number()),
+    unvestedQuantity: v.optional(v.number()),
+    unvestedValue: v.optional(v.number()),
+    
+    // Currency
+    isoCurrencyCode: v.optional(v.string()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_account", ["plaidAccountId"])
+    .index("by_security", ["plaidSecurityId"])
+    .index("by_investment", ["investmentId"]),
+
+  // ============================================
+  // PLAID INVESTMENT TRANSACTIONS - Trades, dividends, etc.
+  // ============================================
+  plaidInvestmentTransactions: defineTable({
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    plaidSecurityId: v.optional(v.id("plaidSecurities")),
+    
+    // Plaid identifiers
+    investmentTransactionId: v.string(),
+    
+    // Transaction details
+    date: v.string(),
+    name: v.string(),
+    quantity: v.number(),
+    amount: v.number(),
+    price: v.number(),
+    fees: v.optional(v.number()),
+    
+    // Type classification
+    transactionType: v.string(),  // buy, sell, cancel, cash, fee, transfer
+    subtype: v.optional(v.string()), // dividend, contribution, deposit, withdrawal, etc.
+    
+    // Currency
+    isoCurrencyCode: v.optional(v.string()),
+    
+    // TallyUp link (optionally create entry for dividends, contributions, etc.)
+    entryId: v.optional(v.id("entries")),
+    
+    // Import status
+    importStatus: v.union(
+      v.literal("pending"),
+      v.literal("imported"),
+      v.literal("skipped")
+    ),
+    importedAt: v.optional(v.number()),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_account", ["plaidAccountId"])
+    .index("by_security", ["plaidSecurityId"])
+    .index("by_transactionId", ["investmentTransactionId"])
+    .index("by_user_date", ["userId", "date"])
+    .index("by_user_importStatus", ["userId", "importStatus"]),
+
+  // ============================================
+  // PLAID LIABILITIES - Credit, mortgage, student loan details
+  // ============================================
+  plaidLiabilities: defineTable({
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    accountId: v.id("accounts"),
+    
+    // Liability type
+    liabilityType: v.union(
+      v.literal("credit"),
+      v.literal("mortgage"),
+      v.literal("student")
+    ),
+    
+    // Common fields across all liability types
+    accountNumber: v.optional(v.string()),
+    isOverdue: v.optional(v.boolean()),
+    lastPaymentAmount: v.optional(v.number()),
+    lastPaymentDate: v.optional(v.string()),
+    lastStatementIssueDate: v.optional(v.string()),
+    minimumPaymentAmount: v.optional(v.number()),
+    nextPaymentDueDate: v.optional(v.string()),
+    
+    // ---- Credit Card specific fields ----
+    aprs: v.optional(v.array(v.object({
+      aprPercentage: v.number(),
+      aprType: v.string(), // balance_transfer_apr, cash_apr, purchase_apr, special
+      balanceSubjectToApr: v.optional(v.number()),
+      interestChargeAmount: v.optional(v.number()),
+    }))),
+    lastStatementBalance: v.optional(v.number()),
+    
+    // ---- Mortgage specific fields ----
+    currentLateFee: v.optional(v.number()),
+    escrowBalance: v.optional(v.number()),
+    hasPmi: v.optional(v.boolean()),
+    hasPrepaymentPenalty: v.optional(v.boolean()),
+    interestRate: v.optional(v.object({
+      percentage: v.number(),
+      type: v.string(), // fixed, variable
+    })),
+    loanTerm: v.optional(v.string()),
+    loanTypeDescription: v.optional(v.string()),
+    maturityDate: v.optional(v.string()),
+    nextMonthlyPayment: v.optional(v.number()),
+    originationDate: v.optional(v.string()),
+    originationPrincipalAmount: v.optional(v.number()),
+    pastDueAmount: v.optional(v.number()),
+    propertyAddress: v.optional(v.object({
+      city: v.optional(v.string()),
+      region: v.optional(v.string()),
+      street: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      country: v.optional(v.string()),
+    })),
+    ytdInterestPaid: v.optional(v.number()),
+    ytdPrincipalPaid: v.optional(v.number()),
+    
+    // ---- Student Loan specific fields ----
+    disbursementDates: v.optional(v.array(v.string())),
+    expectedPayoffDate: v.optional(v.string()),
+    guarantor: v.optional(v.string()),
+    interestRatePercentage: v.optional(v.number()),
+    loanName: v.optional(v.string()),
+    loanStatus: v.optional(v.object({
+      type: v.string(), // cancelled, in grace, in military, in school, etc.
+      endDate: v.optional(v.string()),
+    })),
+    outstandingInterestAmount: v.optional(v.number()),
+    paymentReferenceNumber: v.optional(v.string()),
+    pslfStatus: v.optional(v.object({
+      estimatedEligibilityDate: v.optional(v.string()),
+      paymentsMade: v.optional(v.number()),
+      paymentsRemaining: v.optional(v.number()),
+    })),
+    repaymentPlan: v.optional(v.object({
+      type: v.string(), // standard, graduated, income-based, etc.
+      description: v.optional(v.string()),
+    })),
+    sequenceNumber: v.optional(v.string()),
+    servicerAddress: v.optional(v.object({
+      city: v.optional(v.string()),
+      region: v.optional(v.string()),
+      street: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      country: v.optional(v.string()),
+    })),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_account", ["plaidAccountId"])
+    .index("by_tallyup_account", ["accountId"])
+    .index("by_type", ["liabilityType"]),
 });

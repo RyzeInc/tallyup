@@ -412,17 +412,45 @@ export const upsertPlaidTransaction = internalMutation({
     amount: v.number(),
     date: v.string(),
     datetime: v.optional(v.string()),
+    authorizedDate: v.optional(v.string()),
+    authorizedDatetime: v.optional(v.string()),
     name: v.string(),
     merchantName: v.optional(v.string()),
     pending: v.boolean(),
     category: v.optional(v.string()),
     categoryDetailed: v.optional(v.string()),
     categoryConfidence: v.optional(v.string()),
+    categoryIconUrl: v.optional(v.string()),
     paymentChannel: v.string(),
     transactionType: v.optional(v.string()),
+    transactionCode: v.optional(v.string()),
+    checkNumber: v.optional(v.string()),
+    // Location
     locationCity: v.optional(v.string()),
     locationRegion: v.optional(v.string()),
     locationCountry: v.optional(v.string()),
+    locationPostalCode: v.optional(v.string()),
+    locationAddress: v.optional(v.string()),
+    locationLat: v.optional(v.number()),
+    locationLon: v.optional(v.number()),
+    locationStoreNumber: v.optional(v.string()),
+    // Merchant enrichment
+    logoUrl: v.optional(v.string()),
+    website: v.optional(v.string()),
+    merchantEntityId: v.optional(v.string()),
+    // Counterparties
+    counterparties: v.optional(v.array(v.object({
+      name: v.optional(v.string()),
+      type: v.optional(v.string()),
+      logoUrl: v.optional(v.string()),
+      website: v.optional(v.string()),
+      entityId: v.optional(v.string()),
+      phoneNumber: v.optional(v.string()),
+      confidenceLevel: v.optional(v.string()),
+    }))),
+    // Currency
+    isoCurrencyCode: v.optional(v.string()),
+    unofficialCurrencyCode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -435,25 +463,43 @@ export const upsertPlaidTransaction = internalMutation({
       )
       .first();
     
+    const txnData = {
+      amount: args.amount,
+      date: args.date,
+      datetime: args.datetime,
+      authorizedDate: args.authorizedDate,
+      authorizedDatetime: args.authorizedDatetime,
+      name: args.name,
+      merchantName: args.merchantName,
+      pending: args.pending,
+      category: args.category,
+      categoryDetailed: args.categoryDetailed,
+      categoryConfidence: args.categoryConfidence,
+      categoryIconUrl: args.categoryIconUrl,
+      paymentChannel: args.paymentChannel,
+      transactionType: args.transactionType,
+      transactionCode: args.transactionCode,
+      checkNumber: args.checkNumber,
+      locationCity: args.locationCity,
+      locationRegion: args.locationRegion,
+      locationCountry: args.locationCountry,
+      locationPostalCode: args.locationPostalCode,
+      locationAddress: args.locationAddress,
+      locationLat: args.locationLat,
+      locationLon: args.locationLon,
+      locationStoreNumber: args.locationStoreNumber,
+      logoUrl: args.logoUrl,
+      website: args.website,
+      merchantEntityId: args.merchantEntityId,
+      counterparties: args.counterparties,
+      isoCurrencyCode: args.isoCurrencyCode,
+      unofficialCurrencyCode: args.unofficialCurrencyCode,
+      updatedAt: now,
+    };
+    
     if (existing) {
       // Update existing transaction
-      await ctx.db.patch(existing._id, {
-        amount: args.amount,
-        date: args.date,
-        datetime: args.datetime,
-        name: args.name,
-        merchantName: args.merchantName,
-        pending: args.pending,
-        category: args.category,
-        categoryDetailed: args.categoryDetailed,
-        categoryConfidence: args.categoryConfidence,
-        paymentChannel: args.paymentChannel,
-        transactionType: args.transactionType,
-        locationCity: args.locationCity,
-        locationRegion: args.locationRegion,
-        locationCountry: args.locationCountry,
-        updatedAt: now,
-      });
+      await ctx.db.patch(existing._id, txnData);
       return existing._id;
     } else {
       // Create new transaction
@@ -462,23 +508,9 @@ export const upsertPlaidTransaction = internalMutation({
         plaidAccountId: args.plaidAccountId,
         plaidTransactionId: args.plaidTransactionId,
         pendingTransactionId: args.pendingTransactionId,
-        amount: args.amount,
-        date: args.date,
-        datetime: args.datetime,
-        name: args.name,
-        merchantName: args.merchantName,
-        pending: args.pending,
-        category: args.category,
-        categoryDetailed: args.categoryDetailed,
-        categoryConfidence: args.categoryConfidence,
-        paymentChannel: args.paymentChannel,
-        transactionType: args.transactionType,
-        locationCity: args.locationCity,
-        locationRegion: args.locationRegion,
-        locationCountry: args.locationCountry,
+        ...txnData,
         importStatus: "pending",
         createdAt: now,
-        updatedAt: now,
       });
     }
   },
@@ -541,6 +573,408 @@ export const completeSyncLog = internalMutation({
       errorCode: args.errorCode,
       errorMessage: args.errorMessage,
       completedAt: Date.now(),
+    });
+  },
+});
+
+// ============================================
+// INVESTMENT INTERNAL MUTATIONS
+// ============================================
+
+export const upsertPlaidSecurity = internalMutation({
+  args: {
+    securityId: v.string(),
+    isin: v.optional(v.string()),
+    cusip: v.optional(v.string()),
+    sedol: v.optional(v.string()),
+    institutionSecurityId: v.optional(v.string()),
+    institutionId: v.optional(v.string()),
+    tickerSymbol: v.optional(v.string()),
+    name: v.string(),
+    securityType: v.string(),
+    isCashEquivalent: v.optional(v.boolean()),
+    closePrice: v.optional(v.number()),
+    closePriceAsOf: v.optional(v.string()),
+    sector: v.optional(v.string()),
+    industry: v.optional(v.string()),
+    isoCurrencyCode: v.optional(v.string()),
+    unofficialCurrencyCode: v.optional(v.string()),
+    marketIdentifierCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Check if security already exists
+    const existing = await ctx.db
+      .query("plaidSecurities")
+      .withIndex("by_securityId", (q) => q.eq("securityId", args.securityId))
+      .first();
+    
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        isin: args.isin,
+        cusip: args.cusip,
+        sedol: args.sedol,
+        institutionSecurityId: args.institutionSecurityId,
+        institutionId: args.institutionId,
+        tickerSymbol: args.tickerSymbol,
+        name: args.name,
+        securityType: args.securityType,
+        isCashEquivalent: args.isCashEquivalent,
+        closePrice: args.closePrice,
+        closePriceAsOf: args.closePriceAsOf,
+        sector: args.sector,
+        industry: args.industry,
+        isoCurrencyCode: args.isoCurrencyCode,
+        unofficialCurrencyCode: args.unofficialCurrencyCode,
+        marketIdentifierCode: args.marketIdentifierCode,
+        updatedAt: now,
+      });
+      return existing._id;
+    } else {
+      return await ctx.db.insert("plaidSecurities", {
+        securityId: args.securityId,
+        isin: args.isin,
+        cusip: args.cusip,
+        sedol: args.sedol,
+        institutionSecurityId: args.institutionSecurityId,
+        institutionId: args.institutionId,
+        tickerSymbol: args.tickerSymbol,
+        name: args.name,
+        securityType: args.securityType,
+        isCashEquivalent: args.isCashEquivalent,
+        closePrice: args.closePrice,
+        closePriceAsOf: args.closePriceAsOf,
+        sector: args.sector,
+        industry: args.industry,
+        isoCurrencyCode: args.isoCurrencyCode,
+        unofficialCurrencyCode: args.unofficialCurrencyCode,
+        marketIdentifierCode: args.marketIdentifierCode,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+export const getPlaidSecurityBySecurityId = internalQuery({
+  args: { securityId: v.string() },
+  handler: async (ctx, { securityId }) => {
+    return await ctx.db
+      .query("plaidSecurities")
+      .withIndex("by_securityId", (q) => q.eq("securityId", securityId))
+      .first();
+  },
+});
+
+export const upsertPlaidHolding = internalMutation({
+  args: {
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    plaidSecurityId: v.id("plaidSecurities"),
+    quantity: v.number(),
+    institutionPrice: v.number(),
+    institutionPriceAsOf: v.optional(v.string()),
+    institutionPriceDatetime: v.optional(v.string()),
+    institutionValue: v.optional(v.number()),
+    costBasis: v.optional(v.number()),
+    vestedQuantity: v.optional(v.number()),
+    vestedValue: v.optional(v.number()),
+    unvestedQuantity: v.optional(v.number()),
+    unvestedValue: v.optional(v.number()),
+    isoCurrencyCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Check if holding already exists for this account + security
+    const existingHoldings = await ctx.db
+      .query("plaidHoldings")
+      .withIndex("by_account", (q) => q.eq("plaidAccountId", args.plaidAccountId))
+      .collect();
+    
+    const existing = existingHoldings.find(
+      (h) => h.plaidSecurityId === args.plaidSecurityId
+    );
+    
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        quantity: args.quantity,
+        institutionPrice: args.institutionPrice,
+        institutionPriceAsOf: args.institutionPriceAsOf,
+        institutionPriceDatetime: args.institutionPriceDatetime,
+        institutionValue: args.institutionValue,
+        costBasis: args.costBasis,
+        vestedQuantity: args.vestedQuantity,
+        vestedValue: args.vestedValue,
+        unvestedQuantity: args.unvestedQuantity,
+        unvestedValue: args.unvestedValue,
+        isoCurrencyCode: args.isoCurrencyCode,
+        updatedAt: now,
+      });
+      return existing._id;
+    } else {
+      return await ctx.db.insert("plaidHoldings", {
+        userId: args.userId,
+        plaidAccountId: args.plaidAccountId,
+        plaidSecurityId: args.plaidSecurityId,
+        quantity: args.quantity,
+        institutionPrice: args.institutionPrice,
+        institutionPriceAsOf: args.institutionPriceAsOf,
+        institutionPriceDatetime: args.institutionPriceDatetime,
+        institutionValue: args.institutionValue,
+        costBasis: args.costBasis,
+        vestedQuantity: args.vestedQuantity,
+        vestedValue: args.vestedValue,
+        unvestedQuantity: args.unvestedQuantity,
+        unvestedValue: args.unvestedValue,
+        isoCurrencyCode: args.isoCurrencyCode,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+export const upsertPlaidInvestmentTransaction = internalMutation({
+  args: {
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    plaidSecurityId: v.optional(v.id("plaidSecurities")),
+    investmentTransactionId: v.string(),
+    date: v.string(),
+    name: v.string(),
+    quantity: v.number(),
+    amount: v.number(),
+    price: v.number(),
+    fees: v.optional(v.number()),
+    transactionType: v.string(),
+    subtype: v.optional(v.string()),
+    isoCurrencyCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Check if transaction already exists
+    const existing = await ctx.db
+      .query("plaidInvestmentTransactions")
+      .withIndex("by_transactionId", (q) => 
+        q.eq("investmentTransactionId", args.investmentTransactionId)
+      )
+      .first();
+    
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        plaidSecurityId: args.plaidSecurityId,
+        date: args.date,
+        name: args.name,
+        quantity: args.quantity,
+        amount: args.amount,
+        price: args.price,
+        fees: args.fees,
+        transactionType: args.transactionType,
+        subtype: args.subtype,
+        isoCurrencyCode: args.isoCurrencyCode,
+        updatedAt: now,
+      });
+      return existing._id;
+    } else {
+      return await ctx.db.insert("plaidInvestmentTransactions", {
+        userId: args.userId,
+        plaidAccountId: args.plaidAccountId,
+        plaidSecurityId: args.plaidSecurityId,
+        investmentTransactionId: args.investmentTransactionId,
+        date: args.date,
+        name: args.name,
+        quantity: args.quantity,
+        amount: args.amount,
+        price: args.price,
+        fees: args.fees,
+        transactionType: args.transactionType,
+        subtype: args.subtype,
+        isoCurrencyCode: args.isoCurrencyCode,
+        importStatus: "pending",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+export const updatePlaidItemInvestmentsSyncState = internalMutation({
+  args: {
+    id: v.id("plaidItems"),
+    lastInvestmentsSyncAt: v.number(),
+    investmentsCursor: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      lastInvestmentsSyncAt: args.lastInvestmentsSyncAt,
+      investmentsCursor: args.investmentsCursor,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ============================================
+// LIABILITIES INTERNAL MUTATIONS
+// ============================================
+
+export const upsertPlaidLiability = internalMutation({
+  args: {
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    accountId: v.id("accounts"),
+    liabilityType: v.union(
+      v.literal("credit"),
+      v.literal("mortgage"),
+      v.literal("student")
+    ),
+    // Common fields
+    accountNumber: v.optional(v.string()),
+    isOverdue: v.optional(v.boolean()),
+    lastPaymentAmount: v.optional(v.number()),
+    lastPaymentDate: v.optional(v.string()),
+    lastStatementIssueDate: v.optional(v.string()),
+    minimumPaymentAmount: v.optional(v.number()),
+    nextPaymentDueDate: v.optional(v.string()),
+    // Credit fields
+    aprs: v.optional(v.array(v.object({
+      aprPercentage: v.number(),
+      aprType: v.string(),
+      balanceSubjectToApr: v.optional(v.number()),
+      interestChargeAmount: v.optional(v.number()),
+    }))),
+    lastStatementBalance: v.optional(v.number()),
+    // Mortgage fields
+    currentLateFee: v.optional(v.number()),
+    escrowBalance: v.optional(v.number()),
+    hasPmi: v.optional(v.boolean()),
+    hasPrepaymentPenalty: v.optional(v.boolean()),
+    interestRate: v.optional(v.object({
+      percentage: v.number(),
+      type: v.string(),
+    })),
+    loanTerm: v.optional(v.string()),
+    loanTypeDescription: v.optional(v.string()),
+    maturityDate: v.optional(v.string()),
+    nextMonthlyPayment: v.optional(v.number()),
+    originationDate: v.optional(v.string()),
+    originationPrincipalAmount: v.optional(v.number()),
+    pastDueAmount: v.optional(v.number()),
+    propertyAddress: v.optional(v.object({
+      city: v.optional(v.string()),
+      region: v.optional(v.string()),
+      street: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      country: v.optional(v.string()),
+    })),
+    ytdInterestPaid: v.optional(v.number()),
+    ytdPrincipalPaid: v.optional(v.number()),
+    // Student loan fields
+    disbursementDates: v.optional(v.array(v.string())),
+    expectedPayoffDate: v.optional(v.string()),
+    guarantor: v.optional(v.string()),
+    interestRatePercentage: v.optional(v.number()),
+    loanName: v.optional(v.string()),
+    loanStatus: v.optional(v.object({
+      type: v.string(),
+      endDate: v.optional(v.string()),
+    })),
+    outstandingInterestAmount: v.optional(v.number()),
+    paymentReferenceNumber: v.optional(v.string()),
+    pslfStatus: v.optional(v.object({
+      estimatedEligibilityDate: v.optional(v.string()),
+      paymentsMade: v.optional(v.number()),
+      paymentsRemaining: v.optional(v.number()),
+    })),
+    repaymentPlan: v.optional(v.object({
+      type: v.string(),
+      description: v.optional(v.string()),
+    })),
+    sequenceNumber: v.optional(v.string()),
+    servicerAddress: v.optional(v.object({
+      city: v.optional(v.string()),
+      region: v.optional(v.string()),
+      street: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      country: v.optional(v.string()),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Check if liability already exists for this account
+    const existing = await ctx.db
+      .query("plaidLiabilities")
+      .withIndex("by_account", (q) => q.eq("plaidAccountId", args.plaidAccountId))
+      .first();
+    
+    const data = {
+      userId: args.userId,
+      plaidAccountId: args.plaidAccountId,
+      accountId: args.accountId,
+      liabilityType: args.liabilityType,
+      accountNumber: args.accountNumber,
+      isOverdue: args.isOverdue,
+      lastPaymentAmount: args.lastPaymentAmount,
+      lastPaymentDate: args.lastPaymentDate,
+      lastStatementIssueDate: args.lastStatementIssueDate,
+      minimumPaymentAmount: args.minimumPaymentAmount,
+      nextPaymentDueDate: args.nextPaymentDueDate,
+      aprs: args.aprs,
+      lastStatementBalance: args.lastStatementBalance,
+      currentLateFee: args.currentLateFee,
+      escrowBalance: args.escrowBalance,
+      hasPmi: args.hasPmi,
+      hasPrepaymentPenalty: args.hasPrepaymentPenalty,
+      interestRate: args.interestRate,
+      loanTerm: args.loanTerm,
+      loanTypeDescription: args.loanTypeDescription,
+      maturityDate: args.maturityDate,
+      nextMonthlyPayment: args.nextMonthlyPayment,
+      originationDate: args.originationDate,
+      originationPrincipalAmount: args.originationPrincipalAmount,
+      pastDueAmount: args.pastDueAmount,
+      propertyAddress: args.propertyAddress,
+      ytdInterestPaid: args.ytdInterestPaid,
+      ytdPrincipalPaid: args.ytdPrincipalPaid,
+      disbursementDates: args.disbursementDates,
+      expectedPayoffDate: args.expectedPayoffDate,
+      guarantor: args.guarantor,
+      interestRatePercentage: args.interestRatePercentage,
+      loanName: args.loanName,
+      loanStatus: args.loanStatus,
+      outstandingInterestAmount: args.outstandingInterestAmount,
+      paymentReferenceNumber: args.paymentReferenceNumber,
+      pslfStatus: args.pslfStatus,
+      repaymentPlan: args.repaymentPlan,
+      sequenceNumber: args.sequenceNumber,
+      servicerAddress: args.servicerAddress,
+      updatedAt: now,
+    };
+    
+    if (existing) {
+      await ctx.db.patch(existing._id, data);
+      return existing._id;
+    } else {
+      return await ctx.db.insert("plaidLiabilities", {
+        ...data,
+        createdAt: now,
+      });
+    }
+  },
+});
+
+export const updatePlaidItemLiabilitiesSyncState = internalMutation({
+  args: {
+    id: v.id("plaidItems"),
+    lastLiabilitiesSyncAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      lastLiabilitiesSyncAt: args.lastLiabilitiesSyncAt,
+      updatedAt: Date.now(),
     });
   },
 });
