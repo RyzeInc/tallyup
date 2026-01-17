@@ -837,8 +837,8 @@ export const syncInvestments = action({
           costBasis: holding.cost_basis ?? undefined,
           vestedQuantity: holding.vested_quantity ?? undefined,
           vestedValue: holding.vested_value ?? undefined,
-          unvestedQuantity: holding.unvested_quantity ?? undefined,
-          unvestedValue: holding.unvested_value ?? undefined,
+          unvestedQuantity: (holding as any).unvested_quantity ?? undefined,
+          unvestedValue: (holding as any).unvested_value ?? undefined,
           isoCurrencyCode: holding.iso_currency_code || undefined,
         });
         holdingsCount++;
@@ -1119,8 +1119,8 @@ export const syncLiabilities = action({
             hasPmi: mortgage.has_pmi ?? undefined,
             hasPrepaymentPenalty: mortgage.has_prepayment_penalty ?? undefined,
             interestRate: mortgage.interest_rate ? {
-              percentage: mortgage.interest_rate.percentage,
-              type: mortgage.interest_rate.type,
+              percentage: mortgage.interest_rate.percentage ?? 0,
+              type: mortgage.interest_rate.type || "unknown",
             } : undefined,
             lastPaymentAmount: mortgage.last_payment_amount ?? undefined,
             lastPaymentDate: mortgage.last_payment_date || undefined,

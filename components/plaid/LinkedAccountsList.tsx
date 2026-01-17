@@ -112,14 +112,17 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
       if (hasInvestments) {
         try {
           const invResult = await syncInvestments({ plaidItemId: item._id });
-          if (invResult.holdingsCount > 0 || invResult.securitiesCount > 0) {
-            results.push(`${invResult.holdingsCount} holding(s)`);
+          const holdingsCount = invResult?.holdingsCount ?? 0;
+          const securitiesCount = invResult?.securitiesCount ?? 0;
+          if (holdingsCount > 0 || securitiesCount > 0) {
+            results.push(`${holdingsCount} holding(s)`);
           }
-          
+
           // Also sync investment transactions
           const invTxResult = await syncInvestmentTransactions({ plaidItemId: item._id });
-          if (invTxResult.added > 0) {
-            results.push(`${invTxResult.added} investment tx(s)`);
+          const invTxCount = invTxResult?.transactionsCount ?? 0;
+          if (invTxCount > 0) {
+            results.push(`${invTxCount} investment tx(s)`);
           }
         } catch (invErr) {
           console.error("Investment sync error:", invErr);
@@ -131,8 +134,9 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
       if (hasLiabilities) {
         try {
           const liabResult = await syncLiabilities({ plaidItemId: item._id });
-          if (liabResult.count > 0) {
-            results.push(`${liabResult.count} liabilit${liabResult.count === 1 ? "y" : "ies"}`);
+          const liabTotal = liabResult?.totalCount ?? 0;
+          if (liabTotal > 0) {
+            results.push(`${liabTotal} liabilit${liabTotal === 1 ? "y" : "ies"}`);
           }
         } catch (liabErr) {
           console.error("Liabilities sync error:", liabErr);
