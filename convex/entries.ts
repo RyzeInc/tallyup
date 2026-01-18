@@ -1235,3 +1235,350 @@ export const permanentDeleteEntry = mutation({
     return { ok: true };
   },
 });
+
+// ============================================================================
+// MANUAL USER SUGGESTIONS
+// These queries analyze manual entry data to provide Plaid-equivalent suggestions
+// ============================================================================
+
+/**
+ * Get goal suggestions based on manual entry data
+ * Analyzes spending patterns to suggest emergency fund, debt payoff, etc.
+ */
+export const getManualGoalSuggestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const now = Date.now();
+    const threeMonthsAgo = now - 90 * 24 * 60 * 60 * 1000;
+    
+    // Get recent expenses to analyze spending patterns
+    const recentExpenses = await ctx.db
+      .query("entries")
+      .withIndex("by_user_type_date", q =>
+        q.eq("userId", identity.subject)
+          .eq("type", "expense")
+          .gte("date", threeMonthsAgo)
+      )
+      .collect();
+    
+    // Get recent income
+    const recentIncome = await ctx.db
+      .query("entries")
+      .withIndex("by_user_type_date", q =>
+        q.eq("userId", identity.subject)
+          .eq("type", "income")
+          .gte("date", threeMonthsAgo)
+      )
+      .collect();
+    
+    // Get existing goals to avoid suggesting duplicates
+    const existingGoals = await ctx.db
+      .query("goals")
+      .withIndex("by_user", q => q.eq("userId", identity.subject))
+      .collect();
+    const existingTypes = new Set(existingGoals.map(g => g.goalType));
+    
+    const suggestions: Array<{
+      type: "savings" | "paydown" | "sinking_fund";
+      name: string;
+      suggestedAmount: number;
+      reason: string;
+      category?: string;
+      priority: number;
+    }> = [];
+    
+    // Calculate monthly averages
+    const totalExpenses = recentExpenses.reduce((sum, e) => sum + e.amountCents, 0);
+    const totalIncome = recentIncome.reduce((sum, e) => sum + e.amountCents, 0);
+    const monthlyExpenses = Math.round(totalExpenses / 3);
+    const monthlyIncome = Math.round(totalIncome / 3);
+    
+    // 1. Emergency Fund - suggest 3-6 months of expenses
+    if (!existingTypes.has("savings") && monthlyExpenses > 0) {
+      suggestions.push({
+        type: "savings",
+        name: "Emergency Fund",
+        suggestedAmount: monthlyExpenses * 3, // 3 months as starter
+        reason: `Based on your ~$${(monthlyExpenses / 100).toLocaleString()}/mo spending, a 3-month cushion would help protect against unexpected events.`,
+        priority: 1,
+      });
+    }
+    
+    // 2. Analyze categories to find potential debt (credit card payments, loans)
+    const categorySpending: Record<string, number> = {};
+    for (const e of recentExpenses) {
+      const cat = e.category || "Other";
+      categorySpending[cat] = (categorySpending[cat] || 0) + e.amountCents;
+    }
+    
+    // Look for debt-related categories
+    const debtKeywords = ["credit", "loan", "payment", "debt", "interest", "finance"];
+    for (const [cat, amount] of Object.entries(categorySpending)) {
+      const catLower = cat.toLowerCase();
+      if (debtKeywords.some(kw => catLower.includes(kw)) && amount > 10000) { // > $100 in 3 months
+        if (!existingTypes.has("paydown")) {
+          suggestions.push({
+            type: "paydown",
+            name: `Pay Off ${cat}`,
+            suggestedAmount: Math.round(amount * 4), // Estimate ~1 year of payments as target
+            reason: `You've spent $${(amount / 100).toLocaleString()} on "${cat}" in the last 3 months. Paying this off could free up cash flow.`,
+            category: cat,
+            priority: 2,
+          });
+          break; // Only suggest one debt payoff
+        }
+      }
+    }
+    
+    // 3. Sinking fund for large recurring expenses
+    const largeCategories = Object.entries(categorySpending)
+      .filter((entry) => entry[1] > 30000) // > $300 over 3 months
+      .sort((a, b) => b[1] - a[1]);
+    
+    for (const [cat, amount] of largeCategories.slice(0, 2)) {
+      const catLower = cat.toLowerCase();
+      // Skip if it's likely a debt or if already a goal
+      if (debtKeywords.some(kw => catLower.includes(kw))) continue;
+      if (["housing", "rent", "mortgage", "utilities"].some(kw => catLower.includes(kw))) continue;
+      
+      suggestions.push({
+        type: "sinking_fund",
+        name: `${cat} Fund`,
+        suggestedAmount: Math.round(amount / 3 * 12), // Annualize the monthly average
+        reason: `You spend ~$${((amount / 3) / 100).toLocaleString()}/mo on "${cat}". A dedicated fund helps plan for these expenses.`,
+        category: cat,
+        priority: 3,
+      });
+    }
+    
+    // 4. If income > expenses, suggest savings goal
+    if (monthlyIncome > monthlyExpenses && !existingTypes.has("savings")) {
+      const surplus = monthlyIncome - monthlyExpenses;
+      if (surplus > 10000) { // > $100/mo surplus
+        suggestions.push({
+          type: "savings",
+          name: "General Savings",
+          suggestedAmount: surplus * 12, // 1 year of surplus
+          reason: `You typically save ~$${(surplus / 100).toLocaleString()}/mo. Setting a goal can help you stay consistent.`,
+          priority: 4,
+        });
+      }
+    }
+    
+    // Sort by priority and return top suggestions
+    return suggestions.sort((a, b) => a.priority - b.priority).slice(0, 4);
+  },
+});
+
+/**
+ * Get budget suggestions based on manual entry spending patterns
+ * Analyzes actual spending by category to suggest realistic budget amounts
+ */
+export const getManualBudgetSuggestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return {};
+    
+    const now = Date.now();
+    const threeMonthsAgo = now - 90 * 24 * 60 * 60 * 1000;
+    
+    // Get recent expenses
+    const recentExpenses = await ctx.db
+      .query("entries")
+      .withIndex("by_user_type_date", q =>
+        q.eq("userId", identity.subject)
+          .eq("type", "expense")
+          .gte("date", threeMonthsAgo)
+      )
+      .collect();
+    
+    // Aggregate by category
+    const categorySpending: Record<string, { total: number; count: number; merchants: Set<string> }> = {};
+    for (const e of recentExpenses) {
+      const cat = e.category || "Other";
+      if (!categorySpending[cat]) {
+        categorySpending[cat] = { total: 0, count: 0, merchants: new Set() };
+      }
+      categorySpending[cat].total += e.amountCents;
+      categorySpending[cat].count++;
+      if (e.merchant) categorySpending[cat].merchants.add(e.merchant);
+    }
+    
+    // Map to budget categories with monthly averages + 10% buffer
+    const suggestions: Record<string, {
+      suggestedAmountCents: number;
+      monthlyAverage: number;
+      transactionCount: number;
+      topMerchants: string[];
+      source: "manual";
+    }> = {};
+    
+    // Common category mappings
+    const categoryMappings: Record<string, string[]> = {
+      "Food & Drink": ["food", "restaurant", "dining", "grocery", "groceries", "coffee", "cafe", "fast food", "takeout"],
+      "Shopping": ["shopping", "retail", "amazon", "store", "clothing", "electronics"],
+      "Transportation": ["transport", "gas", "fuel", "uber", "lyft", "taxi", "parking", "transit", "car"],
+      "Entertainment": ["entertainment", "movie", "netflix", "spotify", "gaming", "fun", "streaming"],
+      "Health & Wellness": ["health", "medical", "doctor", "pharmacy", "gym", "fitness", "wellness"],
+      "Utilities": ["utility", "utilities", "electric", "water", "gas bill", "internet", "phone"],
+      "Subscriptions": ["subscription", "membership", "recurring"],
+      "Housing": ["rent", "mortgage", "housing", "home"],
+      "Travel": ["travel", "hotel", "flight", "vacation", "airbnb"],
+      "Personal": ["personal", "self-care", "haircut", "beauty"],
+    };
+    
+    for (const [cat, data] of Object.entries(categorySpending)) {
+      const catLower = cat.toLowerCase();
+      let budgetCategory = "Other";
+      
+      // Find matching budget category
+      for (const [budgetCat, keywords] of Object.entries(categoryMappings)) {
+        if (keywords.some(kw => catLower.includes(kw))) {
+          budgetCategory = budgetCat;
+          break;
+        }
+      }
+      
+      const monthlyAvg = Math.round(data.total / 3);
+      const withBuffer = Math.round(monthlyAvg * 1.1); // 10% buffer
+      
+      // Aggregate into budget categories
+      if (!suggestions[budgetCategory]) {
+        suggestions[budgetCategory] = {
+          suggestedAmountCents: 0,
+          monthlyAverage: 0,
+          transactionCount: 0,
+          topMerchants: [],
+          source: "manual",
+        };
+      }
+      suggestions[budgetCategory].suggestedAmountCents += withBuffer;
+      suggestions[budgetCategory].monthlyAverage += monthlyAvg;
+      suggestions[budgetCategory].transactionCount += data.count;
+      suggestions[budgetCategory].topMerchants.push(...Array.from(data.merchants).slice(0, 3));
+    }
+    
+    // Trim merchant lists and remove duplicates
+    for (const cat of Object.keys(suggestions)) {
+      const merchants = suggestions[cat].topMerchants;
+      suggestions[cat].topMerchants = [...new Set(merchants)].slice(0, 5);
+    }
+    
+    return suggestions;
+  },
+});
+
+/**
+ * Get auto-sort rule suggestions based on manual entry patterns
+ * Analyzes merchant/note patterns to suggest categorization rules
+ */
+export const getManualRuleSuggestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000;
+    
+    // Get recent entries
+    const entries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_date", q =>
+        q.eq("userId", identity.subject)
+          .gte("date", sixMonthsAgo)
+      )
+      .collect();
+    
+    // Get existing category rules to avoid duplicates
+    const existingRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", q => q.eq("userId", identity.subject))
+      .collect();
+    // Extract existing match patterns (merchant names, keywords, etc.)
+    const existingPatterns = new Set(existingRules.flatMap(r => {
+      const patterns: string[] = [];
+      if (r.matchMerchantContains) patterns.push(r.matchMerchantContains.toLowerCase());
+      if (r.matchMerchantExact) patterns.push(r.matchMerchantExact.toLowerCase());
+      if (r.matchNoteContains) patterns.push(r.matchNoteContains.toLowerCase());
+      return patterns;
+    }));
+    
+    // Group entries by merchant
+    const merchantGroups: Record<string, {
+      count: number;
+      totalCents: number;
+      categories: Record<string, number>;
+      types: Record<string, number>;
+      sampleNote?: string;
+    }> = {};
+    
+    for (const e of entries) {
+      // Use merchant or extract from note
+      let merchant = e.merchant;
+      if (!merchant && e.note) {
+        // Try to extract merchant from note (first few words)
+        const words = e.note.trim().split(/\s+/).slice(0, 3).join(" ");
+        if (words.length >= 3) merchant = words;
+      }
+      if (!merchant) continue;
+      
+      const key = merchant.toLowerCase();
+      if (!merchantGroups[key]) {
+        merchantGroups[key] = { count: 0, totalCents: 0, categories: {}, types: {}, sampleNote: e.note };
+      }
+      merchantGroups[key].count++;
+      merchantGroups[key].totalCents += e.amountCents;
+      if (e.category) {
+        merchantGroups[key].categories[e.category] = (merchantGroups[key].categories[e.category] || 0) + 1;
+      }
+      merchantGroups[key].types[e.type] = (merchantGroups[key].types[e.type] || 0) + 1;
+    }
+    
+    // Build suggestions for merchants with 3+ transactions
+    const suggestions: Array<{
+      merchant: string;
+      suggestedCategory: string;
+      suggestedType: "expense" | "income";
+      transactionCount: number;
+      totalSpent: number;
+      confidence: "high" | "medium";
+    }> = [];
+    
+    for (const [merchantKey, data] of Object.entries(merchantGroups)) {
+      if (data.count < 3) continue; // Need at least 3 transactions
+      if (existingPatterns.has(merchantKey)) continue; // Already have a rule for this pattern
+      
+      // Find most common category
+      const categoryEntries = Object.entries(data.categories);
+      if (categoryEntries.length === 0) continue;
+      
+      const [topCategory, topCategoryCount] = categoryEntries.sort((a, b) => b[1] - a[1])[0];
+      
+      // Find most common type
+      const typeEntries = Object.entries(data.types);
+      const [topType] = typeEntries.sort((a, b) => b[1] - a[1])[0];
+      
+      // Calculate confidence
+      const categoryConsistency = topCategoryCount / data.count;
+      const confidence = categoryConsistency >= 0.8 ? "high" : "medium";
+      
+      suggestions.push({
+        merchant: data.sampleNote?.split(/\s+/).slice(0, 3).join(" ") || merchantKey,
+        suggestedCategory: topCategory,
+        suggestedType: topType as "expense" | "income",
+        transactionCount: data.count,
+        totalSpent: data.totalCents,
+        confidence,
+      });
+    }
+    
+    // Sort by transaction count and return top suggestions
+    return suggestions
+      .sort((a, b) => b.transactionCount - a.transactionCount)
+      .slice(0, 20);
+  },
+});

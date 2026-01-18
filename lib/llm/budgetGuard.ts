@@ -1,7 +1,7 @@
 export const GLOBAL_USAGE_USER_ID = "__global__";
 
-const DEFAULT_USER_MAX = 20;
-const DEFAULT_GLOBAL_MAX = 500;
+const DEFAULT_USER_MAX = 0;
+const DEFAULT_GLOBAL_MAX = 0;
 
 function parseLimit(value: string | undefined, fallback: number): number {
   if (!value) return fallback;

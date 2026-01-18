@@ -106,6 +106,13 @@ export default function ActivityPage() {
     api.plaid.listAllPlaidTransactions,
     viewMode === "plaid" ? { limit: 100, startDate: startDateStr, endDate: endDateStr } : "skip"
   ) as PlaidTransaction[] | undefined;
+  
+  // Check if user has linked Plaid accounts
+  const plaidAccounts = useQuery(
+    api.plaid.listPlaidAccounts,
+    viewMode === "plaid" ? {} : "skip"
+  );
+  const hasLinkedAccounts = plaidAccounts && plaidAccounts.length > 0;
 
   // Get user's accounts for filtering
   const accounts = useQuery(api.accounts.listAccounts, {}) as Doc<"accounts">[] | undefined;
@@ -1130,10 +1137,52 @@ export default function ActivityPage() {
                 </div>
               </div>
             ) : plaidTransactions.length === 0 ? (
-              <EmptyState
-                title="No Plaid transactions"
-                subtitle="No raw transactions from linked accounts in this date range. Link an account to start syncing."
-              />
+              <div
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--card-radius)",
+                  border: "1px solid var(--border)",
+                  padding: "var(--space-8)",
+                  textAlign: "center",
+                }}
+              >
+                {!hasLinkedAccounts ? (
+                  <>
+                    <Lucide.Link2 className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--text-tertiary)" }} />
+                    <div style={{ fontWeight: 600, marginBottom: "var(--space-2)", color: "var(--text)" }}>
+                      No Linked Accounts
+                    </div>
+                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
+                      This view shows raw transaction data from bank accounts connected via Plaid. 
+                      You&apos;re currently using manual entry mode.
+                    </div>
+                    <div style={{ 
+                      padding: "var(--space-3)", 
+                      borderRadius: "var(--card-radius)", 
+                      backgroundColor: "var(--surface-2)",
+                      textAlign: "left",
+                    }}>
+                      <div style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--text)", marginBottom: "var(--space-2)" }}>
+                        💡 Manual mode works great!
+                      </div>
+                      <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                        All TallyUp features work without linking accounts. Your manually entered transactions 
+                        appear in the Cards, Table, and Extended views.
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Lucide.Database className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--text-tertiary)" }} />
+                    <div style={{ fontWeight: 600, marginBottom: "var(--space-2)", color: "var(--text)" }}>
+                      No transactions in this date range
+                    </div>
+                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                      Try expanding your date range or syncing your accounts to fetch recent transactions.
+                    </div>
+                  </>
+                )}
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                 <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: "var(--space-1)" }}>

@@ -26,6 +26,56 @@ export default function RulesPage() {
   
   // Plaid-suggested rules
   const plaidSuggestions = useQuery(api.plaid.getPlaidMerchantRuleSuggestions, {});
+  
+  // Manual-entry-suggested rules
+  const manualSuggestions = useQuery(api.entries.getManualRuleSuggestions, {});
+  
+  // Combine suggestions from both sources
+  const combinedSuggestions = useMemo(() => {
+    const suggestions: Array<{
+      merchant: string;
+      suggestedCategory: string;
+      transactionCount: number;
+      totalSpent: number;
+      confidence: "high" | "medium";
+      source: "plaid" | "manual";
+    }> = [];
+    
+    // Add Plaid suggestions first
+    if (plaidSuggestions && plaidSuggestions.length > 0) {
+      for (const s of plaidSuggestions) {
+        suggestions.push({
+          merchant: s.merchantName,
+          suggestedCategory: s.suggestedCategory,
+          transactionCount: s.transactionCount,
+          totalSpent: s.totalAmountCents,
+          // Plaid suggestions are high confidence since they come from actual bank data
+          confidence: "high",
+          source: "plaid",
+        });
+      }
+    }
+    
+    // Add manual suggestions (avoid duplicates by merchant name)
+    if (manualSuggestions && manualSuggestions.length > 0) {
+      const existingMerchants = new Set(suggestions.map(s => s.merchant.toLowerCase()));
+      for (const s of manualSuggestions) {
+        if (!existingMerchants.has(s.merchant.toLowerCase())) {
+          suggestions.push({
+            merchant: s.merchant,
+            suggestedCategory: s.suggestedCategory,
+            transactionCount: s.transactionCount,
+            totalSpent: s.totalSpent,
+            confidence: s.confidence,
+            source: "manual",
+          });
+        }
+      }
+    }
+    
+    // Sort by transaction count
+    return suggestions.sort((a, b) => b.transactionCount - a.transactionCount);
+  }, [plaidSuggestions, manualSuggestions]);
 
   // Create Category Rule Modal
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -45,7 +95,7 @@ export default function RulesPage() {
   const [merchCategory, setMerchCategory] = useState("");
   
   // Count of suggestions for badge
-  const suggestionCount = useMemo(() => plaidSuggestions?.length || 0, [plaidSuggestions]);
+  const suggestionCount = useMemo(() => combinedSuggestions.length, [combinedSuggestions]);
 
   const resetCategoryModal = () => {
     setShowCreateCategory(false);
@@ -116,12 +166,12 @@ export default function RulesPage() {
     }
   };
   
-  const handleCreateFromSuggestion = async (suggestion: { merchantName: string; suggestedCategory: string }) => {
+  const handleCreateFromSuggestion = async (suggestion: { merchant: string; suggestedCategory: string }) => {
     setCreating(true);
     try {
       await createCategoryRule({
-        name: `${suggestion.merchantName} → ${suggestion.suggestedCategory}`,
-        matchMerchantContains: suggestion.merchantName,
+        name: `${suggestion.merchant} → ${suggestion.suggestedCategory}`,
+        matchMerchantContains: suggestion.merchant,
         assignCategory: suggestion.suggestedCategory,
         priority: 0,
       });
@@ -340,19 +390,19 @@ export default function RulesPage() {
           
           {activeTab === "suggestions" && (
             <>
-              {/* Plaid-Suggested Rules */}
-              {plaidSuggestions === undefined ? (
+              {/* Smart Suggested Rules */}
+              {(plaidSuggestions === undefined && manualSuggestions === undefined) ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="h-20 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-2)" }} />
                   ))}
                 </div>
-              ) : plaidSuggestions.length === 0 ? (
+              ) : combinedSuggestions.length === 0 ? (
                 <div className="text-center py-12">
                   <Lucide.Sparkles className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--text-tertiary)" }} />
-                  <div className="font-medium mb-1" style={{ color: "var(--text)" }}>No suggestions available</div>
+                  <div className="font-medium mb-1" style={{ color: "var(--text)" }}>No suggestions yet</div>
                   <div className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                    Import more transactions from Plaid to get smart categorization suggestions
+                    Add more transactions to get smart categorization suggestions based on your spending patterns
                   </div>
                 </div>
               ) : (
@@ -360,7 +410,7 @@ export default function RulesPage() {
                   <div className="p-3 rounded-xl" style={{ backgroundColor: "var(--primary-subtle)" }}>
                     <div className="flex items-center gap-2 mb-1">
                       <Lucide.Sparkles className="h-4 w-4" style={{ color: "var(--primary)" }} />
-                      <span className="text-sm font-medium" style={{ color: "var(--primary)" }}>Smart Suggestions from Plaid</span>
+                      <span className="text-sm font-medium" style={{ color: "var(--primary)" }}>Smart Suggestions</span>
                     </div>
                     <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                       Based on your transaction patterns. Tap a suggestion to create an auto-sort rule.
@@ -368,9 +418,9 @@ export default function RulesPage() {
                   </div>
                   
                   <div className="space-y-3">
-                    {plaidSuggestions.map((suggestion, idx) => (
+                    {combinedSuggestions.map((suggestion, idx) => (
                       <button
-                        key={`${suggestion.merchantName}-${idx}`}
+                        key={`${suggestion.merchant}-${idx}`}
                         onClick={() => handleCreateFromSuggestion(suggestion)}
                         disabled={creating}
                         className="w-full p-4 rounded-xl text-left transition-colors hover:opacity-90 disabled:opacity-50"
@@ -381,8 +431,13 @@ export default function RulesPage() {
                             <div className="flex items-center gap-2 mb-1">
                               <Lucide.Store className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                               <span className="font-medium capitalize" style={{ color: "var(--text)" }}>
-                                {suggestion.merchantName}
+                                {suggestion.merchant}
                               </span>
+                              {suggestion.confidence === "high" && (
+                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: "var(--success-subtle)", color: "var(--success)" }}>
+                                  High confidence
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <Lucide.ArrowRight className="h-3 w-3" style={{ color: "var(--text-tertiary)" }} />
@@ -391,7 +446,7 @@ export default function RulesPage() {
                               </span>
                             </div>
                             <div className="mt-2 text-xs" style={{ color: "var(--text-tertiary)" }}>
-                              {suggestion.transactionCount} transactions · {formatMoney(suggestion.totalAmountCents)} total
+                              {suggestion.transactionCount} transactions · {formatMoney(suggestion.totalSpent)} total
                             </div>
                           </div>
                           <Lucide.Plus className="h-5 w-5 shrink-0" style={{ color: "var(--primary)" }} />

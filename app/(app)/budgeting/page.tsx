@@ -83,6 +83,7 @@ export default function BudgetingPage() {
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
   const plaidBudgetSuggestions = useQuery(api.plaid.getPlaidBudgetSuggestions, {});
+  const manualBudgetSuggestions = useQuery(api.entries.getManualBudgetSuggestions, {});
   const timezoneOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
   const asOfDate = useMemo(() => Date.now(), []);
   const budgetStatus = useQuery(api.budgetEngine.getBudgetStatus, {
@@ -133,16 +134,38 @@ export default function BudgetingPage() {
     return [...categorySpending.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [categorySpending]);
 
-  // Map Plaid budget suggestions to category IDs for quick lookup
-  const plaidSuggestedAmounts = useMemo(() => {
-    const map = new Map<string, number>();
-    if (!plaidBudgetSuggestions) return map;
-    for (const suggestion of plaidBudgetSuggestions) {
-      const current = map.get(suggestion.budgetCategory) || 0;
-      map.set(suggestion.budgetCategory, current + suggestion.suggestedMonthlyCents);
+  // Map budget suggestions (Plaid + Manual) to category IDs for quick lookup
+  const smartSuggestedAmounts = useMemo(() => {
+    const map = new Map<string, { amount: number; source: "plaid" | "manual"; details?: string }>();
+    
+    // Add Plaid suggestions first (higher priority)
+    if (plaidBudgetSuggestions) {
+      for (const suggestion of plaidBudgetSuggestions) {
+        const current = map.get(suggestion.budgetCategory);
+        const newAmount = (current?.amount || 0) + suggestion.suggestedMonthlyCents;
+        map.set(suggestion.budgetCategory, {
+          amount: newAmount,
+          source: "plaid",
+          details: `Based on ${suggestion.streamCount || 0} recurring streams`,
+        });
+      }
     }
+    
+    // Add manual suggestions for categories not covered by Plaid
+    if (manualBudgetSuggestions) {
+      for (const [category, data] of Object.entries(manualBudgetSuggestions)) {
+        if (!map.has(category)) {
+          map.set(category, {
+            amount: data.suggestedAmountCents,
+            source: "manual",
+            details: `Based on ${data.transactionCount} transactions`,
+          });
+        }
+      }
+    }
+    
     return map;
-  }, [plaidBudgetSuggestions]);
+  }, [plaidBudgetSuggestions, manualBudgetSuggestions]);
 
   const budgetHealth = useMemo(() => {
     if (!budgetCategories || budgetCategories.length === 0) return { onTrack: 0, warning: 0, overspent: 0 };
@@ -456,25 +479,25 @@ export default function BudgetingPage() {
 
               {createStep === "amount" && (
                 <div className="space-y-4">
-                  {/* Plaid Suggestion Banner */}
-                  {plaidSuggestedAmounts.size > 0 && (
+                  {/* Smart Suggestion Banner */}
+                  {smartSuggestedAmounts.size > 0 && (
                     <div className="p-3 rounded-xl" style={{ backgroundColor: "var(--success-subtle)" }}>
                       <div className="flex items-center gap-2 mb-2">
                         <Lucide.Sparkles className="h-4 w-4" style={{ color: "var(--success)" }} />
-                        <span className="text-xs font-medium" style={{ color: "var(--success)" }}>Smart Suggestions from Plaid</span>
+                        <span className="text-xs font-medium" style={{ color: "var(--success)" }}>Smart Budget Suggestions</span>
                       </div>
                       <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                        Based on your recurring spending patterns. Tap &quot;Use Plaid Data&quot; below to auto-fill.
+                        Based on your {[...smartSuggestedAmounts.values()].some(s => s.source === "plaid") ? "connected accounts and " : ""}spending patterns. Tap below to auto-fill.
                       </p>
                       <button 
                         onClick={() => {
                           const amounts: Record<string, string> = {};
                           DEFAULT_BUDGET_CATEGORIES.forEach((cat) => {
                             if (selectedCategories.has(cat.id)) {
-                              const plaidAmount = plaidSuggestedAmounts.get(cat.id);
-                              if (plaidAmount) {
+                              const suggestion = smartSuggestedAmounts.get(cat.id);
+                              if (suggestion) {
                                 // Round to nearest $10 and add 10% buffer
-                                amounts[cat.id] = (Math.ceil((plaidAmount * 1.1) / 1000) * 10).toString();
+                                amounts[cat.id] = (Math.ceil((suggestion.amount * 1.1) / 1000) * 10).toString();
                               }
                             }
                           });
@@ -483,7 +506,7 @@ export default function BudgetingPage() {
                         className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium"
                         style={{ backgroundColor: "var(--success)", color: "white" }}
                       >
-                        Use Plaid Data
+                        Use Smart Data
                       </button>
                     </div>
                   )}
@@ -497,16 +520,16 @@ export default function BudgetingPage() {
                   </div>
                   <div className="space-y-3 max-h-[40vh] overflow-y-auto">
                     {DEFAULT_BUDGET_CATEGORIES.filter(c => selectedCategories.has(c.id)).map((cat) => {
-                      const plaidAmount = plaidSuggestedAmounts.get(cat.id);
+                      const suggestion = smartSuggestedAmounts.get(cat.id);
                       return (
                       <div key={cat.id} className="flex items-center gap-3">
                         <span className="text-lg">{cat.icon}</span>
                         <div className="flex-1">
                           <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{cat.name}</div>
-                          {plaidAmount ? (
+                          {suggestion ? (
                             <div className="text-xs flex items-center gap-1" style={{ color: "var(--success)" }}>
                               <Lucide.TrendingUp className="h-3 w-3" />
-                              {formatMoney(plaidAmount)}/mo from Plaid
+                              {formatMoney(suggestion.amount)}/mo • {suggestion.details}
                             </div>
                           ) : monthlyIncome ? (
                             <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{cat.suggestedPercent}% suggested</div>

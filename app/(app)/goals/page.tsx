@@ -70,6 +70,7 @@ export default function GoalsPage() {
   // Queries
   const goals = useQuery(api.goals.listGoals, { includeCompleted: true }) as Goal[] | undefined;
   const plaidSuggestedGoals = useQuery(api.plaid.getPlaidSuggestedGoals, {});
+  const manualSuggestedGoals = useQuery(api.entries.getManualGoalSuggestions, {});
 
   // Mutations
   const createGoal = useMutation(api.goals.createGoal);
@@ -85,14 +86,59 @@ export default function GoalsPage() {
   const activeGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "active"), [goals]);
   const completedGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "completed"), [goals]);
 
-  // Filter out Plaid suggestions that already have similar goals
-  const filteredPlaidSuggestions = useMemo(() => {
-    if (!plaidSuggestedGoals || plaidSuggestedGoals.length === 0) return [];
+  // Combine Plaid and manual suggestions, filtering out existing goals
+  const smartSuggestions = useMemo(() => {
     const activeNames = new Set(activeGoals.map(g => g.name.toLowerCase()));
-    return plaidSuggestedGoals.filter(
-      s => !activeNames.has(s.name.toLowerCase())
-    );
-  }, [plaidSuggestedGoals, activeGoals]);
+    const suggestions: Array<{
+      type: "savings" | "paydown" | "sinking_fund" | "sinkingFund";
+      name: string;
+      icon: string;
+      suggestedAmountCents: number;
+      description: string;
+      source: "plaid" | "manual";
+    }> = [];
+    
+    // Add Plaid suggestions first (higher priority since they have more data)
+    if (plaidSuggestedGoals && plaidSuggestedGoals.length > 0) {
+      for (const s of plaidSuggestedGoals) {
+        if (!activeNames.has(s.name.toLowerCase())) {
+          suggestions.push({
+            type: s.type,
+            name: s.name,
+            icon: s.icon,
+            suggestedAmountCents: s.suggestedAmountCents,
+            description: s.description,
+            source: "plaid",
+          });
+        }
+      }
+    }
+    
+    // Add manual suggestions (only if we don't have Plaid data for same type)
+    if (manualSuggestedGoals && manualSuggestedGoals.length > 0) {
+      const plaidTypes = new Set(suggestions.map(s => s.type));
+      for (const s of manualSuggestedGoals) {
+        if (!activeNames.has(s.name.toLowerCase()) && !plaidTypes.has(s.type)) {
+          const iconMap: Record<string, string> = {
+            "Emergency Fund": "🆘",
+            "General Savings": "💰",
+            "Pay Off": "💳",
+          };
+          const icon = Object.entries(iconMap).find(([k]) => s.name.includes(k))?.[1] || "🎯";
+          suggestions.push({
+            type: s.type,
+            name: s.name,
+            icon,
+            suggestedAmountCents: s.suggestedAmount,
+            description: s.reason,
+            source: "manual",
+          });
+        }
+      }
+    }
+    
+    return suggestions;
+  }, [plaidSuggestedGoals, manualSuggestedGoals, activeGoals]);
 
   const totalProgress = useMemo(() => {
     return activeGoals.reduce(
@@ -273,25 +319,25 @@ export default function GoalsPage() {
           </div>
         )}
 
-        {/* Plaid-Suggested Goals */}
-        {filteredPlaidSuggestions.length > 0 && (
+        {/* Smart Goal Suggestions (Plaid + Manual data) */}
+        {smartSuggestions.length > 0 && (
           <div className="rounded-2xl p-4" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
             <div className="flex items-center gap-2 mb-3">
               <Lucide.Sparkles className="h-5 w-5" style={{ color: "var(--primary)" }} />
               <h2 className="font-medium" style={{ color: "var(--text)" }}>Suggested Goals</h2>
               <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--primary-subtle)", color: "var(--primary)" }}>
-                From Plaid
+                Smart
               </span>
             </div>
             <p className="text-xs mb-3" style={{ color: "var(--text-tertiary)" }}>
-              Based on your connected accounts and spending patterns
+              Based on your {smartSuggestions.some(s => s.source === "plaid") ? "connected accounts and " : ""}spending patterns
             </p>
             <div className="space-y-2">
-              {filteredPlaidSuggestions.map((suggestion, idx) => (
+              {smartSuggestions.map((suggestion, idx) => (
                 <button
                   key={`${suggestion.type}-${suggestion.name}-${idx}`}
                   onClick={() => {
-                    setSelectedType(suggestion.type);
+                    setSelectedType(suggestion.type === "sinking_fund" ? "sinkingFund" : suggestion.type);
                     setCreateName(suggestion.name);
                     setCreateIcon(suggestion.icon);
                     setCreateAmount((suggestion.suggestedAmountCents / 100).toFixed(2));
@@ -304,7 +350,7 @@ export default function GoalsPage() {
                   <span className="text-lg">{suggestion.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium" style={{ color: "var(--text)" }}>{suggestion.name}</div>
-                    <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{suggestion.description}</div>
+                    <div className="text-xs line-clamp-2" style={{ color: "var(--text-tertiary)" }}>{suggestion.description}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-medium" style={{ color: suggestion.type === "paydown" ? "var(--warning)" : "var(--success)" }}>
