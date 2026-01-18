@@ -305,6 +305,38 @@ export default defineSchema({
   })
     .index("by_user_computedAt", ["userId", "computedAt"]),
 
+  coachFoundation: defineTable({
+    userId: v.string(),
+    snapshot: v.any(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
+  coachKnowledge: defineTable({
+    docId: v.string(),
+    chunkIndex: v.number(),
+    content: v.string(),
+    embedding: v.array(v.number()),
+    tokenCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_doc_chunk", ["docId", "chunkIndex"]),
+
+  coachKnowledgeCache: defineTable({
+    userId: v.string(),
+    messageHash: v.string(),
+    computedAt: v.number(),
+    expiresAt: v.number(),
+    snippets: v.array(v.object({
+      docId: v.string(),
+      chunkIndex: v.number(),
+      content: v.string(),
+      score: v.number(),
+    })),
+  })
+    .index("by_user_message", ["userId", "messageHash"]),
+
   llmUsageDaily: defineTable({
     userId: v.string(),
     yyyymmdd: v.string(),
@@ -1119,6 +1151,7 @@ export default defineSchema({
     investmentsCursor: v.optional(v.string()),   // For investments sync
     lastInvestmentsSyncAt: v.optional(v.number()),
     lastLiabilitiesSyncAt: v.optional(v.number()),
+    lastRecurringSyncAt: v.optional(v.number()), // For recurring streams sync
     
     // Webhook
     webhookUrl: v.optional(v.string()),
@@ -1514,4 +1547,79 @@ export default defineSchema({
     .index("by_account", ["plaidAccountId"])
     .index("by_tallyup_account", ["accountId"])
     .index("by_type", ["liabilityType"]),
+
+  // ============================================
+  // PLAID RECURRING STREAMS - Detected recurring transactions from Plaid
+  // ============================================
+  plaidRecurringStreams: defineTable({
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    accountId: v.id("accounts"),
+    
+    // Plaid stream identifiers
+    streamId: v.string(),                           // Plaid's stream_id
+    
+    // Stream direction: inflow (income) or outflow (expense)
+    streamType: v.union(v.literal("inflow"), v.literal("outflow")),
+    
+    // Stream details from Plaid
+    merchantName: v.optional(v.string()),
+    description: v.optional(v.string()),
+    
+    // Plaid category
+    categoryId: v.optional(v.string()),             // Plaid category ID
+    category: v.optional(v.array(v.string())),      // Category hierarchy
+    personalFinanceCategory: v.optional(v.object({
+      primary: v.optional(v.string()),
+      detailed: v.optional(v.string()),
+    })),
+    
+    // Frequency and timing
+    frequency: v.union(
+      v.literal("WEEKLY"),
+      v.literal("BIWEEKLY"),
+      v.literal("SEMI_MONTHLY"),
+      v.literal("MONTHLY"),
+      v.literal("ANNUALLY"),
+      v.literal("UNKNOWN")
+    ),
+    averageDaysBetween: v.optional(v.number()),
+    
+    // Amount info
+    averageAmountCents: v.number(),                 // Average amount in cents (absolute)
+    lastAmountCents: v.number(),                    // Most recent amount in cents (absolute)
+    isAmountVariable: v.optional(v.boolean()),
+    
+    // Dates
+    firstDate: v.string(),                          // YYYY-MM-DD
+    lastDate: v.string(),                           // YYYY-MM-DD
+    predictedNextDate: v.optional(v.string()),      // YYYY-MM-DD
+    
+    // Stream status
+    isActive: v.boolean(),
+    status: v.union(
+      v.literal("MATURE"),                          // Well-established pattern
+      v.literal("EARLY_DETECTION"),                 // Recently detected
+      v.literal("TOMBSTONED")                       // No longer active
+    ),
+    
+    // Transaction IDs in this stream
+    transactionIds: v.optional(v.array(v.string())), // Plaid transaction_ids
+    transactionCount: v.optional(v.number()),
+    
+    // Link to TallyUp recurring rule (if matched/created)
+    recurringRuleId: v.optional(v.id("recurringRules")),
+    
+    // Sync metadata
+    lastSyncedAt: v.number(),
+    
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_streamId", ["streamId"])
+    .index("by_account", ["plaidAccountId"])
+    .index("by_recurringRule", ["recurringRuleId"])
+    .index("by_user_type", ["userId", "streamType"])
+    .index("by_user_status", ["userId", "status"]),
 });

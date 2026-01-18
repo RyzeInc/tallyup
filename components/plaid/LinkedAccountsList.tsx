@@ -90,6 +90,7 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
   const syncInvestments = useAction(api.plaidActions.syncInvestments);
   const syncInvestmentTransactions = useAction(api.plaidActions.syncInvestmentTransactions);
   const syncLiabilities = useAction(api.plaidActions.syncLiabilities);
+  const syncRecurringStreams = useAction(api.plaidActions.syncRecurringStreams);
   const hideUnhidePlaidAccount = useMutation(api.plaid.hideUnhidePlaidAccount);
   const unlinkPlaidItem = useMutation(api.plaid.unlinkPlaidItem);
   
@@ -147,6 +148,19 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
         } catch (liabErr) {
           console.warn("Liabilities sync skipped:", liabErr);
         }
+      }
+      
+      // Sync recurring streams (detects recurring transactions from Plaid)
+      // This is available for all accounts with the transactions product
+      try {
+        const recurringResult = await syncRecurringStreams({ plaidItemId: item._id });
+        const recurringTotal = recurringResult?.totalCount ?? 0;
+        if (recurringTotal > 0) {
+          results.push(`${recurringTotal} recurring stream(s)`);
+        }
+      } catch (recurringErr) {
+        // Don't warn for this one - it may not have enough data for recurring detection
+        console.info("Recurring streams sync skipped:", recurringErr);
       }
       
       // Show success message

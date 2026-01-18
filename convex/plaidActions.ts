@@ -66,12 +66,13 @@ export const createLinkToken = action({
     
     const plaidClient = getPlaidClient();
     
-    // Default products: Only Transactions
+    // Default products: Transactions + Recurring Transactions (for detecting recurring patterns)
     // IMPORTANT: Requesting multiple products (e.g., transactions + investments + liabilities)
     // restricts Plaid Link to only show accounts that support ALL requested products.
     // This causes the "No liability accounts" error when using sandbox.
     // Instead, request only 'transactions' which works with checking, savings, and credit accounts.
     // Investments and liabilities data can be fetched on-demand for accounts that support them.
+    // Note: RecurringTransactions is included with Transactions product, no additional consent needed.
     let productsToRequest: Products[] = [
       Products.Transactions,
     ];
@@ -1312,6 +1313,212 @@ export const syncLiabilities = action({
       }
       
       throw new Error(`Failed to sync liabilities: ${message}`);
+    }
+  },
+});
+
+// ============================================
+// RECURRING STREAMS SYNC
+// ============================================
+
+// Frequency mapping from Plaid to our schema
+const PLAID_FREQUENCY_MAP: Record<string, "WEEKLY" | "BIWEEKLY" | "SEMI_MONTHLY" | "MONTHLY" | "ANNUALLY" | "UNKNOWN"> = {
+  "WEEKLY": "WEEKLY",
+  "BIWEEKLY": "BIWEEKLY",
+  "SEMI_MONTHLY": "SEMI_MONTHLY",
+  "MONTHLY": "MONTHLY",
+  "ANNUALLY": "ANNUALLY",
+  "UNKNOWN": "UNKNOWN",
+};
+
+// Status mapping from Plaid to our schema  
+const PLAID_STATUS_MAP: Record<string, "MATURE" | "EARLY_DETECTION" | "TOMBSTONED"> = {
+  "MATURE": "MATURE",
+  "EARLY_DETECTION": "EARLY_DETECTION",
+  "TOMBSTONED": "TOMBSTONED",
+};
+
+export const syncRecurringStreams = action({
+  args: {
+    plaidItemId: v.id("plaidItems"),
+  },
+  handler: async (ctx, { plaidItemId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    const plaidClient = getPlaidClient();
+    
+    // Get the Plaid item
+    const items = await ctx.runQuery(internal.plaid.getUserPlaidItems, {
+      userId: identity.subject,
+    }) as PlaidItem[];
+    
+    const item = items.find((i: PlaidItem) => i._id === plaidItemId);
+    if (!item) throw new Error("Plaid item not found");
+    
+    // Get linked accounts for mapping
+    const plaidAccounts = await ctx.runQuery(internal.plaid.getPlaidAccountsByItem, {
+      plaidItemId,
+    }) as PlaidAccount[];
+    
+    const accountIdMap = new Map(
+      plaidAccounts.map((a: PlaidAccount) => [a.plaidAccountId, a])
+    );
+    
+    try {
+      // Fetch recurring transactions from Plaid
+      // transactionsRecurringGet returns both inflow_streams and outflow_streams
+      const response = await plaidClient.transactionsRecurringGet({
+        access_token: item.accessToken,
+        account_ids: plaidAccounts.map((a: PlaidAccount) => a.plaidAccountId),
+      });
+      
+      const { inflow_streams, outflow_streams, updated_datetime } = response.data;
+      
+      let inflowCount = 0;
+      let outflowCount = 0;
+      
+      // Process inflow streams (recurring income)
+      for (const stream of inflow_streams) {
+        const plaidAccount = accountIdMap.get(stream.account_id);
+        if (!plaidAccount) continue;
+        
+        // Get average and last amounts (Plaid returns negative amounts for inflows)
+        const avgAmountCents = Math.abs(Math.round((stream.average_amount?.amount ?? 0) * 100));
+        const lastAmountCents = Math.abs(Math.round((stream.last_amount?.amount ?? 0) * 100));
+        
+        // Map frequency
+        const frequency = PLAID_FREQUENCY_MAP[stream.frequency || "UNKNOWN"] || "UNKNOWN";
+        const status = PLAID_STATUS_MAP[stream.status || "MATURE"] || "MATURE";
+        
+        // Extract category info
+        const personalFinanceCategory = stream.personal_finance_category ? {
+          primary: stream.personal_finance_category.primary || undefined,
+          detailed: stream.personal_finance_category.detailed || undefined,
+        } : undefined;
+        
+        const averageDaysBetween =
+          (stream as { average_days_apart?: number | null }).average_days_apart ?? undefined;
+
+        await ctx.runMutation(internal.plaid.upsertPlaidRecurringStream, {
+          userId: identity.subject,
+          plaidAccountId: plaidAccount._id,
+          accountId: plaidAccount.accountId,
+          streamId: stream.stream_id,
+          streamType: "inflow",
+          merchantName: stream.merchant_name || undefined,
+          description: stream.description || undefined,
+          categoryId: stream.category_id || undefined,
+          category: stream.category || undefined,
+          personalFinanceCategory,
+          frequency,
+          averageDaysBetween,
+          averageAmountCents: avgAmountCents,
+          lastAmountCents: lastAmountCents,
+          isAmountVariable: stream.is_user_modified ?? undefined,
+          firstDate: stream.first_date,
+          lastDate: stream.last_date,
+          predictedNextDate: stream.predicted_next_date || undefined,
+          isActive: stream.is_active ?? true,
+          status,
+          transactionIds: stream.transaction_ids || undefined,
+          transactionCount: stream.transaction_ids?.length ?? undefined,
+        });
+        inflowCount++;
+      }
+      
+      // Process outflow streams (recurring expenses)
+      for (const stream of outflow_streams) {
+        const plaidAccount = accountIdMap.get(stream.account_id);
+        if (!plaidAccount) continue;
+        
+        // Get average and last amounts (Plaid returns positive amounts for outflows)
+        const avgAmountCents = Math.abs(Math.round((stream.average_amount?.amount ?? 0) * 100));
+        const lastAmountCents = Math.abs(Math.round((stream.last_amount?.amount ?? 0) * 100));
+        
+        // Map frequency
+        const frequency = PLAID_FREQUENCY_MAP[stream.frequency || "UNKNOWN"] || "UNKNOWN";
+        const status = PLAID_STATUS_MAP[stream.status || "MATURE"] || "MATURE";
+        
+        // Extract category info
+        const personalFinanceCategory = stream.personal_finance_category ? {
+          primary: stream.personal_finance_category.primary || undefined,
+          detailed: stream.personal_finance_category.detailed || undefined,
+        } : undefined;
+        
+        const averageDaysBetween =
+          (stream as { average_days_apart?: number | null }).average_days_apart ?? undefined;
+
+        await ctx.runMutation(internal.plaid.upsertPlaidRecurringStream, {
+          userId: identity.subject,
+          plaidAccountId: plaidAccount._id,
+          accountId: plaidAccount.accountId,
+          streamId: stream.stream_id,
+          streamType: "outflow",
+          merchantName: stream.merchant_name || undefined,
+          description: stream.description || undefined,
+          categoryId: stream.category_id || undefined,
+          category: stream.category || undefined,
+          personalFinanceCategory,
+          frequency,
+          averageDaysBetween,
+          averageAmountCents: avgAmountCents,
+          lastAmountCents: lastAmountCents,
+          isAmountVariable: stream.is_user_modified ?? undefined,
+          firstDate: stream.first_date,
+          lastDate: stream.last_date,
+          predictedNextDate: stream.predicted_next_date || undefined,
+          isActive: stream.is_active ?? true,
+          status,
+          transactionIds: stream.transaction_ids || undefined,
+          transactionCount: stream.transaction_ids?.length ?? undefined,
+        });
+        outflowCount++;
+      }
+      
+      // Update sync state
+      await ctx.runMutation(internal.plaid.updatePlaidItemRecurringSyncState, {
+        id: plaidItemId,
+        lastRecurringSyncAt: Date.now(),
+      });
+      
+      return {
+        success: true,
+        inflowCount,
+        outflowCount,
+        totalCount: inflowCount + outflowCount,
+        lastUpdated: updated_datetime,
+      };
+    } catch (error: unknown) {
+      console.error("Error syncing recurring streams:", error);
+      
+      let message = "Unknown error";
+      if (error && typeof error === "object" && "response" in error) {
+        const axiosError = error as { response?: { data?: { error_code?: string; error_message?: string } } };
+        const errorCode = axiosError.response?.data?.error_code;
+        message = axiosError.response?.data?.error_message || message;
+        
+        if (errorCode === "PRODUCTS_NOT_SUPPORTED" || errorCode === "NO_RECURRING_TRANSACTIONS") {
+          return {
+            success: false,
+            error: "Recurring transactions not available for this institution or not enough data",
+          };
+        }
+        
+        if (errorCode === "ITEM_LOGIN_REQUIRED") {
+          await ctx.runMutation(internal.plaid.updatePlaidItemStatus, {
+            id: plaidItemId,
+            status: "needs_reauth",
+            errorCode,
+            errorMessage: message,
+          });
+          throw new Error("Bank connection needs re-authentication. Please reconnect this account.");
+        }
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+      
+      throw new Error(`Failed to sync recurring streams: ${message}`);
     }
   },
 });

@@ -16,9 +16,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Doc } from "convex/_generated/dataModel";
 
 type EntryDoc = Doc<"entries">;
+type PlaidTransaction = Doc<"plaidTransactions">;
 type EditableEntry = EntryDoc & { type: "expense" | "income" };
 type EntriesPage = { rows: EntryDoc[]; nextCursor?: number };
 type SortBy = "newest" | "oldest" | "highest" | "lowest";
+type ViewMode = "cards" | "table" | "extended" | "plaid";
 
 function isEditableEntry(entry: EntryDoc): entry is EditableEntry {
   return entry.type === "expense" || entry.type === "income";
@@ -47,10 +49,10 @@ export default function ActivityPage() {
   // Selection mode - controlled from here, passed to ActivityTable
   const [selectMode, setSelectMode] = useState(false);
   
-  // View mode - "cards" (default), "table" (compact), or "extended" (full columns)
-  const [viewMode, setViewMode] = useState<"cards" | "table" | "extended">(() => {
+  // View mode - "cards" (default), "table" (compact), "extended" (full columns), or "plaid" (raw Plaid transactions)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("tallyup.activityViewMode") as "cards" | "table" | "extended") || "cards";
+      return (localStorage.getItem("tallyup.activityViewMode") as ViewMode) || "cards";
     }
     return "cards";
   });
@@ -62,10 +64,11 @@ export default function ActivityPage() {
     } catch {}
   }, [viewMode]);
   
-  // Cycle through view modes: cards -> table -> extended -> cards
+  // Cycle through view modes: cards -> table -> extended -> plaid -> cards
   const cycleViewMode = () => {
     if (viewMode === "cards") setViewMode("table");
     else if (viewMode === "table") setViewMode("extended");
+    else if (viewMode === "extended") setViewMode("plaid");
     else setViewMode("cards");
   };
 
@@ -87,6 +90,22 @@ export default function ActivityPage() {
   // Get review count for badge
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as EntryDoc[] | undefined;
   const reviewCount = inbox?.length ?? 0;
+
+  // Convert timestamps to YYYY-MM-DD for Plaid query
+  const startDateStr = useMemo(() => {
+    const d = new Date(startDate);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [startDate]);
+  const endDateStr = useMemo(() => {
+    const d = new Date(endDate);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [endDate]);
+
+  // Get raw Plaid transactions when in plaid view mode
+  const plaidTransactions = useQuery(
+    api.plaid.listAllPlaidTransactions,
+    viewMode === "plaid" ? { limit: 100, startDate: startDateStr, endDate: endDateStr } : "skip"
+  ) as PlaidTransaction[] | undefined;
 
   // Get user's accounts for filtering
   const accounts = useQuery(api.accounts.listAccounts, {}) as Doc<"accounts">[] | undefined;
@@ -827,7 +846,7 @@ export default function ActivityPage() {
             )}
           </div>
 
-          {/* View toggle - cards vs table vs extended */}
+          {/* View toggle - cards vs table vs extended vs plaid */}
           <button
             onClick={cycleViewMode}
             style={{
@@ -839,18 +858,25 @@ export default function ActivityPage() {
               fontSize: "var(--text-meta)",
               fontWeight: 500,
               cursor: "pointer",
-              backgroundColor: "transparent",
-              color: "var(--text)",
+              backgroundColor: viewMode === "plaid" ? "var(--accent-subtle)" : "transparent",
+              color: viewMode === "plaid" ? "var(--primary)" : "var(--text)",
               border: "1px solid var(--border)",
             }}
-            title={viewMode === "cards" ? "Switch to table view" : viewMode === "table" ? "Switch to extended view" : "Switch to card view"}
+            title={
+              viewMode === "cards" ? "Switch to table view" : 
+              viewMode === "table" ? "Switch to extended view" : 
+              viewMode === "extended" ? "Switch to Plaid raw view" :
+              "Switch to card view"
+            }
           >
             {viewMode === "cards" ? (
               <Lucide.LayoutList className="h-4 w-4" />
             ) : viewMode === "table" ? (
               <Lucide.Table className="h-4 w-4" />
-            ) : (
+            ) : viewMode === "extended" ? (
               <Lucide.LayoutGrid className="h-4 w-4" />
+            ) : (
+              <Lucide.Database className="h-4 w-4" />
             )}
           </button>
 
@@ -1044,7 +1070,189 @@ export default function ActivityPage() {
 
         {/* Results - can expand to full width (1400px) */}
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", flex: 1, minHeight: 0, overflow: "hidden", padding: "0 var(--space-4) var(--space-4) var(--space-4)" }}>
-        {pages.length === 0 && !pageResult ? (
+        
+        {/* Plaid Raw Transactions View */}
+        {viewMode === "plaid" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", overflow: "auto" }}>
+            {/* Header explaining this view */}
+            <div
+              style={{
+                backgroundColor: "var(--accent-subtle)",
+                borderRadius: "var(--card-radius)",
+                border: "1px solid var(--primary)",
+                padding: "var(--space-4)",
+                marginBottom: "var(--space-2)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
+                <Lucide.Database className="h-5 w-5" style={{ color: "var(--primary)" }} />
+                <h3 style={{ fontSize: "var(--text-base)", fontWeight: 600, color: "var(--text)" }}>Raw Plaid Transactions</h3>
+              </div>
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", margin: 0 }}>
+                This view shows raw transaction data from Plaid before it&apos;s imported into TallyUp. 
+                Use this to debug sync issues or see exactly what your bank sends.
+              </p>
+            </div>
+            
+            {/* Status legend */}
+            <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap", marginBottom: "var(--space-2)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--warning)" }} />
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Pending</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--success)" }} />
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Imported</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--text-tertiary)" }} />
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Skipped</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--destructive)" }} />
+                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Duplicate</span>
+              </div>
+            </div>
+            
+            {!plaidTransactions ? (
+              <div
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderRadius: "var(--card-radius)",
+                  border: "1px solid var(--border)",
+                  padding: "var(--space-8)",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)" }}>
+                  <Lucide.Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-tertiary)" }} />
+                  <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Loading Plaid transactions…</span>
+                </div>
+              </div>
+            ) : plaidTransactions.length === 0 ? (
+              <EmptyState
+                title="No Plaid transactions"
+                subtitle="No raw transactions from linked accounts in this date range. Link an account to start syncing."
+              />
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: "var(--space-1)" }}>
+                  Showing {plaidTransactions.length} raw transactions
+                </div>
+                {plaidTransactions.map((tx) => {
+                  const statusColor = 
+                    tx.importStatus === "pending" ? "var(--warning)" :
+                    tx.importStatus === "imported" ? "var(--success)" :
+                    tx.importStatus === "duplicate" ? "var(--destructive)" :
+                    "var(--text-tertiary)";
+                  
+                  return (
+                    <div
+                      key={tx._id}
+                      style={{
+                        backgroundColor: "var(--surface)",
+                        borderRadius: "var(--card-radius)",
+                        border: "1px solid var(--border)",
+                        padding: "var(--space-3)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "var(--space-2)",
+                      }}
+                    >
+                      {/* Top row: name, amount, status */}
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--space-2)" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: "var(--text-base)", color: "var(--text)", marginBottom: 2 }}>
+                            {tx.merchantName || tx.name || "Unknown"}
+                          </div>
+                          {tx.merchantName && tx.name && tx.merchantName !== tx.name && (
+                            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                              Original: {tx.name}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ 
+                            fontWeight: 600, 
+                            fontSize: "var(--text-base)", 
+                            color: tx.amount < 0 ? "var(--income)" : "var(--expense)"
+                          }}>
+                            {tx.amount < 0 ? "+" : "-"}${Math.abs(tx.amount).toFixed(2)}
+                          </div>
+                          <div style={{ 
+                            display: "inline-flex", 
+                            alignItems: "center", 
+                            gap: 4, 
+                            fontSize: "var(--text-micro)",
+                            color: statusColor,
+                            fontWeight: 500,
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: statusColor }} />
+                            {tx.importStatus}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Middle row: date, account */}
+                      <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                        <span>{tx.date}</span>
+                        {tx.isoCurrencyCode && <span>• {tx.isoCurrencyCode}</span>}
+                      </div>
+                      
+                      {/* Categories from Plaid */}
+                      {(tx.category || tx.categoryDetailed) && (
+                        <div style={{ display: "flex", gap: "var(--space-1)", flexWrap: "wrap" }}>
+                          {tx.category && (
+                            <span
+                              style={{
+                                fontSize: "var(--text-micro)",
+                                padding: "2px 8px",
+                                borderRadius: "var(--radius-full)",
+                                backgroundColor: "var(--surface-2)",
+                                color: "var(--text-secondary)",
+                              }}
+                            >
+                              {tx.category}
+                            </span>
+                          )}
+                          {tx.categoryDetailed && tx.categoryDetailed !== tx.category && (
+                            <span
+                              style={{
+                                fontSize: "var(--text-micro)",
+                                padding: "2px 8px",
+                                borderRadius: "var(--radius-full)",
+                                backgroundColor: "var(--surface-2)",
+                                color: "var(--text-tertiary)",
+                              }}
+                            >
+                              {tx.categoryDetailed}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Plaid IDs and technical details - collapsible */}
+                      <details style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
+                        <summary style={{ cursor: "pointer", userSelect: "none" }}>Technical Details</summary>
+                        <div style={{ marginTop: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-1)", paddingLeft: "var(--space-2)" }}>
+                          <div><strong>Plaid TX ID:</strong> {tx.plaidTransactionId}</div>
+                          <div><strong>Payment Channel:</strong> {tx.paymentChannel || "N/A"}</div>
+                          <div><strong>Pending:</strong> {tx.pending ? "Yes" : "No"}</div>
+                          {tx.categoryConfidence && (
+                            <div><strong>Category Confidence:</strong> {tx.categoryConfidence}</div>
+                          )}
+                          {tx.entryId && (
+                            <div><strong>Linked Entry:</strong> {tx.entryId}</div>
+                          )}
+                        </div>
+                      </details>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : pages.length === 0 && !pageResult ? (
           <div
             style={{
               backgroundColor: "var(--surface)",

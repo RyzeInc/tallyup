@@ -5,6 +5,7 @@ import {
   computeAnomalies,
   computeMonthlyCashflow,
   computeSpendByCategory,
+  computeTransactionDrilldown,
   computeUpcomingBills,
   type MonthInput,
 } from "./finance_aggregates";
@@ -14,8 +15,10 @@ import {
   GLOBAL_USAGE_USER_ID,
 } from "../lib/llm/budgetGuard";
 import type { CoachContextPacket } from "../lib/llm/types";
+import { cosineSimilarity, embedText } from "../lib/llm/embedding";
 
 const CONTEXT_TTL_MS = 2 * 60 * 1000;
+const KNOWLEDGE_TTL_MS = 2 * 60 * 1000;
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -63,6 +66,19 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .first();
 
+  const foundation = await ctx.db
+    .query("coachFoundation")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .first();
+
+  const drilldownOptIn = (coachState?.preferences as { transactionDrilldownOptIn?: { enabled?: boolean; windowDays?: number; expiresAt?: number } } | undefined)
+    ?.transactionDrilldownOptIn;
+  const optInEnabled = !!drilldownOptIn?.enabled && (drilldownOptIn.expiresAt ?? 0) > Date.now();
+  const windowDays = drilldownOptIn?.windowDays ?? 30;
+  const drilldownItems = optInEnabled
+    ? await computeTransactionDrilldown(ctx, userId, windowDays)
+    : [];
+
   const events = await ctx.db
     .query("coachEvents")
     .withIndex("by_user_createdAt", (q) => q.eq("userId", userId))
@@ -107,6 +123,11 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     recentActions,
     recentOpenQuestions,
     recentConversation: conversation.slice(-8),
+    foundationSnapshot: (foundation?.snapshot as CoachContextPacket["foundationSnapshot"]) ?? null,
+    transactionDrilldownOptIn: optInEnabled
+      ? { enabled: true, windowDays, expiresAt: drilldownOptIn?.expiresAt ?? 0 }
+      : { enabled: false, windowDays, expiresAt: drilldownOptIn?.expiresAt ?? 0 },
+    transactionDrilldown: optInEnabled ? { windowDays, items: drilldownItems } : null,
   };
 }
 
@@ -120,8 +141,71 @@ export function summarizePacket(packet: CoachContextPacket) {
     currentFocus: packet.coachState?.currentFocus ?? null,
     recentSummaries: packet.recentSummaries,
     updatedAt: packet.generatedAt,
+    foundation: packet.foundationSnapshot
+      ? { updatedAt: packet.generatedAt, hasFoundation: true }
+      : { updatedAt: packet.generatedAt, hasFoundation: false },
   };
 }
+
+export const getOrBuildKnowledgeSnippets = internalMutation({
+  args: {
+    userId: v.string(),
+    message: v.string(),
+    topK: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const messageHash = hashString(args.message.trim().toLowerCase());
+    const cached = await ctx.db
+      .query("coachKnowledgeCache")
+      .withIndex("by_user_message", (q) => q.eq("userId", args.userId).eq("messageHash", messageHash))
+      .first();
+
+    if (cached && cached.expiresAt > now) {
+      return cached.snippets;
+    }
+
+    const chunks = await ctx.db
+      .query("coachKnowledge")
+      .collect();
+
+    if (!chunks.length) {
+      return [];
+    }
+
+    const queryEmbedding = embedText(args.message);
+    const scored = chunks.map((chunk) => ({
+      docId: chunk.docId,
+      chunkIndex: chunk.chunkIndex,
+      content: chunk.content,
+      score: cosineSimilarity(queryEmbedding, chunk.embedding),
+    }));
+
+    const topK = Math.min(Math.max(args.topK ?? 4, 1), 6);
+    const snippets = scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+      .filter((item) => item.score > 0);
+
+    if (cached) {
+      await ctx.db.patch(cached._id, {
+        computedAt: now,
+        expiresAt: now + KNOWLEDGE_TTL_MS,
+        snippets,
+      });
+    } else {
+      await ctx.db.insert("coachKnowledgeCache", {
+        userId: args.userId,
+        messageHash,
+        computedAt: now,
+        expiresAt: now + KNOWLEDGE_TTL_MS,
+        snippets,
+      });
+    }
+
+    return snippets;
+  },
+});
 
 export const getOrBuildContextPacket = internalMutation({
   args: {
@@ -145,7 +229,18 @@ export const getOrBuildContextPacket = internalMutation({
         .take(1);
       const latestEventAt = latestEvent[0]?.createdAt ?? 0;
       if (latestEventAt <= cached.computedAt) {
-        return { hash: cached.hash, packet: cached.packet as CoachContextPacket };
+        const coachState = await ctx.db
+          .query("coachState")
+          .withIndex("by_user", (q) => q.eq("userId", args.userId))
+          .first();
+        const optIn = (coachState?.preferences as { transactionDrilldownOptIn?: { enabled?: boolean; expiresAt?: number } } | undefined)
+          ?.transactionDrilldownOptIn;
+        const optInEnabled = !!optIn?.enabled && (optIn.expiresAt ?? 0) > now;
+        const cachedPacket = cached.packet as CoachContextPacket;
+        const cachedHasDrilldown = !!cachedPacket.transactionDrilldown && cachedPacket.transactionDrilldown.items.length > 0;
+        if (!optInEnabled || cachedHasDrilldown) {
+          return { hash: cached.hash, packet: cached.packet as CoachContextPacket };
+        }
       }
     }
 

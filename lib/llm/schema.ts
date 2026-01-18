@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { CoachProfileUpdateSchema } from "../coach/profile";
+import { CoachFoundationUpdateSchema } from "../coach/foundation";
 
 export const CoachOutputSchema = z
   .object({
@@ -7,6 +9,14 @@ export const CoachOutputSchema = z
     actions: z.array(z.string()),
     openQuestions: z.array(z.string()),
     metricsUsed: z.array(z.string()).optional().default([]),
+    profileUpdates: CoachProfileUpdateSchema.optional(),
+    foundationUpdates: CoachFoundationUpdateSchema.optional(),
+    transactionDrilldownRequest: z
+      .object({
+        reason: z.string(),
+        windowDays: z.number().int().min(7).max(90),
+      })
+      .optional(),
   })
   .strict();
 

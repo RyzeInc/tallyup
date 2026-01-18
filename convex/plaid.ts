@@ -835,6 +835,149 @@ export const updatePlaidItemInvestmentsSyncState = internalMutation({
 });
 
 // ============================================
+// SYNC PLAID HOLDINGS TO INVESTMENTS
+// ============================================
+
+// Map Plaid security type to TallyUp asset type
+const PLAID_TO_TALLYUP_ASSET_TYPE: Record<string, "stock" | "etf" | "mutual_fund" | "bond" | "crypto" | "cash" | "real_estate" | "other"> = {
+  "cash": "cash",
+  "cryptocurrency": "crypto",
+  "derivative": "other",
+  "equity": "stock",
+  "etf": "etf",
+  "fixed income": "bond",
+  "loan": "other",
+  "mutual fund": "mutual_fund",
+  "other": "other",
+};
+
+export const syncPlaidHoldingsToInvestments = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+    
+    // Get all Plaid holdings for this user
+    const holdings = await ctx.db
+      .query("plaidHoldings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    
+    const now = Date.now();
+    let created = 0;
+    let updated = 0;
+    
+    for (const holding of holdings) {
+      // Get the security info
+      const security = await ctx.db.get(holding.plaidSecurityId);
+      if (!security) continue;
+      
+      // Get the Plaid account to find the TallyUp account
+      const plaidAccount = await ctx.db.get(holding.plaidAccountId);
+      if (!plaidAccount) continue;
+      
+      // Check if investment already exists for this holding
+      const existingInvestments = await ctx.db
+        .query("investments")
+        .withIndex("by_plaidHolding", (q) => q.eq("plaidHoldingId", holding._id))
+        .collect();
+      
+      const assetType = PLAID_TO_TALLYUP_ASSET_TYPE[security.securityType.toLowerCase()] || "other";
+      const currentPriceCents = security.closePrice ? Math.round(security.closePrice * 100) : undefined;
+      const costBasisCents = holding.costBasis ? Math.round(holding.costBasis * 100) : Math.round(holding.institutionValue ?? 0 * 100);
+      const currentValueCents = holding.institutionValue ? Math.round(holding.institutionValue * 100) : undefined;
+      const unrealizedGainCents = currentValueCents && costBasisCents 
+        ? currentValueCents - costBasisCents 
+        : undefined;
+      
+      if (existingInvestments.length > 0) {
+        // Update existing investment
+        const existing = existingInvestments[0];
+        await ctx.db.patch(existing._id, {
+          quantity: holding.quantity,
+          costBasisCents,
+          currentPriceCents,
+          currentValueCents,
+          unrealizedGainCents,
+          vestedQuantity: holding.vestedQuantity ?? undefined,
+          unvestedQuantity: holding.unvestedQuantity ?? undefined,
+          priceAsOf: security.closePriceAsOf ? new Date(security.closePriceAsOf).getTime() : undefined,
+          valuationAsOf: now,
+          updatedAt: now,
+        });
+        updated++;
+      } else {
+        // Create new investment
+        await ctx.db.insert("investments", {
+          userId,
+          accountId: plaidAccount.accountId,
+          plaidSecurityId: holding.plaidSecurityId,
+          plaidHoldingId: holding._id,
+          symbol: security.tickerSymbol,
+          name: security.name,
+          assetType,
+          isin: security.isin,
+          cusip: security.cusip,
+          sector: security.sector,
+          industry: security.industry,
+          quantity: holding.quantity,
+          costBasisCents,
+          currentPriceCents,
+          currentValueCents,
+          unrealizedGainCents,
+          vestedQuantity: holding.vestedQuantity ?? undefined,
+          unvestedQuantity: holding.unvestedQuantity ?? undefined,
+          priceAsOf: security.closePriceAsOf ? new Date(security.closePriceAsOf).getTime() : undefined,
+          valuationAsOf: now,
+          isoCurrencyCode: security.isoCurrencyCode,
+          createdAt: now,
+          updatedAt: now,
+        });
+        created++;
+      }
+    }
+    
+    return { created, updated, total: holdings.length };
+  },
+});
+
+// Query to list Plaid holdings that haven't been linked to investments yet
+export const listUnlinkedPlaidHoldings = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    const userId = identity.subject;
+    
+    const holdings = await ctx.db
+      .query("plaidHoldings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    
+    const unlinked = [];
+    for (const holding of holdings) {
+      // Check if already linked to an investment
+      const linked = await ctx.db
+        .query("investments")
+        .withIndex("by_plaidHolding", (q) => q.eq("plaidHoldingId", holding._id))
+        .first();
+      
+      if (!linked) {
+        // Get security info
+        const security = await ctx.db.get(holding.plaidSecurityId);
+        unlinked.push({
+          ...holding,
+          security,
+        });
+      }
+    }
+    
+    return unlinked;
+  },
+});
+
+// ============================================
 // LIABILITIES INTERNAL MUTATIONS
 // ============================================
 
@@ -1063,6 +1206,79 @@ export const listPendingTransactions = query({
   },
 });
 
+// List ALL Plaid transactions (for debugging/inspection view)
+export const listAllPlaidTransactions = query({
+  args: { 
+    limit: v.optional(v.number()),
+    importStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("imported"),
+      v.literal("skipped"),
+      v.literal("duplicate"),
+      v.literal("all")
+    )),
+    startDate: v.optional(v.string()), // YYYY-MM-DD
+    endDate: v.optional(v.string()),   // YYYY-MM-DD
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const limit = Math.min(args.limit ?? 200, 500);
+    
+    // Get all Plaid transactions for user
+    let results = await ctx.db
+      .query("plaidTransactions")
+      .withIndex("by_user_importStatus", (q) => {
+        if (args.importStatus && args.importStatus !== "all") {
+          return q.eq("userId", identity.subject).eq("importStatus", args.importStatus);
+        }
+        return q.eq("userId", identity.subject);
+      })
+      .collect();
+    
+    // If "all" status, we need to get all statuses (the index only returns one)
+    if (args.importStatus === "all" || !args.importStatus) {
+      // Re-query without import status filter using by_user index
+      const allStatuses = await ctx.db
+        .query("plaidTransactions")
+        .filter(q => q.eq(q.field("userId"), identity.subject))
+        .collect();
+      results = allStatuses;
+    }
+    
+    // Filter by date if provided
+    if (args.startDate) {
+      results = results.filter(t => t.date >= args.startDate!);
+    }
+    if (args.endDate) {
+      results = results.filter(t => t.date <= args.endDate!);
+    }
+    
+    // Sort by date descending (most recent first)
+    results.sort((a, b) => b.date.localeCompare(a.date));
+    
+    // Apply limit
+    results = results.slice(0, limit);
+    
+    // Get account info for enrichment
+    const accountIds = [...new Set(results.map(t => t.plaidAccountId))];
+    const accounts = await Promise.all(
+      accountIds.map(id => ctx.db.get(id))
+    );
+    const accountMap = new Map(
+      accounts.filter(Boolean).map(a => [a!._id, a!])
+    );
+    
+    // Return enriched transactions
+    return results.map(t => ({
+      ...t,
+      accountName: accountMap.get(t.plaidAccountId)?.name || "Unknown",
+      accountMask: accountMap.get(t.plaidAccountId)?.mask,
+    }));
+  },
+});
+
 export const getPlaidSyncStatus = query({
   args: {},
   handler: async (ctx) => {
@@ -1105,6 +1321,143 @@ export const getPlaidSyncStatus = query({
     );
     
     return status;
+  },
+});
+
+// List all Plaid liabilities for the current user
+export const listPlaidLiabilities = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    return await ctx.db
+      .query("plaidLiabilities")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+  },
+});
+
+// Get Plaid-suggested goals based on connected accounts
+export const getPlaidSuggestedGoals = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    const suggestions: Array<{
+      type: "paydown" | "savings" | "sinkingFund";
+      name: string;
+      icon: string;
+      suggestedAmountCents: number;
+      source: string;
+      description: string;
+    }> = [];
+    
+    // Get liabilities for debt paydown suggestions
+    const liabilities = await ctx.db
+      .query("plaidLiabilities")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+    
+    // Get linked accounts for context
+    const plaidAccounts = await ctx.db
+      .query("plaidAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+    
+    for (const liability of liabilities) {
+      const account = plaidAccounts.find(a => a._id === liability.plaidAccountId);
+      const accountName = account?.name || account?.officialName || "Account";
+      
+      if (liability.liabilityType === "credit") {
+        // Credit card payoff goal
+        const balance = account?.balanceCurrent;
+        if (balance && balance > 0) {
+          suggestions.push({
+            type: "paydown",
+            name: `Pay off ${accountName}`,
+            icon: "💳",
+            suggestedAmountCents: Math.round(balance * 100),
+            source: "plaid_liability",
+            description: `Current balance: ${balance.toLocaleString("en-US", { style: "currency", currency: "USD" })}`,
+          });
+        }
+      } else if (liability.liabilityType === "student") {
+        // Student loan payoff goal
+        const balance = account?.balanceCurrent;
+        if (balance && balance > 0) {
+          suggestions.push({
+            type: "paydown",
+            name: `Pay off ${liability.loanName || accountName}`,
+            icon: "🎓",
+            suggestedAmountCents: Math.round(balance * 100),
+            source: "plaid_liability",
+            description: `Remaining: ${balance.toLocaleString("en-US", { style: "currency", currency: "USD" })}`,
+          });
+        }
+      } else if (liability.liabilityType === "mortgage") {
+        // Mortgage payoff (usually long-term, but can suggest)
+        const balance = account?.balanceCurrent;
+        if (balance && balance > 0 && liability.originationPrincipalAmount) {
+          const progress = ((liability.originationPrincipalAmount - balance) / liability.originationPrincipalAmount) * 100;
+          suggestions.push({
+            type: "paydown",
+            name: `Mortgage (${accountName})`,
+            icon: "🏠",
+            suggestedAmountCents: Math.round(balance * 100),
+            source: "plaid_liability",
+            description: `${progress.toFixed(0)}% paid off`,
+          });
+        }
+      }
+    }
+    
+    // Check for emergency fund suggestion based on checking/savings balances
+    const depositoryAccounts = plaidAccounts.filter(
+      a => a.type === "depository" && (a.subtype === "checking" || a.subtype === "savings")
+    );
+    
+    const totalSavings = depositoryAccounts
+      .filter(a => a.subtype === "savings")
+      .reduce((sum, a) => sum + (a.balanceCurrent || 0), 0);
+    
+    // Get monthly expenses estimate from recurring streams
+    const recurringStreams = await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .filter(q => q.eq(q.field("streamType"), "outflow"))
+      .filter(q => q.eq(q.field("isActive"), true))
+      .collect();
+    
+    // Calculate monthly expense estimate from recurring
+    let monthlyExpenses = 0;
+    for (const stream of recurringStreams) {
+      const amount = Math.abs(stream.averageAmountCents / 100);
+      switch (stream.frequency) {
+        case "WEEKLY": monthlyExpenses += amount * 4.33; break;
+        case "BIWEEKLY": monthlyExpenses += amount * 2.17; break;
+        case "SEMI_MONTHLY": monthlyExpenses += amount * 2; break;
+        case "MONTHLY": monthlyExpenses += amount; break;
+        case "ANNUALLY": monthlyExpenses += amount / 12; break;
+        default: monthlyExpenses += amount; // Assume monthly for unknown
+      }
+    }
+    
+    // Suggest 3-6 months emergency fund if savings < 3x monthly expenses
+    if (monthlyExpenses > 0 && totalSavings < monthlyExpenses * 3) {
+      const targetEmergency = monthlyExpenses * 6; // 6 month emergency fund
+      suggestions.push({
+        type: "savings",
+        name: "Emergency Fund",
+        icon: "🆘",
+        suggestedAmountCents: Math.round((targetEmergency - totalSavings) * 100),
+        source: "plaid_analysis",
+        description: `Target: 6 months of expenses (${targetEmergency.toLocaleString("en-US", { style: "currency", currency: "USD" })})`,
+      });
+    }
+    
+    return suggestions;
   },
 });
 
@@ -1501,5 +1854,373 @@ export const bulkImportPlaidTransactions = mutation({
     }
     
     return { imported, skipped, errors };
+  },
+});
+
+// ============================================
+// RECURRING STREAMS - Internal mutations
+// ============================================
+
+export const upsertPlaidRecurringStream = internalMutation({
+  args: {
+    userId: v.string(),
+    plaidAccountId: v.id("plaidAccounts"),
+    accountId: v.id("accounts"),
+    streamId: v.string(),
+    streamType: v.union(v.literal("inflow"), v.literal("outflow")),
+    merchantName: v.optional(v.string()),
+    description: v.optional(v.string()),
+    categoryId: v.optional(v.string()),
+    category: v.optional(v.array(v.string())),
+    personalFinanceCategory: v.optional(v.object({
+      primary: v.optional(v.string()),
+      detailed: v.optional(v.string()),
+    })),
+    frequency: v.union(
+      v.literal("WEEKLY"),
+      v.literal("BIWEEKLY"),
+      v.literal("SEMI_MONTHLY"),
+      v.literal("MONTHLY"),
+      v.literal("ANNUALLY"),
+      v.literal("UNKNOWN")
+    ),
+    averageDaysBetween: v.optional(v.number()),
+    averageAmountCents: v.number(),
+    lastAmountCents: v.number(),
+    isAmountVariable: v.optional(v.boolean()),
+    firstDate: v.string(),
+    lastDate: v.string(),
+    predictedNextDate: v.optional(v.string()),
+    isActive: v.boolean(),
+    status: v.union(
+      v.literal("MATURE"),
+      v.literal("EARLY_DETECTION"),
+      v.literal("TOMBSTONED")
+    ),
+    transactionIds: v.optional(v.array(v.string())),
+    transactionCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    
+    // Check if stream already exists
+    const existing = await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_streamId", (q) => q.eq("streamId", args.streamId))
+      .first();
+    
+    if (existing) {
+      // Update existing stream
+      await ctx.db.patch(existing._id, {
+        streamType: args.streamType,
+        merchantName: args.merchantName,
+        description: args.description,
+        categoryId: args.categoryId,
+        category: args.category,
+        personalFinanceCategory: args.personalFinanceCategory,
+        frequency: args.frequency,
+        averageDaysBetween: args.averageDaysBetween,
+        averageAmountCents: args.averageAmountCents,
+        lastAmountCents: args.lastAmountCents,
+        isAmountVariable: args.isAmountVariable,
+        firstDate: args.firstDate,
+        lastDate: args.lastDate,
+        predictedNextDate: args.predictedNextDate,
+        isActive: args.isActive,
+        status: args.status,
+        transactionIds: args.transactionIds,
+        transactionCount: args.transactionCount,
+        lastSyncedAt: now,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+    
+    // Create new stream
+    return await ctx.db.insert("plaidRecurringStreams", {
+      userId: args.userId,
+      plaidAccountId: args.plaidAccountId,
+      accountId: args.accountId,
+      streamId: args.streamId,
+      streamType: args.streamType,
+      merchantName: args.merchantName,
+      description: args.description,
+      categoryId: args.categoryId,
+      category: args.category,
+      personalFinanceCategory: args.personalFinanceCategory,
+      frequency: args.frequency,
+      averageDaysBetween: args.averageDaysBetween,
+      averageAmountCents: args.averageAmountCents,
+      lastAmountCents: args.lastAmountCents,
+      isAmountVariable: args.isAmountVariable,
+      firstDate: args.firstDate,
+      lastDate: args.lastDate,
+      predictedNextDate: args.predictedNextDate,
+      isActive: args.isActive,
+      status: args.status,
+      transactionIds: args.transactionIds,
+      transactionCount: args.transactionCount,
+      lastSyncedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const updatePlaidItemRecurringSyncState = internalMutation({
+  args: {
+    id: v.id("plaidItems"),
+    lastRecurringSyncAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      lastRecurringSyncAt: args.lastRecurringSyncAt,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const linkRecurringStreamToRule = internalMutation({
+  args: {
+    streamId: v.id("plaidRecurringStreams"),
+    recurringRuleId: v.id("recurringRules"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.streamId, {
+      recurringRuleId: args.recurringRuleId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const getPlaidRecurringStreamsByUser = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    return await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+  },
+});
+
+export const getUnlinkedPlaidRecurringStreams = internalQuery({
+  args: { userId: v.string() },
+  handler: async (ctx, { userId }) => {
+    const streams = await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    
+    // Return streams that don't have a recurringRuleId
+    return streams.filter(s => !s.recurringRuleId && s.isActive);
+  },
+});
+
+// Get suggested budget amounts based on Plaid recurring data
+export const getPlaidBudgetSuggestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    // Get all active outflow recurring streams
+    const streams = await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+    
+    const activeOutflows = streams.filter(
+      s => s.streamType === "outflow" && s.isActive
+    );
+    
+    // Group by category and calculate monthly amounts
+    const categoryMap = new Map<string, { totalMonthlyCents: number; count: number; examples: string[] }>();
+    
+    for (const stream of activeOutflows) {
+      // Use Plaid's category or personal finance category
+      const category = stream.personalFinanceCategory?.primary || 
+                       stream.category?.[0] || 
+                       "Other";
+      
+      // Convert to monthly amount based on frequency
+      let monthlyCents = Math.abs(stream.averageAmountCents);
+      switch (stream.frequency) {
+        case "WEEKLY": monthlyCents *= 4.33; break;
+        case "BIWEEKLY": monthlyCents *= 2.17; break;
+        case "SEMI_MONTHLY": monthlyCents *= 2; break;
+        case "ANNUALLY": monthlyCents /= 12; break;
+        // MONTHLY stays as-is
+      }
+      
+      const existing = categoryMap.get(category) || { totalMonthlyCents: 0, count: 0, examples: [] };
+      existing.totalMonthlyCents += monthlyCents;
+      existing.count += 1;
+      if (existing.examples.length < 3) {
+        existing.examples.push(stream.merchantName || stream.description || "Unknown");
+      }
+      categoryMap.set(category, existing);
+    }
+    
+    // Map Plaid categories to TallyUp budget categories
+    const plaidToBudgetMap: Record<string, string> = {
+      "RENT_AND_UTILITIES": "utilities",
+      "UTILITIES": "utilities",
+      "TRANSPORTATION": "transportation",
+      "TRAVEL": "transportation",
+      "FOOD_AND_DRINK": "food",
+      "GROCERIES": "food",
+      "RESTAURANTS": "food",
+      "ENTERTAINMENT": "entertainment",
+      "RECREATION": "entertainment",
+      "PERSONAL_CARE": "personal",
+      "GENERAL_MERCHANDISE": "personal",
+      "HEALTHCARE": "healthcare",
+      "MEDICAL": "healthcare",
+      "INSURANCE": "insurance",
+      "LOAN_PAYMENTS": "debt",
+      "CREDIT_CARD": "debt",
+      "BANK_FEES": "debt",
+      "TRANSFER_OUT": "savings",
+      "INCOME": "income", // Filter out
+    };
+    
+    const suggestions: Array<{
+      budgetCategory: string;
+      suggestedMonthlyCents: number;
+      streamCount: number;
+      examples: string[];
+      plaidCategory: string;
+    }> = [];
+    
+    for (const [plaidCat, data] of categoryMap) {
+      const budgetCat = plaidToBudgetMap[plaidCat] || "personal";
+      if (budgetCat === "income") continue; // Skip income streams
+      
+      suggestions.push({
+        budgetCategory: budgetCat,
+        suggestedMonthlyCents: Math.round(data.totalMonthlyCents),
+        streamCount: data.count,
+        examples: data.examples,
+        plaidCategory: plaidCat,
+      });
+    }
+    
+    // Sort by amount (highest first)
+    return suggestions.sort((a, b) => b.suggestedMonthlyCents - a.suggestedMonthlyCents);
+  },
+});
+
+// Get suggested category rules based on Plaid transaction merchant data
+export const getPlaidMerchantRuleSuggestions = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    
+    // Get recent Plaid transactions
+    const transactions = await ctx.db
+      .query("plaidTransactions")
+      .withIndex("by_user_importStatus", (q) => 
+        q.eq("userId", identity.subject).eq("importStatus", "imported")
+      )
+      .collect();
+    
+    // Get existing category rules to avoid duplicates
+    const existingRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+    
+    const existingMerchants = new Set(
+      existingRules
+        .map(r => r.matchMerchantContains?.toLowerCase() || r.matchMerchantExact?.toLowerCase())
+        .filter(Boolean)
+    );
+    
+    // Group by merchant name and category
+    const merchantCategories = new Map<string, { 
+      category: string;
+      count: number; 
+      totalCents: number;
+      plaidCategory: string;
+    }>();
+    
+    for (const tx of transactions) {
+      const merchant = tx.merchantName || tx.name;
+      if (!merchant) continue;
+      
+      const normalizedMerchant = merchant.toLowerCase().trim();
+      
+      // Skip if we already have a rule for this merchant
+      if (existingMerchants.has(normalizedMerchant)) continue;
+      
+      const category = tx.category || "Other";
+      const key = `${normalizedMerchant}:${category}`;
+      
+      const existing = merchantCategories.get(key) || {
+        category,
+        count: 0,
+        totalCents: 0,
+        plaidCategory: tx.categoryDetailed || tx.category || "",
+      };
+      
+      existing.count += 1;
+      existing.totalCents += Math.abs(Math.round((tx.amount || 0) * 100));
+      merchantCategories.set(key, existing);
+    }
+    
+    // Map Plaid categories to TallyUp categories
+    const plaidToCategoryMap: Record<string, string> = {
+      "FOOD_AND_DRINK": "Food & Dining",
+      "GROCERIES": "Groceries",
+      "RESTAURANTS": "Restaurants",
+      "TRANSPORTATION": "Transportation",
+      "TRAVEL": "Travel",
+      "ENTERTAINMENT": "Entertainment",
+      "PERSONAL_CARE": "Personal Care",
+      "HEALTHCARE": "Health",
+      "UTILITIES": "Utilities",
+      "RENT_AND_UTILITIES": "Housing",
+      "GENERAL_MERCHANDISE": "Shopping",
+      "SHOPPING": "Shopping",
+    };
+    
+    // Build suggestions from merchants with 2+ transactions
+    const suggestions: Array<{
+      merchantName: string;
+      suggestedCategory: string;
+      plaidCategory: string;
+      transactionCount: number;
+      totalAmountCents: number;
+    }> = [];
+    
+    const seenMerchants = new Set<string>();
+    
+    for (const [key, data] of merchantCategories) {
+      const [merchant] = key.split(":");
+      
+      // Only suggest if 2+ transactions and not seen
+      if (data.count < 2) continue;
+      if (seenMerchants.has(merchant)) continue;
+      
+      seenMerchants.add(merchant);
+      
+      const suggestedCategory = plaidToCategoryMap[data.plaidCategory.toUpperCase()] || 
+                                data.category || 
+                                "Other";
+      
+      suggestions.push({
+        merchantName: merchant,
+        suggestedCategory,
+        plaidCategory: data.plaidCategory,
+        transactionCount: data.count,
+        totalAmountCents: data.totalCents,
+      });
+    }
+    
+    // Sort by transaction count (most frequent first)
+    return suggestions
+      .sort((a, b) => b.transactionCount - a.transactionCount)
+      .slice(0, 10); // Top 10 suggestions
   },
 });

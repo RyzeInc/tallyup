@@ -616,6 +616,7 @@ export function RecurringCalendar() {
   
   // Fetch active recurring rules
   const rules = useQuery(api.recurring.listRecurringRules, {}) as RecurringRule[] | undefined;
+  const plaidStreams = useQuery(api.recurring.listPlaidRecurringStreams, { onlyUnlinked: false });
 
   // detect mobile
   React.useEffect(() => {
@@ -629,14 +630,58 @@ export function RecurringCalendar() {
     return () => window.removeEventListener("resize", check);
   }, []);
   
+  // Convert Plaid streams to RecurringRule format for calendar display
+  const plaidAsRules = React.useMemo((): RecurringRule[] => {
+    if (!plaidStreams) return [];
+    
+    return plaidStreams
+      .filter(s => s.isActive && !s.recurringRuleId) // Only unlinked active streams
+      .map(stream => {
+        // Map Plaid frequency to cadenceType
+        const freqMap: Record<string, string> = {
+          WEEKLY: "weekly",
+          BIWEEKLY: "biweekly", 
+          SEMI_MONTHLY: "semiMonthly",
+          MONTHLY: "monthly",
+          ANNUALLY: "yearly",
+        };
+        
+        // Parse predicted next date if available
+        let cadenceAnchor: string | undefined;
+        if (stream.predictedNextDate) {
+          cadenceAnchor = stream.predictedNextDate;
+        } else if (stream.lastDate) {
+          cadenceAnchor = stream.lastDate;
+        }
+        
+        return {
+          _id: `plaid-${stream._id}`,
+          displayName: stream.merchantName || stream.description,
+          type: stream.streamType === "outflow" ? "expense" as const : "income" as const,
+          amountCents: Math.abs(stream.averageAmountCents),
+          cadenceType: freqMap[stream.frequency] || "monthly",
+          cadenceAnchor,
+          active: true,
+        };
+      });
+  }, [plaidStreams]);
+  
+  // Combine TallyUp rules with Plaid streams
+  const allRules = React.useMemo(() => {
+    const combined = [...(rules || [])];
+    // Add Plaid streams that aren't already linked
+    combined.push(...plaidAsRules);
+    return combined;
+  }, [rules, plaidAsRules]);
+  
   // Build calendar with events placed on appropriate days
   const calendarDays = React.useMemo(() => {
     const days = getMonthDays(year, month);
     
-    if (!rules) return days;
+    if (!allRules.length) return days;
     
     // Place each rule on its matching days
-    for (const rule of rules) {
+    for (const rule of allRules) {
       if (!rule.active) continue;
       if (rule.status === "cancelled" || rule.status === "archived") continue;
       
@@ -648,7 +693,7 @@ export function RecurringCalendar() {
     }
     
     return days;
-  }, [year, month, rules]);
+  }, [year, month, allRules]);
   
   // Calculate monthly totals from recurring rules
   const monthlyTotals = React.useMemo(() => {

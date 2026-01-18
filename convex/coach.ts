@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, query } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { buildContextPacket, hashContextPacket, summarizePacket } from "./coach_internal";
 import { getCoachProvider } from "../lib/llm";
@@ -7,6 +7,8 @@ import { buildCoachSystemPrompt } from "../lib/llm/prompt";
 import type { CoachOutput } from "../lib/llm/schema";
 import type { CoachContextPacket } from "../lib/llm/types";
 import { applyCoachResponseGuards } from "../lib/llm/responseGuard";
+import { CoachProfileUpdateSchema, type CoachProfileUpdate } from "../lib/coach/profile";
+import { CoachFoundationUpdateSchema, type CoachFoundationUpdate } from "../lib/coach/foundation";
 
 type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
 
@@ -50,6 +52,9 @@ type ChatResponse = {
   actions: string[];
   followUps: string[];
   contextHash: string;
+  profileUpdates?: CoachProfileUpdate;
+  foundationUpdates?: CoachFoundationUpdate;
+  transactionDrilldownRequest?: { reason: string; windowDays: number };
 };
 
 export const chat: ReturnType<typeof action> = action({
@@ -70,6 +75,15 @@ export const chat: ReturnType<typeof action> = action({
     const contextHash = contextPacketResult.hash;
     const packet = contextPacketResult.packet;
 
+    const knowledgeSnippets = await ctx.runMutation(
+      internal.coach_internal.getOrBuildKnowledgeSnippets,
+      { userId, message: args.message, topK: 4 }
+    );
+    const packetWithKnowledge: CoachContextPacket = {
+      ...packet,
+      knowledgeSnippets,
+    };
+
     const { provider, usesExternal } = getCoachProvider();
     const systemPrompt = buildCoachSystemPrompt();
 
@@ -89,14 +103,14 @@ export const chat: ReturnType<typeof action> = action({
     try {
       llmOutput = await provider.generate({
         message: args.message,
-        contextPacket: packet,
+        contextPacket: packetWithKnowledge,
         systemPrompt,
       });
     } catch {
       const fallback = getCoachProvider({ forceMock: true });
       llmOutput = await fallback.provider.generate({
         message: args.message,
-        contextPacket: packet,
+        contextPacket: packetWithKnowledge,
         systemPrompt,
       });
     }
@@ -106,7 +120,13 @@ export const chat: ReturnType<typeof action> = action({
     await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
       userId,
       userMessage: args.message,
-      llmOutput,
+      llmOutput: {
+        assistantMessage: llmOutput.assistantMessage,
+        summaryBullets: llmOutput.summaryBullets,
+        actions: llmOutput.actions,
+        openQuestions: llmOutput.openQuestions,
+        metricsUsed: llmOutput.metricsUsed,
+      },
       contextHash,
     });
 
@@ -115,6 +135,139 @@ export const chat: ReturnType<typeof action> = action({
       actions: llmOutput.actions,
       followUps: llmOutput.openQuestions,
       contextHash,
+      profileUpdates: llmOutput.profileUpdates,
+      foundationUpdates: llmOutput.foundationUpdates,
+      transactionDrilldownRequest: llmOutput.transactionDrilldownRequest,
     };
+  },
+});
+
+export const updateCoachState = mutation({
+  args: { update: v.any() },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const parsed = CoachProfileUpdateSchema.safeParse(args.update);
+    if (!parsed.success) {
+      throw new Error("Invalid coach profile update.");
+    }
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("coachState")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const currentPrefs = (existing?.preferences ?? {}) as Record<string, unknown>;
+    const nextPrefs = { ...currentPrefs, ...parsed.data };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { preferences: nextPrefs, updatedAt: now });
+      return { ok: true };
+    }
+
+    await ctx.db.insert("coachState", {
+      userId,
+      preferences: nextPrefs,
+      updatedAt: now,
+    });
+
+    return { ok: true };
+  },
+});
+
+export const updateCoachFoundation = mutation({
+  args: { update: v.any() },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const parsed = CoachFoundationUpdateSchema.safeParse(args.update);
+    if (!parsed.success) {
+      throw new Error("Invalid coach foundation update.");
+    }
+
+    const deepMerge = (
+      base: Record<string, unknown>,
+      update: Record<string, unknown>
+    ): Record<string, unknown> => {
+      const merged = { ...base };
+      for (const [key, value] of Object.entries(update)) {
+        if (Array.isArray(value) || value === null || value === undefined) {
+          merged[key] = value;
+          continue;
+        }
+        const baseValue = merged[key];
+        if (
+          typeof value === "object" &&
+          value &&
+          typeof baseValue === "object" &&
+          baseValue &&
+          !Array.isArray(baseValue)
+        ) {
+          merged[key] = deepMerge(baseValue as Record<string, unknown>, value as Record<string, unknown>);
+        } else {
+          merged[key] = value;
+        }
+      }
+      return merged;
+    };
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("coachFoundation")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const current = (existing?.snapshot ?? {}) as Record<string, unknown>;
+    const nextSnapshot = deepMerge(current, parsed.data as Record<string, unknown>);
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { snapshot: nextSnapshot, updatedAt: now });
+      return { ok: true };
+    }
+
+    await ctx.db.insert("coachFoundation", {
+      userId,
+      snapshot: nextSnapshot,
+      updatedAt: now,
+    });
+
+    return { ok: true };
+  },
+});
+
+export const setTransactionDrilldownOptIn = mutation({
+  args: {
+    windowDays: v.optional(v.number()),
+    enabled: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const now = Date.now();
+    const windowDays = Math.min(Math.max(args.windowDays ?? 30, 7), 90);
+    const enabled = args.enabled ?? true;
+    const expiresAt = enabled ? now + 60 * 60 * 1000 : now;
+
+    const existing = await ctx.db
+      .query("coachState")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const currentPrefs = (existing?.preferences ?? {}) as Record<string, unknown>;
+    const nextPrefs = {
+      ...currentPrefs,
+      transactionDrilldownOptIn: { enabled, windowDays, expiresAt },
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { preferences: nextPrefs, updatedAt: now });
+      return { ok: true };
+    }
+
+    await ctx.db.insert("coachState", {
+      userId,
+      preferences: nextPrefs,
+      updatedAt: now,
+    });
+
+    return { ok: true };
   },
 });

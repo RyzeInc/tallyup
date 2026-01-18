@@ -8,6 +8,7 @@ import { SignedIn } from "@clerk/nextjs";
 import * as Lucide from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { formatMoney } from "@/components/utils";
+import { useToast } from "@/components/ToastProvider";
 
 const formatPercent = (ratio: number) => {
   return new Intl.NumberFormat("en-US", {
@@ -32,13 +33,17 @@ const ASSET_TYPES = [
 type AssetType = typeof ASSET_TYPES[number]["value"];
 
 export default function InvestmentsPage() {
+  const toast = useToast();
   const investments = useQuery(api.investments.listInvestments, {});
   const summary = useQuery(api.investments.getPortfolioSummary, {});
+  const unlinkedHoldings = useQuery(api.plaid.listUnlinkedPlaidHoldings, {});
   const createInvestment = useMutation(api.investments.createInvestment);
   const updatePrice = useMutation(api.investments.updateInvestmentPrice);
+  const syncHoldings = useMutation(api.plaid.syncPlaidHoldingsToInvestments);
 
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // Create form state
   const [newSymbol, setNewSymbol] = useState("");
@@ -48,6 +53,18 @@ export default function InvestmentsPage() {
   const [newCostBasis, setNewCostBasis] = useState("");
   const [newPrice, setNewPrice] = useState("");
 
+  const handleSyncHoldings = async () => {
+    setSyncing(true);
+    try {
+      const result = await syncHoldings({});
+      toast.success(`Synced ${result.created} new and updated ${result.updated} investments from linked accounts`);
+    } catch (err) {
+      console.error("Failed to sync holdings:", err);
+      toast.error("Failed to sync investments from linked accounts");
+    } finally {
+      setSyncing(false);
+    }
+  };
   // Update price state
   const [updatingPrice, setUpdatingPrice] = useState<Id<"investments"> | null>(null);
   const [priceInput, setPriceInput] = useState("");
@@ -179,6 +196,43 @@ export default function InvestmentsPage() {
 
         {/* Holdings List */}
         <div className="px-4 space-y-3">
+          {/* Sync from Plaid banner */}
+          {unlinkedHoldings && unlinkedHoldings.length > 0 && (
+            <div
+              className="p-4 rounded-xl flex items-center justify-between"
+              style={{ backgroundColor: "var(--primary-subtle)", border: "1px solid var(--primary)" }}
+            >
+              <div className="flex items-center gap-3">
+                <Lucide.Sparkles className="h-5 w-5" style={{ color: "var(--primary)" }} />
+                <div>
+                  <div className="font-medium text-sm" style={{ color: "var(--text)" }}>
+                    {unlinkedHoldings.length} investment{unlinkedHoldings.length !== 1 ? "s" : ""} detected from linked accounts
+                  </div>
+                  <div className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    Import holdings from your brokerage accounts
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleSyncHoldings}
+                disabled={syncing}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+                style={{
+                  backgroundColor: "var(--primary)",
+                  color: "var(--on-primary)",
+                  opacity: syncing ? 0.7 : 1,
+                }}
+              >
+                {syncing ? (
+                  <Lucide.Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Lucide.Download className="h-4 w-4" />
+                )}
+                Import
+              </button>
+            </div>
+          )}
+          
           {investments === undefined ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
@@ -190,7 +244,9 @@ export default function InvestmentsPage() {
               <Lucide.TrendingUp className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--text-tertiary)" }} />
               <div className="font-medium mb-1" style={{ color: "var(--text)" }}>No investments yet</div>
               <div className="text-sm mb-4" style={{ color: "var(--text-secondary)" }}>
-                Add your first holding to start tracking
+                {unlinkedHoldings && unlinkedHoldings.length > 0 
+                  ? "Import from linked accounts or add manually"
+                  : "Link a brokerage account or add manually"}
               </div>
             </div>
           ) : (

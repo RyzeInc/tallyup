@@ -69,6 +69,7 @@ export default function GoalsPage() {
 
   // Queries
   const goals = useQuery(api.goals.listGoals, { includeCompleted: true }) as Goal[] | undefined;
+  const plaidSuggestedGoals = useQuery(api.plaid.getPlaidSuggestedGoals, {});
 
   // Mutations
   const createGoal = useMutation(api.goals.createGoal);
@@ -83,6 +84,15 @@ export default function GoalsPage() {
 
   const activeGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "active"), [goals]);
   const completedGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "completed"), [goals]);
+
+  // Filter out Plaid suggestions that already have similar goals
+  const filteredPlaidSuggestions = useMemo(() => {
+    if (!plaidSuggestedGoals || plaidSuggestedGoals.length === 0) return [];
+    const activeNames = new Set(activeGoals.map(g => g.name.toLowerCase()));
+    return plaidSuggestedGoals.filter(
+      s => !activeNames.has(s.name.toLowerCase())
+    );
+  }, [plaidSuggestedGoals, activeGoals]);
 
   const totalProgress = useMemo(() => {
     return activeGoals.reduce(
@@ -260,6 +270,54 @@ export default function GoalsPage() {
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {/* Plaid-Suggested Goals */}
+        {filteredPlaidSuggestions.length > 0 && (
+          <div className="rounded-2xl p-4" style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Lucide.Sparkles className="h-5 w-5" style={{ color: "var(--primary)" }} />
+              <h2 className="font-medium" style={{ color: "var(--text)" }}>Suggested Goals</h2>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "var(--primary-subtle)", color: "var(--primary)" }}>
+                From Plaid
+              </span>
+            </div>
+            <p className="text-xs mb-3" style={{ color: "var(--text-tertiary)" }}>
+              Based on your connected accounts and spending patterns
+            </p>
+            <div className="space-y-2">
+              {filteredPlaidSuggestions.map((suggestion, idx) => (
+                <button
+                  key={`${suggestion.type}-${suggestion.name}-${idx}`}
+                  onClick={() => {
+                    setSelectedType(suggestion.type);
+                    setCreateName(suggestion.name);
+                    setCreateIcon(suggestion.icon);
+                    setCreateAmount((suggestion.suggestedAmountCents / 100).toFixed(2));
+                    setCreateStep("details");
+                    setShowCreate(true);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors hover:opacity-90"
+                  style={{ backgroundColor: "var(--surface-2)" }}
+                >
+                  <span className="text-lg">{suggestion.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium" style={{ color: "var(--text)" }}>{suggestion.name}</div>
+                    <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{suggestion.description}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium" style={{ color: suggestion.type === "paydown" ? "var(--warning)" : "var(--success)" }}>
+                      {formatMoney(suggestion.suggestedAmountCents)}
+                    </div>
+                    <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>
+                      {suggestion.type === "paydown" ? "to pay off" : "to save"}
+                    </div>
+                  </div>
+                  <Lucide.ChevronRight className="h-4 w-4 shrink-0" style={{ color: "var(--text-tertiary)" }} />
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

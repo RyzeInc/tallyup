@@ -82,6 +82,7 @@ export default function BudgetingPage() {
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
+  const plaidBudgetSuggestions = useQuery(api.plaid.getPlaidBudgetSuggestions, {});
   const timezoneOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
   const asOfDate = useMemo(() => Date.now(), []);
   const budgetStatus = useQuery(api.budgetEngine.getBudgetStatus, {
@@ -131,6 +132,17 @@ export default function BudgetingPage() {
   const topCategories = useMemo(() => {
     return [...categorySpending.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [categorySpending]);
+
+  // Map Plaid budget suggestions to category IDs for quick lookup
+  const plaidSuggestedAmounts = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!plaidBudgetSuggestions) return map;
+    for (const suggestion of plaidBudgetSuggestions) {
+      const current = map.get(suggestion.budgetCategory) || 0;
+      map.set(suggestion.budgetCategory, current + suggestion.suggestedMonthlyCents);
+    }
+    return map;
+  }, [plaidBudgetSuggestions]);
 
   const budgetHealth = useMemo(() => {
     if (!budgetCategories || budgetCategories.length === 0) return { onTrack: 0, warning: 0, overspent: 0 };
@@ -444,6 +456,37 @@ export default function BudgetingPage() {
 
               {createStep === "amount" && (
                 <div className="space-y-4">
+                  {/* Plaid Suggestion Banner */}
+                  {plaidSuggestedAmounts.size > 0 && (
+                    <div className="p-3 rounded-xl" style={{ backgroundColor: "var(--success-subtle)" }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Lucide.Sparkles className="h-4 w-4" style={{ color: "var(--success)" }} />
+                        <span className="text-xs font-medium" style={{ color: "var(--success)" }}>Smart Suggestions from Plaid</span>
+                      </div>
+                      <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                        Based on your recurring spending patterns. Tap &quot;Use Plaid Data&quot; below to auto-fill.
+                      </p>
+                      <button 
+                        onClick={() => {
+                          const amounts: Record<string, string> = {};
+                          DEFAULT_BUDGET_CATEGORIES.forEach((cat) => {
+                            if (selectedCategories.has(cat.id)) {
+                              const plaidAmount = plaidSuggestedAmounts.get(cat.id);
+                              if (plaidAmount) {
+                                // Round to nearest $10 and add 10% buffer
+                                amounts[cat.id] = (Math.ceil((plaidAmount * 1.1) / 1000) * 10).toString();
+                              }
+                            }
+                          });
+                          setCategoryAmounts(prev => ({ ...prev, ...amounts }));
+                        }}
+                        className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium"
+                        style={{ backgroundColor: "var(--success)", color: "white" }}
+                      >
+                        Use Plaid Data
+                      </button>
+                    </div>
+                  )}
                   <div className="p-3 rounded-xl" style={{ backgroundColor: "var(--primary-subtle)" }}>
                     <div className="flex items-center gap-2 mb-2"><Lucide.Lightbulb className="h-4 w-4" style={{ color: "var(--primary)" }} /><span className="text-xs font-medium" style={{ color: "var(--primary)" }}>Quick Setup</span></div>
                     <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>Enter monthly income for suggested amounts:</p>
@@ -453,13 +496,25 @@ export default function BudgetingPage() {
                     </div>
                   </div>
                   <div className="space-y-3 max-h-[40vh] overflow-y-auto">
-                    {DEFAULT_BUDGET_CATEGORIES.filter(c => selectedCategories.has(c.id)).map((cat) => (
+                    {DEFAULT_BUDGET_CATEGORIES.filter(c => selectedCategories.has(c.id)).map((cat) => {
+                      const plaidAmount = plaidSuggestedAmounts.get(cat.id);
+                      return (
                       <div key={cat.id} className="flex items-center gap-3">
                         <span className="text-lg">{cat.icon}</span>
-                        <div className="flex-1"><div className="text-sm font-medium" style={{ color: "var(--text)" }}>{cat.name}</div>{monthlyIncome && <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{cat.suggestedPercent}% suggested</div>}</div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{cat.name}</div>
+                          {plaidAmount ? (
+                            <div className="text-xs flex items-center gap-1" style={{ color: "var(--success)" }}>
+                              <Lucide.TrendingUp className="h-3 w-3" />
+                              {formatMoney(plaidAmount)}/mo from Plaid
+                            </div>
+                          ) : monthlyIncome ? (
+                            <div className="text-xs" style={{ color: "var(--text-tertiary)" }}>{cat.suggestedPercent}% suggested</div>
+                          ) : null}
+                        </div>
                         <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: "var(--text-tertiary)" }}>$</span><input type="number" value={categoryAmounts[cat.id] || ""} onChange={(e) => setCategoryAmounts(prev => ({ ...prev, [cat.id]: e.target.value }))} placeholder="0" className="w-24 pl-7 pr-2 py-2 rounded-lg text-sm text-right" style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }} /></div>
                       </div>
-                    ))}
+                    );})}
                   </div>
                   <div className="pt-3 border-t" style={{ borderColor: "var(--border)" }}>
                     <div className="flex justify-between mb-3"><span className="text-sm font-medium" style={{ color: "var(--text)" }}>Total Budget</span><span className="text-sm font-bold" style={{ color: "var(--primary)" }}>{formatMoney(Object.values(categoryAmounts).reduce((s, v) => s + (parseFloat(v || "0") * 100), 0))}/mo</span></div>

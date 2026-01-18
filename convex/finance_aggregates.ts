@@ -1,4 +1,5 @@
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -29,6 +30,15 @@ type Anomaly = {
   baselineAverageCents: number;
   deltaCents: number;
   reason: string;
+};
+
+type DrilldownItem = {
+  date: number;
+  amountCents: number;
+  type: "expense" | "income" | "transfer";
+  category?: string;
+  merchant?: string;
+  entryType?: string;
 };
 
 function getMonthBounds(month: MonthInput): { start: number; end: number } {
@@ -195,4 +205,78 @@ export async function computeAnomalies(ctx: Ctx, userId: string): Promise<Anomal
   }
 
   return anomalies.sort((a, b) => b.deltaCents - a.deltaCents).slice(0, 5);
+}
+
+function includesKeyword(value: string | undefined | null, keyword: string): boolean {
+  if (!value) return false;
+  return value.toLowerCase().includes(keyword);
+}
+
+function isTransferLike(entry: Doc<"entries">): boolean {
+  if (entry.type === "transfer") return true;
+  if (entry.entryType === "transfer") return true;
+  const category = resolveCategory(entry).toLowerCase();
+  if (category.includes("transfer")) return true;
+  if (entry.tags?.some((tag) => tag.includes("transfer"))) return true;
+  return false;
+}
+
+function isFeeLike(entry: Doc<"entries">): boolean {
+  if (entry.entryType === "fee") return true;
+  const category = resolveCategory(entry).toLowerCase();
+  return category.includes("fee") || category.includes("fees");
+}
+
+function isCashLike(entry: Doc<"entries">): boolean {
+  return (
+    includesKeyword(entry.merchantNormalized, "atm") ||
+    includesKeyword(entry.merchant, "atm") ||
+    includesKeyword(entry.note, "cash") ||
+    includesKeyword(entry.title, "cash")
+  );
+}
+
+export async function computeTransactionDrilldown(
+  ctx: Ctx,
+  userId: string,
+  windowDays: number
+): Promise<DrilldownItem[]> {
+  const now = Date.now();
+  const start = now - windowDays * DAY_MS;
+  const rows = await ctx.db
+    .query("entries")
+    .withIndex("by_user_date", (q) => q.eq("userId", userId).gte("date", start).lt("date", now))
+    .order("desc")
+    .take(500);
+
+  const flagged = rows.filter((entry) => {
+    if (entry.type !== "expense" && entry.type !== "income" && entry.type !== "transfer") return false;
+    if (isTransferLike(entry)) return true;
+    if (isFeeLike(entry)) return true;
+    if (isCashLike(entry)) return true;
+    if (entry.entryType === "refund") return true;
+    return false;
+  });
+
+  const largestExpenses = rows
+    .filter((entry) => entry.type === "expense" && !isTransferLike(entry))
+    .sort((a, b) => b.amountCents - a.amountCents)
+    .slice(0, 12);
+
+  const combined = new Map<string, Doc<"entries">>();
+  for (const entry of [...flagged, ...largestExpenses]) {
+    combined.set(entry._id, entry);
+  }
+
+  return [...combined.values()]
+    .sort((a, b) => b.date - a.date)
+    .slice(0, 25)
+    .map((entry) => ({
+      date: entry.date,
+      amountCents: entry.amountCents,
+      type: entry.type,
+      category: resolveCategory(entry),
+      merchant: entry.merchantNormalized ?? entry.merchant ?? undefined,
+      entryType: entry.entryType ?? undefined,
+    }));
 }

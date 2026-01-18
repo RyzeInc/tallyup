@@ -61,9 +61,15 @@ export function applyCoachResponseGuards(
   const assistantMessage = output.assistantMessage ?? "";
   const needsList = seemsIncomplete(assistantMessage) && isIntakeQuestion(input.userMessage);
 
-  if (!needsList) return output;
+  const trimmedOutput: CoachOutput = {
+    ...output,
+    actions: output.actions.slice(0, 2),
+    openQuestions: output.openQuestions.slice(0, 2),
+  };
 
-  const listSource = output.actions.length ? output.actions : DEFAULT_INTAKE_ITEMS;
+  if (!needsList) return trimmedOutput;
+
+  const listSource = trimmedOutput.actions.length ? trimmedOutput.actions : DEFAULT_INTAKE_ITEMS;
   const listItems = buildIntakeList(input.contextPacket, listSource);
   const cleanedBase = assistantMessage.replace(/:\s*$/, "").trim();
   const prefix = cleanedBase
@@ -71,8 +77,8 @@ export function applyCoachResponseGuards(
     : "Here is the information I need:\n";
 
   return {
-    ...output,
+    ...trimmedOutput,
     assistantMessage: `${prefix}${formatList(listItems)}`,
-    actions: output.actions.length ? [] : output.actions,
+    actions: trimmedOutput.actions.length ? [] : trimmedOutput.actions,
   };
 }

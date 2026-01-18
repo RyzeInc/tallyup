@@ -231,6 +231,7 @@ export default function InsightsPage() {
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
   const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
+  const plaidRecurringStreams = useQuery(api.recurring.listPlaidRecurringStreams, { onlyUnlinked: false });
   
   // Fetch custom categories for display name resolution
   const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
@@ -663,89 +664,119 @@ export default function InsightsPage() {
   // Recurring Patterns for sparkline widget
   // ─────────────────────────────────────────────────────────────
   const recurringPatterns = useMemo((): RecurringPatternDisplay[] => {
-    if (!recurringRules || !entries) return [];
+    const patterns: RecurringPatternDisplay[] = [];
+    
+    // First, add patterns from TallyUp recurring rules
+    if (recurringRules && entries) {
+      // Build entry lookup by recurringRuleId
+      const entriesByRule = new Map<string, Entry[]>();
+      for (const entry of entries) {
+        if (entry.recurringRuleId) {
+          const arr = entriesByRule.get(entry.recurringRuleId) || [];
+          arr.push(entry);
+          entriesByRule.set(entry.recurringRuleId, arr);
+        }
+      }
 
-    // Build entry lookup by recurringRuleId
-    const entriesByRule = new Map<string, Entry[]>();
-    for (const entry of entries) {
-      if (entry.recurringRuleId) {
-        const arr = entriesByRule.get(entry.recurringRuleId) || [];
-        arr.push(entry);
-        entriesByRule.set(entry.recurringRuleId, arr);
+      for (const rule of recurringRules) {
+        const linkedEntries = entriesByRule.get(rule._id) || [];
+        const matchCount = linkedEntries.length;
+
+        // Name: prefer displayName, fallback to category/bucket
+        const name = rule.displayName || rule.category || rule.bucket || "Unnamed Pattern";
+
+        // Amount: prefer amountCents, else derive from linked entries average
+        let amountStr = "—";
+        if (rule.amountCents) {
+          amountStr = centsToDollars(rule.amountCents);
+        } else if (linkedEntries.length > 0) {
+          const avgCents = Math.round(linkedEntries.reduce((s, e) => s + e.amountCents, 0) / linkedEntries.length);
+          amountStr = "~" + centsToDollars(avgCents);
+        }
+
+        // Cadence label
+        const cadenceMap: Record<string, string> = {
+          weekly: "Weekly",
+          biweekly: "Bi-weekly",
+          semiMonthly: "Semi-monthly",
+          monthly: "Monthly",
+          quarterly: "Quarterly",
+          yearly: "Yearly",
+          custom: "Custom",
+        };
+        const cadence = rule.cadenceType ? cadenceMap[rule.cadenceType] || rule.cadenceType : "—";
+
+        // Sparkline data: last 6 amounts from linked entries (sorted by date)
+        const sortedLinked = [...linkedEntries].sort((a, b) => a.date - b.date);
+        const last6 = sortedLinked.slice(-6);
+        const sparklineData = last6.map((e) => e.amountCents);
+        // Pad with zeros if fewer than 6
+        while (sparklineData.length < 6) sparklineData.unshift(0);
+
+        // Last seen (use endDate as reference point for stability)
+        let lastSeen = "Never";
+        if (linkedEntries.length > 0) {
+          const mostRecent = Math.max(...linkedEntries.map((e) => e.date));
+          const daysDiff = Math.round((endDate - mostRecent) / (24 * 60 * 60 * 1000));
+          if (daysDiff <= 0) lastSeen = "Today";
+          else if (daysDiff === 1) lastSeen = "Yesterday";
+          else if (daysDiff < 7) lastSeen = `${daysDiff}d ago`;
+          else if (daysDiff < 30) lastSeen = `${Math.round(daysDiff / 7)}w ago`;
+          else lastSeen = `${Math.round(daysDiff / 30)}mo ago`;
+        } else if (rule.lastMatchedAt) {
+          const daysDiff = Math.round((endDate - rule.lastMatchedAt) / (24 * 60 * 60 * 1000));
+          if (daysDiff <= 0) lastSeen = "Today";
+          else if (daysDiff === 1) lastSeen = "Yesterday";
+          else if (daysDiff < 7) lastSeen = `${daysDiff}d ago`;
+          else if (daysDiff < 30) lastSeen = `${Math.round(daysDiff / 7)}w ago`;
+          else lastSeen = `${Math.round(daysDiff / 30)}mo ago`;
+        }
+
+        patterns.push({
+          id: rule._id,
+          name,
+          type: rule.type,
+          amount: amountStr,
+          cadence,
+          matchCount,
+          sparklineData,
+          lastSeen,
+        });
       }
     }
-
-    const patterns: RecurringPatternDisplay[] = [];
-
-    for (const rule of recurringRules) {
-      const linkedEntries = entriesByRule.get(rule._id) || [];
-      const matchCount = linkedEntries.length;
-
-      // Name: prefer displayName, fallback to category/bucket
-      const name = rule.displayName || rule.category || rule.bucket || "Unnamed Pattern";
-
-      // Amount: prefer amountCents, else derive from linked entries average
-      let amountStr = "—";
-      if (rule.amountCents) {
-        amountStr = centsToDollars(rule.amountCents);
-      } else if (linkedEntries.length > 0) {
-        const avgCents = Math.round(linkedEntries.reduce((s, e) => s + e.amountCents, 0) / linkedEntries.length);
-        amountStr = "~" + centsToDollars(avgCents);
-      }
-
-      // Cadence label
+    
+    // Add Plaid recurring streams that aren't already linked to rules
+    if (plaidRecurringStreams && patterns.length < 5) {
+      const unlinkedStreams = plaidRecurringStreams.filter(s => !s.recurringRuleId && s.isActive);
+      
       const cadenceMap: Record<string, string> = {
-        weekly: "Weekly",
-        biweekly: "Bi-weekly",
-        semiMonthly: "Semi-monthly",
-        monthly: "Monthly",
-        quarterly: "Quarterly",
-        yearly: "Yearly",
-        custom: "Custom",
+        WEEKLY: "Weekly",
+        BIWEEKLY: "Bi-weekly",
+        SEMI_MONTHLY: "Semi-monthly",
+        MONTHLY: "Monthly",
+        ANNUALLY: "Yearly",
+        UNKNOWN: "—",
       };
-      const cadence = rule.cadenceType ? cadenceMap[rule.cadenceType] || rule.cadenceType : "—";
-
-      // Sparkline data: last 6 amounts from linked entries (sorted by date)
-      const sortedLinked = [...linkedEntries].sort((a, b) => a.date - b.date);
-      const last6 = sortedLinked.slice(-6);
-      const sparklineData = last6.map((e) => e.amountCents);
-      // Pad with zeros if fewer than 6
-      while (sparklineData.length < 6) sparklineData.unshift(0);
-
-      // Last seen (use endDate as reference point for stability)
-      let lastSeen = "Never";
-      if (linkedEntries.length > 0) {
-        const mostRecent = Math.max(...linkedEntries.map((e) => e.date));
-        const daysDiff = Math.round((endDate - mostRecent) / (24 * 60 * 60 * 1000));
-        if (daysDiff <= 0) lastSeen = "Today";
-        else if (daysDiff === 1) lastSeen = "Yesterday";
-        else if (daysDiff < 7) lastSeen = `${daysDiff}d ago`;
-        else if (daysDiff < 30) lastSeen = `${Math.round(daysDiff / 7)}w ago`;
-        else lastSeen = `${Math.round(daysDiff / 30)}mo ago`;
-      } else if (rule.lastMatchedAt) {
-        const daysDiff = Math.round((endDate - rule.lastMatchedAt) / (24 * 60 * 60 * 1000));
-        if (daysDiff <= 0) lastSeen = "Today";
-        else if (daysDiff === 1) lastSeen = "Yesterday";
-        else if (daysDiff < 7) lastSeen = `${daysDiff}d ago`;
-        else if (daysDiff < 30) lastSeen = `${Math.round(daysDiff / 7)}w ago`;
-        else lastSeen = `${Math.round(daysDiff / 30)}mo ago`;
+      
+      for (const stream of unlinkedStreams) {
+        if (patterns.length >= 5) break;
+        
+        patterns.push({
+          id: `plaid-${stream._id}`,
+          name: stream.merchantName || stream.description || "Unknown",
+          type: stream.streamType === "outflow" ? "expense" : "income",
+          amount: centsToDollars(Math.abs(stream.averageAmountCents)),
+          cadence: cadenceMap[stream.frequency] || "—",
+          matchCount: stream.transactionIds?.length || 0,
+          sparklineData: [0, 0, 0, 0, Math.abs(stream.lastAmountCents), Math.abs(stream.averageAmountCents)],
+          lastSeen: stream.lastDate ? `${stream.lastDate}` : "—",
+        });
       }
-
-      patterns.push({
-        id: rule._id,
-        name,
-        type: rule.type,
-        amount: amountStr,
-        cadence,
-        matchCount,
-        sparklineData,
-        lastSeen,
-      });
     }
 
     // Sort by match count (more matches first), take top 5
     return patterns.sort((a, b) => b.matchCount - a.matchCount).slice(0, 5);
-  }, [recurringRules, entries, endDate]);
+  }, [recurringRules, entries, endDate, plaidRecurringStreams]);
 
   // ─────────────────────────────────────────────────────────────
   // Toggle tag selection

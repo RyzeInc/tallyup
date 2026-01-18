@@ -471,19 +471,6 @@ function cadenceWindowDays(kind: CadenceKind): number {
   }
 }
 
-export const listRecurringRulesAll = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
-    const limit = Math.min(Math.max(args.limit ?? 200, 10), 1000);
-    return await ctx.db
-      .query("recurringRules")
-      .filter(q => q.eq(q.field("userId"), userId))
-      .order("desc")
-      .take(limit);
-  },
-});
-
 export const listExpectedCharges = query({
   args: {
     startDate: v.optional(v.number()),
@@ -1107,3 +1094,273 @@ export const moveExpectedChargeDate = mutation({
   },
 });
 
+// ============================================
+// PLAID RECURRING STREAM INTEGRATION
+// ============================================
+
+// Map Plaid frequency to TallyUp cadence
+function mapPlaidFrequencyToCadence(frequency: string): {
+  cadenceType: "weekly" | "biweekly" | "semiMonthly" | "monthly" | "yearly" | "custom";
+  cadenceKind: "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly" | "custom_days";
+} {
+  switch (frequency) {
+    case "WEEKLY":
+      return { cadenceType: "weekly", cadenceKind: "weekly" };
+    case "BIWEEKLY":
+      return { cadenceType: "biweekly", cadenceKind: "biweekly" };
+    case "SEMI_MONTHLY":
+      return { cadenceType: "semiMonthly", cadenceKind: "custom_days" };
+    case "MONTHLY":
+      return { cadenceType: "monthly", cadenceKind: "monthly" };
+    case "ANNUALLY":
+      return { cadenceType: "yearly", cadenceKind: "yearly" };
+    default:
+      return { cadenceType: "monthly", cadenceKind: "monthly" };
+  }
+}
+
+// Internal mutation to create a recurring rule from a Plaid stream
+export const createRecurringRuleFromPlaidStream = internalMutation({
+  args: {
+    userId: v.string(),
+    streamId: v.id("plaidRecurringStreams"),
+    type: v.union(v.literal("expense"), v.literal("income")),
+    displayName: v.string(),
+    merchantName: v.optional(v.string()),
+    category: v.optional(v.string()),
+    amountCents: v.number(),
+    minAmountCents: v.optional(v.number()),
+    maxAmountCents: v.optional(v.number()),
+    frequency: v.string(),
+    averageDaysBetween: v.optional(v.number()),
+    accountId: v.optional(v.id("accounts")),
+    confidence: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const { cadenceType, cadenceKind } = mapPlaidFrequencyToCadence(args.frequency);
+    
+    // Create the recurring rule
+    const ruleId = await ctx.db.insert("recurringRules", {
+      userId: args.userId,
+      type: args.type,
+      displayName: args.displayName,
+      name: args.displayName,
+      category: args.category,
+      amountCents: args.amountCents,
+      minAmountCents: args.minAmountCents,
+      maxAmountCents: args.maxAmountCents,
+      amountTolerancePercent: 15, // Allow 15% variance
+      amountMode: args.minAmountCents !== args.maxAmountCents ? "range" : "fixed",
+      cadenceType,
+      cadence: {
+        kind: cadenceKind,
+        intervalDays: args.averageDaysBetween,
+      },
+      merchantKeys: args.merchantName ? [normalizeMerchant(args.merchantName)].filter((s): s is string => !!s) : undefined,
+      accountScope: args.accountId ? {
+        kind: "only",
+        accountIds: [args.accountId],
+      } : undefined,
+      autolinkEnabled: true,
+      active: true,
+      status: "active",
+      confidence: args.confidence,
+      note: "Created from Plaid recurring detection",
+      createdAt: now,
+      updatedAt: now,
+    });
+    
+    // Link the stream to the rule
+    await ctx.db.patch(args.streamId, {
+      recurringRuleId: ruleId,
+      updatedAt: now,
+    });
+    
+    return ruleId;
+  },
+});
+
+// Internal mutation to link entries to a recurring rule based on Plaid transaction IDs
+export const linkEntriesByPlaidTransactionIds = internalMutation({
+  args: {
+    userId: v.string(),
+    ruleId: v.id("recurringRules"),
+    plaidTransactionIds: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    let linkedCount = 0;
+    
+    for (const plaidTxnId of args.plaidTransactionIds) {
+      // Find the plaidTransaction by its plaidTransactionId
+      const plaidTxn = await ctx.db
+        .query("plaidTransactions")
+        .withIndex("by_plaidTransactionId", (q) => q.eq("plaidTransactionId", plaidTxnId))
+        .first();
+      
+      if (!plaidTxn || !plaidTxn.entryId) continue;
+      
+      // Get the entry
+      const entry = await ctx.db.get(plaidTxn.entryId);
+      if (!entry || entry.userId !== args.userId) continue;
+      
+      // Skip if already linked to a rule
+      if (entry.recurringRuleId) continue;
+      
+      // Link the entry to the rule
+      await ctx.db.patch(plaidTxn.entryId, {
+        recurringRuleId: args.ruleId,
+        recurringMatch: {
+          ruleId: args.ruleId,
+          matchType: "auto",
+          score: 90,
+          explain: { source: "plaid_recurring_stream" },
+        },
+        updatedAt: now,
+      });
+      linkedCount++;
+    }
+    
+    // Update rule lastMatchedAt
+    if (linkedCount > 0) {
+      await ctx.db.patch(args.ruleId, { lastMatchedAt: now, updatedAt: now });
+    }
+    
+    return linkedCount;
+  },
+});
+
+// Query to get Plaid recurring streams for the current user
+export const listPlaidRecurringStreams = query({
+  args: { 
+    streamType: v.optional(v.union(v.literal("inflow"), v.literal("outflow"))),
+    onlyUnlinked: v.optional(v.boolean()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 100, 10), 500);
+    
+    const query = ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_user", (q) => q.eq("userId", userId));
+    
+    const streams = await query.take(limit);
+    
+    // Filter by stream type if specified
+    let filtered = streams;
+    if (args.streamType) {
+      filtered = filtered.filter(s => s.streamType === args.streamType);
+    }
+    
+    // Filter to only unlinked if specified
+    if (args.onlyUnlinked) {
+      filtered = filtered.filter(s => !s.recurringRuleId && s.isActive);
+    }
+    
+    return filtered;
+  },
+});
+
+// Action to import Plaid recurring streams as TallyUp recurring rules
+export const importPlaidRecurringStreams = action({
+  args: {
+    streamIds: v.optional(v.array(v.id("plaidRecurringStreams"))),
+    importAll: v.optional(v.boolean()),
+    minConfidence: v.optional(v.number()), // Based on Plaid status: MATURE = 90, EARLY_DETECTION = 60
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    const minConfidence = args.minConfidence ?? 60;
+    
+    // Get streams to import
+    const allStreams = await ctx.runQuery(internal.plaid.getUnlinkedPlaidRecurringStreams, {
+      userId: identity.subject,
+    });
+    
+    let streamsToImport = allStreams;
+    
+    // Filter by specific IDs if provided
+    if (args.streamIds && args.streamIds.length > 0) {
+      const idSet = new Set(args.streamIds);
+      streamsToImport = streamsToImport.filter(s => idSet.has(s._id));
+    }
+    
+    const results = {
+      rulesCreated: 0,
+      entriesLinked: 0,
+      errors: [] as string[],
+    };
+    
+    for (const stream of streamsToImport) {
+      try {
+        // Calculate confidence based on Plaid status
+        let confidence = 60;
+        if (stream.status === "MATURE") confidence = 90;
+        else if (stream.status === "EARLY_DETECTION") confidence = 70;
+        
+        if (confidence < minConfidence) continue;
+        
+        // Determine type from stream type
+        const type = stream.streamType === "inflow" ? "income" : "expense";
+        
+        // Create display name from merchant or description
+        const displayName = stream.merchantName || stream.description || "Unknown Recurring";
+        
+        // Map Plaid category to TallyUp category if available
+        const category = stream.personalFinanceCategory?.primary || undefined;
+        
+        // Create the recurring rule
+        const ruleId = await ctx.runMutation(internal.recurring.createRecurringRuleFromPlaidStream, {
+          userId: identity.subject,
+          streamId: stream._id,
+          type,
+          displayName,
+          merchantName: stream.merchantName,
+          category,
+          amountCents: stream.averageAmountCents,
+          minAmountCents: stream.lastAmountCents < stream.averageAmountCents ? stream.lastAmountCents : undefined,
+          maxAmountCents: stream.lastAmountCents > stream.averageAmountCents ? stream.lastAmountCents : undefined,
+          frequency: stream.frequency,
+          averageDaysBetween: stream.averageDaysBetween,
+          accountId: stream.accountId,
+          confidence,
+        });
+        
+        results.rulesCreated++;
+        
+        // Link historical entries if we have transaction IDs
+        if (stream.transactionIds && stream.transactionIds.length > 0) {
+          const linkedCount = await ctx.runMutation(internal.recurring.linkEntriesByPlaidTransactionIds, {
+            userId: identity.subject,
+            ruleId,
+            plaidTransactionIds: stream.transactionIds,
+          });
+          results.entriesLinked += linkedCount;
+        }
+      } catch (err) {
+        results.errors.push(`Failed to import stream ${stream._id}: ${String(err)}`);
+      }
+    }
+    
+    return results;
+  },
+});
+
+// Query to list all recurring rules including those from Plaid
+export const listRecurringRulesAll = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 200, 10), 1000);
+
+    return await ctx.db
+      .query("recurringRules")
+      .withIndex("by_user_active", q => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
+  },
+});

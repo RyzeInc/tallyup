@@ -13,11 +13,13 @@
 
 import { useState } from "react";
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
+import { useQuery, useAction } from "convex/react";
 import { api } from "convex/_generated/api";
+import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
+import { useToast } from "@/components/ToastProvider";
 import {
   PlaidLinkCard,
   LinkedAccountsList,
@@ -27,18 +29,78 @@ import {
 type TabId = "linked" | "pending" | "settings";
 
 export default function LinkAccountsPage() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<TabId>("linked");
   const [refreshKey, setRefreshKey] = useState(0);
   
   const plaidItems = useQuery(api.plaid.listPlaidItems);
   const pendingTransactions = useQuery(api.plaid.listPendingTransactions, { limit: 100 });
   
+  // Actions for auto-sync
+  const syncTransactions = useAction(api.plaidActions.syncTransactions);
+  const syncRecurringStreams = useAction(api.plaidActions.syncRecurringStreams);
+  const syncInvestments = useAction(api.plaidActions.syncInvestments);
+  const syncLiabilities = useAction(api.plaidActions.syncLiabilities);
+  
   const pendingCount = pendingTransactions?.length ?? 0;
   const linkedCount = plaidItems?.length ?? 0;
   
-  const handleLinkSuccess = () => {
+  // Auto-sync all data after linking a new account
+  const handleLinkSuccess = async (result: { institutionName: string; accountCount: number; plaidItemId: string }) => {
     setRefreshKey((k) => k + 1);
     setActiveTab("linked");
+    
+    // Auto-sync all data types
+    const syncResults: string[] = [];
+    
+    try {
+      // Sync transactions
+      const txResult = await syncTransactions({ plaidItemId: result.plaidItemId as Id<"plaidItems"> });
+      syncResults.push(`${txResult.added} transactions`);
+      
+      // Try to sync recurring streams
+      try {
+        const recurringResult = await syncRecurringStreams({ plaidItemId: result.plaidItemId as Id<"plaidItems"> });
+        if ((recurringResult.totalCount ?? 0) > 0) {
+          syncResults.push(`${recurringResult.totalCount} recurring patterns`);
+        }
+      } catch {
+        console.info("Recurring streams not yet available (may need more transaction history)");
+      }
+      
+      // Get the item to check available products
+      const item = plaidItems?.find(i => i._id === result.plaidItemId);
+      const products = item?.products || [];
+      
+      // Try investments if available
+      if (products.includes("investments")) {
+        try {
+          const invResult = await syncInvestments({ plaidItemId: result.plaidItemId as Id<"plaidItems"> });
+          if (invResult.holdingsCount && invResult.holdingsCount > 0) {
+            syncResults.push(`${invResult.holdingsCount} holdings`);
+          }
+        } catch {
+          console.info("Investments sync skipped");
+        }
+      }
+      
+      // Try liabilities if available
+      if (products.includes("liabilities")) {
+        try {
+          const liabResult = await syncLiabilities({ plaidItemId: result.plaidItemId as Id<"plaidItems"> });
+          if (liabResult.totalCount && liabResult.totalCount > 0) {
+            syncResults.push(`${liabResult.totalCount} liabilities`);
+          }
+        } catch {
+          console.info("Liabilities sync skipped");
+        }
+      }
+      
+      toast.success(`Synced ${syncResults.join(", ")} from ${result.institutionName}`);
+    } catch (err) {
+      console.error("Auto-sync error:", err);
+      toast.error("Some data could not be synced. Try syncing manually from the accounts list.");
+    }
   };
   
   const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; count?: number }[] = [

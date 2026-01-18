@@ -1,12 +1,16 @@
 "use client";
 
-import { useAction, useConvex } from "convex/react";
+import { useAction, useConvex, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import { useEffect, useRef, useState } from "react";
 import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import { formatMoney, formatDateLabel } from "@/components/utils";
+import type { CoachProfileUpdate } from "@/lib/coach/profile";
+import type { CoachFoundationUpdate } from "@/lib/coach/foundation";
+import { formatProfileUpdate } from "@/lib/coach/formatProfile";
+import { formatFoundationUpdate } from "@/lib/coach/formatFoundation";
 
 const SNAPSHOT_TTL_MS = 90 * 1000;
 
@@ -25,6 +29,7 @@ type CoachSnapshot = {
     currentFocus: string | null;
     recentSummaries: string[];
     updatedAt: number;
+    foundation?: { updatedAt: number; hasFoundation: boolean };
   };
 };
 
@@ -33,6 +38,9 @@ type ChatMessage = { role: "user" | "assistant"; content: string };
 export default function CoachChat() {
   const convex = useConvex();
   const sendMessage = useAction(api.coach.chat);
+  const updateCoachState = useMutation(api.coach.updateCoachState);
+  const updateCoachFoundation = useMutation(api.coach.updateCoachFoundation);
+  const setTransactionDrilldownOptIn = useMutation(api.coach.setTransactionDrilldownOptIn);
 
   const [snapshot, setSnapshot] = useState<CoachSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -43,6 +51,12 @@ export default function CoachChat() {
   const [actions, setActions] = useState<string[]>([]);
   const [followUps, setFollowUps] = useState<string[]>([]);
   const [contextHash, setContextHash] = useState<string | null>(null);
+  const [profileUpdate, setProfileUpdate] = useState<CoachProfileUpdate | null>(null);
+  const [foundationUpdate, setFoundationUpdate] = useState<CoachFoundationUpdate | null>(null);
+  const [drilldownRequest, setDrilldownRequest] = useState<{ reason: string; windowDays: number } | null>(null);
+  const [applyingProfile, setApplyingProfile] = useState(false);
+  const [applyingFoundation, setApplyingFoundation] = useState(false);
+  const [enablingDrilldown, setEnablingDrilldown] = useState(false);
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -101,6 +115,9 @@ export default function CoachChat() {
       setMessages((prev) => [...prev, { role: "assistant", content: result.assistantMessage }]);
       setActions(result.actions ?? []);
       setFollowUps(result.followUps ?? []);
+      setProfileUpdate(result.profileUpdates ?? null);
+      setFoundationUpdate(result.foundationUpdates ?? null);
+      setDrilldownRequest(result.transactionDrilldownRequest ?? null);
       if (result.contextHash) setContextHash(result.contextHash);
     } catch {
       setMessages((prev) => [
@@ -109,6 +126,43 @@ export default function CoachChat() {
       ]);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleApplyProfile = async () => {
+    if (!profileUpdate || applyingProfile) return;
+    setApplyingProfile(true);
+    try {
+      await updateCoachState({ update: profileUpdate });
+      setProfileUpdate(null);
+    } finally {
+      setApplyingProfile(false);
+    }
+  };
+
+  const handleApplyFoundation = async () => {
+    if (!foundationUpdate || applyingFoundation) return;
+    setApplyingFoundation(true);
+    try {
+      await updateCoachFoundation({ update: foundationUpdate });
+      setFoundationUpdate(null);
+    } finally {
+      setApplyingFoundation(false);
+    }
+  };
+
+  const handleEnableDrilldown = async () => {
+    if (!drilldownRequest || enablingDrilldown) return;
+    setEnablingDrilldown(true);
+    try {
+      await setTransactionDrilldownOptIn({ windowDays: drilldownRequest.windowDays, enabled: true });
+      setDrilldownRequest(null);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Transaction detail sharing is enabled for the next hour. Ask me to review leaks or transfers." },
+      ]);
+    } finally {
+      setEnablingDrilldown(false);
     }
   };
 
@@ -257,6 +311,58 @@ export default function CoachChat() {
                     <li key={`${item}-${index}`}>{item}</li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {profileUpdate && (
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}>
+                <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+                  Suggested Profile Updates
+                </div>
+                <ul className="mt-2 space-y-1 text-sm list-disc pl-4">
+                  {formatProfileUpdate(profileUpdate).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex justify-end">
+                  <Button onClick={handleApplyProfile} disabled={applyingProfile}>
+                    {applyingProfile ? "Saving..." : "Apply Updates"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {foundationUpdate && (
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}>
+                <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+                  Suggested Foundation Updates
+                </div>
+                <ul className="mt-2 space-y-1 text-sm list-disc pl-4">
+                  {formatFoundationUpdate(foundationUpdate).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex justify-end">
+                  <Button onClick={handleApplyFoundation} disabled={applyingFoundation}>
+                    {applyingFoundation ? "Saving..." : "Apply Foundation Updates"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {drilldownRequest && (
+              <div className="rounded-xl border p-3" style={{ borderColor: "var(--border)", backgroundColor: "var(--surface)" }}>
+                <div className="text-xs uppercase tracking-wide" style={{ color: "var(--text-secondary)" }}>
+                  Transaction Drilldown Request
+                </div>
+                <div className="mt-2 text-sm" style={{ color: "var(--text)" }}>
+                  {drilldownRequest.reason}
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <Button onClick={handleEnableDrilldown} disabled={enablingDrilldown}>
+                    {enablingDrilldown ? "Enabling..." : `Share last ${drilldownRequest.windowDays} days`}
+                  </Button>
+                </div>
               </div>
             )}
 

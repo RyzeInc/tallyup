@@ -15,7 +15,7 @@ import * as Lucide from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 
 interface PlaidLinkButtonProps {
-  onSuccess?: (result: { institutionName: string; accountCount: number }) => void;
+  onSuccess?: (result: { institutionName: string; accountCount: number; plaidItemId: string }) => void;
   onExit?: () => void;
   className?: string;
   variant?: "default" | "outline" | "ghost";
@@ -71,12 +71,13 @@ export function PlaidLinkButton({
         });
         
         toast.success(
-          `Successfully linked ${result.institutionName || "institution"} with ${result.accountCount} account(s)`
+          `Successfully linked ${result.institutionName || "institution"} with ${result.accountCount} account(s). Syncing data...`
         );
         
         onSuccess?.({
           institutionName: result.institutionName || "Unknown",
           accountCount: result.accountCount,
+          plaidItemId: result.plaidItemId,
         });
       } catch (err) {
         console.error("Error exchanging token:", err);
@@ -183,7 +184,7 @@ export function PlaidLinkButton({
  * A card-style component for initiating Plaid Link.
  */
 interface PlaidLinkCardProps {
-  onSuccess?: (result: { institutionName: string; accountCount: number }) => void;
+  onSuccess?: (result: { institutionName: string; accountCount: number; plaidItemId: string }) => void;
   onExit?: () => void;
 }
 
