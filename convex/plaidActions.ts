@@ -62,13 +62,14 @@ export const createLinkToken = action({
     
     const plaidClient = getPlaidClient();
     
-    // Default products: Transactions, Investments, Liabilities
-    // Note: Income requires additional user consent flow
-    // Note: Enrich is a separate API call, not a Link product
+    // Default products: Only Transactions
+    // IMPORTANT: Requesting multiple products (e.g., transactions + investments + liabilities)
+    // restricts Plaid Link to only show accounts that support ALL requested products.
+    // This causes the "No liability accounts" error when using sandbox.
+    // Instead, request only 'transactions' which works with checking, savings, and credit accounts.
+    // Investments and liabilities data can be fetched on-demand for accounts that support them.
     let productsToRequest: Products[] = [
       Products.Transactions,
-      Products.Investments,
-      Products.Liabilities,
     ];
     
     // Allow caller to override products
@@ -189,7 +190,31 @@ export const exchangePublicToken = action({
         }
       }
       
-      // Create the Plaid item in the database
+      // Get the Item details to retrieve which products are enabled
+      // This is critical for knowing which sync operations to perform (transactions, investments, liabilities)
+      let products: string[] = [];
+      let availableProducts: string[] = [];
+      let billedProducts: string[] = [];
+      let consentedProducts: string[] = [];
+      
+      try {
+        const itemResponse = await plaidClient.itemGet({
+          access_token: accessToken,
+        });
+        
+        products = itemResponse.data.item.products || [];
+        availableProducts = itemResponse.data.item.available_products || [];
+        billedProducts = itemResponse.data.item.billed_products || [];
+        consentedProducts = itemResponse.data.item.consented_products || [];
+        
+        console.info("[plaid] itemGet products:", { products, availableProducts, billedProducts, consentedProducts });
+      } catch (itemErr) {
+        console.warn("[plaid] Could not fetch item details for products:", itemErr);
+        // Fall back to transactions only (what we requested in link token creation)
+        products = ["transactions"];
+      }
+      
+      // Create the Plaid item in the database with products info
       const plaidItemId = await ctx.runMutation(internal.plaid.createPlaidItem, {
         userId: identity.subject,
         itemId,
@@ -198,6 +223,10 @@ export const exchangePublicToken = action({
         institutionName: instName,
         institutionLogo: instLogo,
         institutionColor: instColor,
+        products,
+        availableProducts,
+        billedProducts,
+        consentedProducts,
       });
       
       // Get accounts for this item
@@ -221,9 +250,19 @@ export const exchangePublicToken = action({
       const linkedAccounts = [];
       
       for (const account of accountsResponse.data.accounts) {
-        const accountType = accountTypeMap[account.subtype?.toLowerCase() ?? ""] 
-          || accountTypeMap[account.type?.toLowerCase() ?? ""] 
-          || "other";
+        // Normalize Plaid account type/subtype and map to TallyUp account type
+        const subtype = (account.subtype || "").toLowerCase();
+        const ptype = (account.type || "").toLowerCase();
+        const accountType = accountTypeMap[subtype] || accountTypeMap[ptype] || "other";
+
+        // Diagnostic logging to help debug accounts that don't map correctly
+        console.info("[plaid] account mapping:", {
+          plaidAccountId: account.account_id,
+          name: account.name,
+          type: account.type,
+          subtype: account.subtype,
+          mapped: accountType,
+        });
         
         // Create TallyUp account
         const tallyUpAccountId = await ctx.runMutation(internal.plaid.createTallyUpAccount, {
@@ -239,6 +278,7 @@ export const exchangePublicToken = action({
           isLinked: true,
           plaidAccountId: account.account_id,
         });
+        console.info("[plaid] created/linked tallyUp account", { tallyUpAccountId, plaidAccountId: account.account_id, accountType });
         
         // Create Plaid account link
         const plaidAccountId = await ctx.runMutation(internal.plaid.createPlaidAccount, {
@@ -555,8 +595,15 @@ export const refreshBalances = action({
     }) as PlaidAccount[];
     
     try {
+      // Some institutions require min_last_updated_datetime parameter
+      // Set it to 24 hours ago to get relatively fresh data
+      const minLastUpdated = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      
       const response = await plaidClient.accountsBalanceGet({
         access_token: item.accessToken,
+        options: {
+          min_last_updated_datetime: minLastUpdated,
+        },
       });
       
       const now = Date.now();
@@ -588,8 +635,6 @@ export const refreshBalances = action({
         accountsUpdated: response.data.accounts.length,
       };
     } catch (error: unknown) {
-      console.error("Error refreshing balances:", error);
-      
       // Extract Plaid error details if available
       let errorCode: string | undefined;
       let message = "Unknown error";
@@ -620,10 +665,26 @@ export const refreshBalances = action({
           });
           throw new Error("Bank connection is invalid. Please unlink and reconnect this account.");
         }
+        
+        // Some institutions have specific requirements - log but don't fail hard
+        // The balance data may still be relatively fresh from the last sync
+        console.warn(`[plaid] Balance refresh warning (${errorCode}): ${message}`);
+        return {
+          success: false,
+          accountsUpdated: 0,
+          warning: message,
+        };
       } else if (error instanceof Error) {
         message = error.message;
       }
-      throw new Error(`Failed to refresh balances: ${message}`);
+      
+      // For unexpected errors, log and return gracefully
+      console.error("Error refreshing balances:", error);
+      return {
+        success: false,
+        accountsUpdated: 0,
+        warning: message,
+      };
     }
   },
 });

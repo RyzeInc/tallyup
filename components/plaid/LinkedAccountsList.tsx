@@ -60,6 +60,7 @@ interface LinkedInstitutionProps {
     lastSyncedAt?: number;
     errorMessage?: string;
     products?: string[];
+    availableProducts?: string[];
   };
   accounts: Array<{
     _id: Id<"plaidAccounts">;
@@ -95,20 +96,26 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
   const handleSync = async () => {
     setIsSyncing(true);
     const results: string[] = [];
-    const errors: string[] = [];
     
     try {
-      // Always sync transactions and balances
+      // Always sync transactions
       const txResult = await syncTransactions({ plaidItemId: item._id });
-      await refreshBalances({ plaidItemId: item._id });
       results.push(`${txResult.added} transaction(s)`);
       
-      // Check which products are enabled for this item
+      // Try to refresh balances (some institutions require extra parameters, so don't fail if this errors)
+      try {
+        await refreshBalances({ plaidItemId: item._id });
+      } catch (balanceErr) {
+        console.warn("Balance refresh skipped:", balanceErr);
+      }
+      
+      // Only sync products that we actually have consent for (in the products array)
+      // available_products shows what COULD be enabled but we don't have access to yet
       const products = item.products || [];
       const hasInvestments = products.includes("investments");
       const hasLiabilities = products.includes("liabilities");
       
-      // Sync investments if enabled
+      // Sync investments only if we have consent
       if (hasInvestments) {
         try {
           const invResult = await syncInvestments({ plaidItemId: item._id });
@@ -125,12 +132,11 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
             results.push(`${invTxCount} investment tx(s)`);
           }
         } catch (invErr) {
-          console.error("Investment sync error:", invErr);
-          errors.push("investments");
+          console.warn("Investment sync skipped:", invErr);
         }
       }
       
-      // Sync liabilities if enabled
+      // Sync liabilities only if we have consent
       if (hasLiabilities) {
         try {
           const liabResult = await syncLiabilities({ plaidItemId: item._id });
@@ -139,18 +145,12 @@ function LinkedInstitution({ item, accounts, onRefresh, onUnlink }: LinkedInstit
             results.push(`${liabTotal} liabilit${liabTotal === 1 ? "y" : "ies"}`);
           }
         } catch (liabErr) {
-          console.error("Liabilities sync error:", liabErr);
-          errors.push("liabilities");
+          console.warn("Liabilities sync skipped:", liabErr);
         }
       }
       
       // Show success message
-      const successMsg = `Synced ${results.join(", ")}`;
-      if (errors.length > 0) {
-        toast.warning(`${successMsg} (failed: ${errors.join(", ")})`);
-      } else {
-        toast.success(successMsg);
-      }
+      toast.success(`Synced ${results.join(", ")}`);
       onRefresh();
     } catch (err) {
       console.error("Sync error:", err);

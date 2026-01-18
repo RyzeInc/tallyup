@@ -215,9 +215,15 @@ export const createPlaidItem = internalMutation({
     institutionName: v.optional(v.string()),
     institutionLogo: v.optional(v.string()),
     institutionColor: v.optional(v.string()),
+    // Products enabled on this item (from /item/get response)
+    products: v.optional(v.array(v.string())),
+    availableProducts: v.optional(v.array(v.string())),
+    billedProducts: v.optional(v.array(v.string())),
+    consentedProducts: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    console.info("[plaid] createPlaidItem: products=", args.products);
     return await ctx.db.insert("plaidItems", {
       userId: args.userId,
       itemId: args.itemId,
@@ -226,6 +232,10 @@ export const createPlaidItem = internalMutation({
       institutionName: args.institutionName,
       institutionLogo: args.institutionLogo,
       institutionColor: args.institutionColor,
+      products: args.products,
+      availableProducts: args.availableProducts,
+      billedProducts: args.billedProducts,
+      consentedProducts: args.consentedProducts,
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -288,6 +298,12 @@ export const createPlaidAccount = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    // Normalize type/subtype to lower-case for consistent querying
+    const storedType = args.type ? args.type.toLowerCase() : args.type;
+    const storedSubtype = args.subtype ? args.subtype.toLowerCase() : args.subtype;
+
+    console.info("[plaid] createPlaidAccount", { plaidAccountId: args.plaidAccountId, type: storedType, subtype: storedSubtype });
+
     return await ctx.db.insert("plaidAccounts", {
       userId: args.userId,
       plaidItemId: args.plaidItemId,
@@ -295,8 +311,8 @@ export const createPlaidAccount = internalMutation({
       plaidAccountId: args.plaidAccountId,
       name: args.name,
       officialName: args.officialName,
-      type: args.type,
-      subtype: args.subtype,
+      type: storedType,
+      subtype: storedSubtype,
       mask: args.mask,
       balanceCurrent: args.balanceCurrent,
       balanceAvailable: args.balanceAvailable,
@@ -388,6 +404,8 @@ export const createTallyUpAccount = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    console.info("[plaid] createTallyUpAccount created", { accountId, userId: args.userId, type: args.type, plaidAccountId: args.plaidAccountId });
 
     if (args.initialBalanceCents !== undefined) {
       await ctx.db.insert("accountSnapshots", {

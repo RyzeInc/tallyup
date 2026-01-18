@@ -44,7 +44,10 @@ export function PlaidLinkButton({
     
     try {
       console.log("[PlaidLink] Creating link token...");
-      const result = await createLinkToken({});
+      // Only request 'transactions' as the primary product - this supports checking, savings, and credit accounts
+      // Investments and liabilities data can be fetched separately for accounts that support them
+      // Requesting multiple products together restricts Link to only show accounts supporting ALL products
+      const result = await createLinkToken({ products: ["transactions"] });
       console.log("[PlaidLink] Link token created:", result.linkToken ? "SUCCESS" : "FAILED");
       setLinkToken(result.linkToken);
     } catch (err) {
@@ -89,7 +92,9 @@ export function PlaidLinkButton({
   // Handle exit
   const handleExit: PlaidLinkOnExit = useCallback(
     (err) => {
-      if (err) {
+      // Note: err can be an empty object {} when user just closes the modal normally
+      // Only log actual errors (objects with properties)
+      if (err && Object.keys(err).length > 0) {
         console.error("Plaid Link error:", err);
       }
       setLinkToken(null);
