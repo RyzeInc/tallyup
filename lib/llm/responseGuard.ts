@@ -54,6 +54,49 @@ function formatList(items: string[]): string {
   return items.map((item, index) => `${index + 1}. ${item}`).join("\n");
 }
 
+function getLastAssistantMessage(packet: CoachContextPacket): string | null {
+  const last = [...packet.recentConversation].reverse().find((entry) => entry.role === "assistant");
+  return last?.content?.trim() ?? null;
+}
+
+function pickNextStep(packet: CoachContextPacket): { action: string; question: string } {
+  const foundation = packet.foundationSnapshot;
+  if (!foundation?.balanceSheet) {
+    return {
+      action: "Share current cash, savings, and investment balances.",
+      question: "What are your current cash, savings, and investment balances?",
+    };
+  }
+  if (!foundation?.debts || foundation.debts.length === 0) {
+    return {
+      action: "List debts with balances, APRs, and minimum payments.",
+      question: "What debts do you have, and what are their balances/APRs/minimums?",
+    };
+  }
+  if (!foundation?.goals || foundation.goals.length === 0) {
+    return {
+      action: "Share your top goals and timelines (what matters most and by when).",
+      question: "What are your top financial goals and timelines?",
+    };
+  }
+  if (!foundation?.riskProfile) {
+    return {
+      action: "Share dependents count and basic insurance coverage status.",
+      question: "Do you have dependents or any insurance coverage gaps I should know about?",
+    };
+  }
+  if (!foundation?.taxProfile) {
+    return {
+      action: "Provide filing status and W-2 vs 1099 mix (high level).",
+      question: "What is your filing status and W-2 vs 1099 mix (high level)?",
+    };
+  }
+  return {
+    action: "Tell me your top focus this week so I can build a short plan.",
+    question: "What feels most urgent right now: spending, debt, or savings?",
+  };
+}
+
 export function applyCoachResponseGuards(
   output: CoachOutput,
   input: { userMessage: string; contextPacket: CoachContextPacket }
@@ -66,6 +109,21 @@ export function applyCoachResponseGuards(
     actions: output.actions.slice(0, 2),
     openQuestions: output.openQuestions.slice(0, 2),
   };
+
+  const lastAssistantMessage = getLastAssistantMessage(input.contextPacket);
+  if (lastAssistantMessage && lastAssistantMessage === assistantMessage.trim()) {
+    const nextStep = pickNextStep(input.contextPacket);
+    return {
+      ...trimmedOutput,
+      assistantMessage: [
+        "Thanks for clarifying — I have that noted.",
+        nextStep.action,
+        nextStep.question,
+      ].join(" "),
+      actions: [nextStep.action],
+      openQuestions: [nextStep.question],
+    };
+  }
 
   if (!needsList) return trimmedOutput;
 

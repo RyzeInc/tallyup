@@ -23,6 +23,11 @@ type ExtractedFacts = {
   incomeCents?: number;
   payCadence?: PayCadence;
   mentionsMortgage?: boolean;
+  mortgageBaseCents?: number;
+  mortgagePaymentCents?: number;
+  mortgageExtraCents?: number;
+  mortgageDueDay?: number;
+  noDebts?: boolean;
   goalMillionaire?: boolean;
 };
 
@@ -47,6 +52,113 @@ function detectPayCadence(text: string): PayCadence | undefined {
   if (lower.includes("monthly")) return "monthly";
   if (lower.includes("irregular") || lower.includes("seasonal")) return "irregular";
   return undefined;
+}
+
+function parseDayOfMonth(text: string): number | null {
+  const numericMatch = text.match(/(?:on|due)\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?/i);
+  if (numericMatch) {
+    const day = Number.parseInt(numericMatch[1], 10);
+    if (Number.isFinite(day) && day >= 1 && day <= 31) return day;
+  }
+
+  const wordMatch = text.match(/(?:on|due)\s+(?:the\s+)?(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|twenty[-\s]?first|twenty[-\s]?second|twenty[-\s]?third|twenty[-\s]?fourth|twenty[-\s]?fifth|twenty[-\s]?sixth|twenty[-\s]?seventh|twenty[-\s]?eighth|twenty[-\s]?ninth|thirtieth|thirty[-\s]?first)/i);
+  if (!wordMatch) return null;
+
+  const normalized = wordMatch[1].replace(/[\s-]+/g, "").toLowerCase();
+  const map: Record<string, number> = {
+    first: 1,
+    second: 2,
+    third: 3,
+    fourth: 4,
+    fifth: 5,
+    sixth: 6,
+    seventh: 7,
+    eighth: 8,
+    ninth: 9,
+    tenth: 10,
+    eleventh: 11,
+    twelfth: 12,
+    thirteenth: 13,
+    fourteenth: 14,
+    fifteenth: 15,
+    sixteenth: 16,
+    seventeenth: 17,
+    eighteenth: 18,
+    nineteenth: 19,
+    twentieth: 20,
+    twentyfirst: 21,
+    twentysecond: 22,
+    twentythird: 23,
+    twentyfourth: 24,
+    twentyfifth: 25,
+    twentysixth: 26,
+    twentyseventh: 27,
+    twentyeighth: 28,
+    twentyninth: 29,
+    thirtieth: 30,
+    thirtyfirst: 31,
+  };
+  return map[normalized] ?? null;
+}
+
+function parseMortgageDetails(message: string): {
+  baseCents?: number;
+  paymentCents?: number;
+  extraCents?: number;
+} {
+  const lower = message.toLowerCase();
+  if (!lower.includes("mortgage") && !lower.includes("principal")) return {};
+
+  let baseCents: number | undefined;
+  let paymentCents: number | undefined;
+  let extraCents: number | undefined;
+
+  const pairedMatch = message.match(
+    /mortgage[^0-9$]*?(?:is|costs|cost|=|at)?\s*([$]?\d[\d,]*(?:\.\d+)?k?)[^0-9$]*?(?:but|and)\s*(?:i\s*)?(?:pay|paying|paid|play)\s*([$]?\d[\d,]*(?:\.\d+)?k?)/i
+  );
+  if (pairedMatch) {
+    const baseValue = parseMoneyToken(pairedMatch[1]);
+    const payValue = parseMoneyToken(pairedMatch[2]);
+    if (baseValue !== null) baseCents = baseValue * 100;
+    if (payValue !== null) paymentCents = payValue * 100;
+  }
+
+  const baseMatch = message.match(
+    /(?:mortgage|it|it's|its)\s*(?:is|=|at)?\s*([$]?\d[\d,]*(?:\.\d+)?k?)\s*(?:in\s*cost|cost|base|principal|a\s*month|per\s*month)?/i
+  );
+  if (!baseCents && baseMatch) {
+    const baseValue = parseMoneyToken(baseMatch[1]);
+    if (baseValue !== null) baseCents = baseValue * 100;
+  }
+
+  const payMatch = message.match(
+    /(?:pay|paying|paid|play)\s*([$]?\d[\d,]*(?:\.\d+)?k?)/i
+  );
+  if (!paymentCents && payMatch) {
+    const payValue = parseMoneyToken(payMatch[1]);
+    if (payValue !== null) paymentCents = payValue * 100;
+  }
+
+  const extraMatch = message.match(/(?:extra|additional)\s*([$]?\d[\d,]*(?:\.\d+)?k?)/i);
+  if (extraMatch) {
+    const extraValue = parseMoneyToken(extraMatch[1]);
+    if (extraValue !== null) extraCents = extraValue * 100;
+  }
+
+  if (paymentCents !== undefined && extraCents !== undefined) {
+    const candidateBase = paymentCents - extraCents;
+    if (candidateBase > 0 && (baseCents === undefined || Math.abs(candidateBase - baseCents) > 50)) {
+      baseCents = candidateBase;
+    }
+  }
+  if (baseCents !== undefined && paymentCents !== undefined && paymentCents > baseCents && extraCents === undefined) {
+    extraCents = paymentCents - baseCents;
+  }
+  if (baseCents !== undefined && extraCents !== undefined && paymentCents === undefined) {
+    paymentCents = baseCents + extraCents;
+  }
+
+  return { baseCents, paymentCents, extraCents };
 }
 
 function extractFacts(messages: string[]): ExtractedFacts {
@@ -76,6 +188,22 @@ function extractFacts(messages: string[]): ExtractedFacts {
     const cadence = detectPayCadence(message);
     if (cadence) facts.payCadence = cadence;
     if (lower.includes("mortgage")) facts.mentionsMortgage = true;
+    const mortgageDetails = parseMortgageDetails(message);
+    if (mortgageDetails.baseCents !== undefined) facts.mortgageBaseCents = mortgageDetails.baseCents;
+    if (mortgageDetails.paymentCents !== undefined) facts.mortgagePaymentCents = mortgageDetails.paymentCents;
+    if (mortgageDetails.extraCents !== undefined) facts.mortgageExtraCents = mortgageDetails.extraCents;
+    const dueDay = parseDayOfMonth(message);
+    if ((facts.mentionsMortgage || lower.includes("mortgage")) && dueDay !== null) {
+      facts.mortgageDueDay = dueDay;
+    }
+    if (
+      lower.includes("no debt") ||
+      lower.includes("no debts") ||
+      lower.includes("don't have any debts") ||
+      lower.includes("do not have any debts")
+    ) {
+      facts.noDebts = true;
+    }
     if (lower.includes("millionaire") || /\b\$?1m\b/.test(lower)) facts.goalMillionaire = true;
   }
   return facts;
@@ -83,6 +211,21 @@ function extractFacts(messages: string[]): ExtractedFacts {
 
 function formatRange(minCents: number, maxCents: number): string {
   return `${formatCents(minCents)}–${formatCents(maxCents)}`;
+}
+
+function formatOrdinal(day: number): string {
+  const remainder100 = day % 100;
+  if (remainder100 >= 11 && remainder100 <= 13) return `${day}th`;
+  switch (day % 10) {
+    case 1:
+      return `${day}st`;
+    case 2:
+      return `${day}nd`;
+    case 3:
+      return `${day}rd`;
+    default:
+      return `${day}th`;
+  }
 }
 
 function buildIntakeFollowup(
@@ -103,14 +246,38 @@ function buildIntakeFollowup(
     knownLines.push(`After-tax income: ${formatCents(facts.incomeCents)} per month.`);
   }
   if (facts.payCadence) knownLines.push(`Pay cadence: ${facts.payCadence}.`);
-  if (facts.mentionsMortgage) knownLines.push("Fixed bill mentioned: mortgage.");
+  if (facts.mortgagePaymentCents !== undefined) {
+    if (facts.mortgageBaseCents !== undefined && facts.mortgagePaymentCents > facts.mortgageBaseCents) {
+      const extra = facts.mortgageExtraCents ?? (facts.mortgagePaymentCents - facts.mortgageBaseCents);
+      knownLines.push(
+        `Mortgage payment: ${formatCents(facts.mortgagePaymentCents)} per month (${formatCents(facts.mortgageBaseCents)} base + ${formatCents(extra)} extra principal).`
+      );
+    } else {
+      knownLines.push(`Mortgage payment: ${formatCents(facts.mortgagePaymentCents)} per month.`);
+    }
+  } else if (facts.mentionsMortgage) {
+    knownLines.push("Fixed bill mentioned: mortgage.");
+  }
+  if (facts.noDebts) {
+    knownLines.push("No debts reported (besides mortgage).");
+  }
+  if (facts.mortgageDueDay !== undefined) {
+    knownLines.push(`Mortgage due date: ${formatOrdinal(facts.mortgageDueDay)}.`);
+  }
 
   const missingPrompts: Array<{ action: string; question: string }> = [];
   if (facts.mentionsMortgage) {
-    missingPrompts.push({
-      action: "Share your monthly mortgage amount and due date.",
-      question: "What is your monthly mortgage payment and due date?",
-    });
+    if (facts.mortgagePaymentCents === undefined) {
+      missingPrompts.push({
+        action: "Share your monthly mortgage payment (including any extra principal).",
+        question: "What do you pay toward your mortgage each month?",
+      });
+    } else if (facts.mortgageDueDay === undefined) {
+      missingPrompts.push({
+        action: "Share your mortgage due date (day of month).",
+        question: "What day of the month is your mortgage due?",
+      });
+    }
   }
   if (!facts.payCadence) {
     missingPrompts.push({
@@ -118,7 +285,7 @@ function buildIntakeFollowup(
       question: "What is your pay cadence?",
     });
   }
-  if (needsDebts) {
+  if (needsDebts && !facts.noDebts) {
     missingPrompts.push({
       action: "List debts with balances, APRs, and minimum payments.",
       question: "What debts do you have, and what are their balances/APRs/minimums?",
@@ -191,8 +358,23 @@ function buildIntakeFollowup(
     incomeUpdates.typicalMonthCents = facts.incomeCents;
   }
 
-  const foundationUpdates: CoachFoundationUpdate | undefined =
-    Object.keys(incomeUpdates).length > 0 ? { incomeProfile: incomeUpdates } : undefined;
+  const nextFoundation: CoachFoundationUpdate = {};
+  if (Object.keys(incomeUpdates).length > 0) {
+    nextFoundation.incomeProfile = incomeUpdates;
+  }
+  if (
+    facts.mortgagePaymentCents !== undefined &&
+    (!foundation.fixedObligations || foundation.fixedObligations.length === 0)
+  ) {
+    nextFoundation.fixedObligations = [
+      {
+        name: "Mortgage",
+        amountCents: facts.mortgagePaymentCents,
+        cadence: "monthly",
+      },
+    ];
+  }
+  const foundationUpdates = Object.keys(nextFoundation).length > 0 ? nextFoundation : undefined;
 
   return {
     assistantMessage: assistantMessageParts.join(" "),

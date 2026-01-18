@@ -84,8 +84,11 @@ export const chat: ReturnType<typeof action> = action({
       knowledgeSnippets,
     };
 
-    const { provider, usesExternal } = getCoachProvider();
+    const { provider, usesExternal, selected } = getCoachProvider();
     const systemPrompt = buildCoachSystemPrompt();
+    if (process.env.COACH_DEBUG === "true") {
+      console.info(`[coach.chat] provider=${selected} external=${usesExternal}`);
+    }
 
     if (usesExternal) {
       const budget = await ctx.runMutation(internal.coach_internal.incrementDailyUsage, { userId });
