@@ -19,6 +19,7 @@ async function callGroq(input: CoachProviderInput) {
     body: JSON.stringify({
       model,
       temperature: 0.2,
+      max_tokens: 700,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: input.systemPrompt },

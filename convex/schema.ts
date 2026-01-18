@@ -286,6 +286,8 @@ export default defineSchema({
   coachEvents: defineTable({
     userId: v.string(),
     createdAt: v.number(),
+    userMessage: v.optional(v.string()),
+    assistantMessage: v.optional(v.string()),
     summaryBullets: v.array(v.string()),
     actions: v.array(v.string()),
     openQuestions: v.array(v.string()),

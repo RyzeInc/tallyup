@@ -27,6 +27,11 @@ export type CoachContextPacket = {
   recentSummaries: string[];
   recentActions: string[];
   recentOpenQuestions: string[];
+  recentConversation: Array<{
+    role: "user" | "assistant";
+    content: string;
+    createdAt: number;
+  }>;
 };
 
 export type CoachProviderInput = {

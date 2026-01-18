@@ -6,6 +6,7 @@ import { getCoachProvider } from "../lib/llm";
 import { buildCoachSystemPrompt } from "../lib/llm/prompt";
 import type { CoachOutput } from "../lib/llm/schema";
 import type { CoachContextPacket } from "../lib/llm/types";
+import { applyCoachResponseGuards } from "../lib/llm/responseGuard";
 
 type AuthCtx = { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } };
 
@@ -100,8 +101,11 @@ export const chat: ReturnType<typeof action> = action({
       });
     }
 
+    llmOutput = applyCoachResponseGuards(llmOutput, { userMessage: args.message, contextPacket: packet });
+
     await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
       userId,
+      userMessage: args.message,
       llmOutput,
       contextHash,
     });

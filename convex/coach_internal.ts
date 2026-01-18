@@ -69,6 +69,17 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     .order("desc")
     .take(5);
 
+  const eventsChrono = [...events].reverse();
+  const conversation: CoachContextPacket["recentConversation"] = [];
+  for (const event of eventsChrono) {
+    if (event.userMessage) {
+      conversation.push({ role: "user", content: event.userMessage, createdAt: event.createdAt });
+    }
+    if (event.assistantMessage) {
+      conversation.push({ role: "assistant", content: event.assistantMessage, createdAt: event.createdAt });
+    }
+  }
+
   const recentSummaries = events.flatMap((event) => event.summaryBullets).slice(0, 12);
   const recentActions = events.flatMap((event) => event.actions).slice(0, 12);
   const recentOpenQuestions = events.flatMap((event) => event.openQuestions).slice(0, 12);
@@ -95,6 +106,7 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     recentSummaries,
     recentActions,
     recentOpenQuestions,
+    recentConversation: conversation.slice(-8),
   };
 }
 
@@ -126,7 +138,15 @@ export const getOrBuildContextPacket = internalMutation({
 
     const cached = existing[0];
     if (cached && cached.expiresAt > now) {
-      return { hash: cached.hash, packet: cached.packet as CoachContextPacket };
+      const latestEvent = await ctx.db
+        .query("coachEvents")
+        .withIndex("by_user_createdAt", (q) => q.eq("userId", args.userId))
+        .order("desc")
+        .take(1);
+      const latestEventAt = latestEvent[0]?.createdAt ?? 0;
+      if (latestEventAt <= cached.computedAt) {
+        return { hash: cached.hash, packet: cached.packet as CoachContextPacket };
+      }
     }
 
     const packet = await buildContextPacket(ctx, args.userId);
@@ -154,6 +174,7 @@ export const getOrBuildContextPacket = internalMutation({
 export const storeCoachEvent = internalMutation({
   args: {
     userId: v.string(),
+    userMessage: v.string(),
     llmOutput: v.object({
       assistantMessage: v.string(),
       summaryBullets: v.array(v.string()),
@@ -168,6 +189,8 @@ export const storeCoachEvent = internalMutation({
     await ctx.db.insert("coachEvents", {
       userId: args.userId,
       createdAt: now,
+      userMessage: args.userMessage,
+      assistantMessage: args.llmOutput.assistantMessage,
       summaryBullets: args.llmOutput.summaryBullets,
       actions: args.llmOutput.actions,
       openQuestions: args.llmOutput.openQuestions,

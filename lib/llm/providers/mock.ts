@@ -17,6 +17,37 @@ function formatDate(timestamp: number): string {
 
 function buildMockResponse(input: CoachProviderInput) {
   const { contextPacket } = input;
+  const message = input.message.trim().toLowerCase();
+
+  if (message.includes("ai model") || message.includes("are you an ai")) {
+    return {
+      assistantMessage:
+        "Yes. I am an alpha-safe financial coach. I can help you build budgets and plans using your data in this app.",
+      summaryBullets: ["Confirmed coach role and scope."],
+      actions: ["Share your primary money goal for this month."],
+      openQuestions: ["What do you want to improve first: spending, saving, or debt payoff?"],
+      metricsUsed: ["intake"],
+    };
+  }
+
+  if (message.includes("what information") || message.includes("information do you need")) {
+    return {
+      assistantMessage:
+        "To build a budget and long-term plan, I need your after-tax income, pay schedule, fixed bills, variable spending, debts (balances and rates), savings/investments, emergency fund target, and your time horizon/risk comfort. Share whatever you can.",
+      summaryBullets: [
+        "Need income, bills, variable spend, debts, savings/investments, and goal timeline.",
+      ],
+      actions: [
+        "Share monthly take-home income and pay cadence.",
+        "List fixed bills and debt balances/rates.",
+        "Share current savings/investment totals.",
+      ],
+      openQuestions: [
+        "What is your target timeline for reaching $1M?",
+      ],
+      metricsUsed: ["intake"],
+    };
+  }
   const cashflow = contextPacket.cashflow;
   const topCategory = contextPacket.spendByCategory[0];
   const nextBill = contextPacket.upcomingBills[0];
