@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { resolveCategoryId } from "./categoryResolver";
+import type { Id } from "./_generated/dataModel";
 
 // ============================================
 // TRANSFERS QUERIES & MUTATIONS
@@ -67,6 +69,10 @@ export const createTransfer = mutation({
       v.literal("investment")
     ),
     note: v.optional(v.string()),
+    merchant: v.optional(v.string()),
+    title: v.optional(v.string()),
+    // Category can be either a Convex ID or a category name/slug string
+    category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -79,6 +85,37 @@ export const createTransfer = mutation({
     }
 
     const now = Date.now();
+
+    // Resolve category - can be a Convex ID, category name, or slug
+    let resolvedCategoryId: Id<"categories"> | undefined;
+    let categoryName: string | undefined;
+    if (args.category) {
+      // Try to get as Convex ID first
+      try {
+        const byId = await ctx.db.get(args.category as Id<"categories">);
+        if (byId && byId.userId === userId) {
+          resolvedCategoryId = byId._id;
+          categoryName = byId.name;
+        }
+      } catch {
+        // Not a valid Convex ID, try to resolve as name/slug
+      }
+      
+      // If not found by ID, resolve using the category resolver
+      if (!resolvedCategoryId) {
+        resolvedCategoryId = await resolveCategoryId(
+          ctx,
+          userId,
+          args.category,
+          "expense", // transfers use expense-style categories
+          { createIfMissing: false }
+        );
+        if (resolvedCategoryId) {
+          const cat = await ctx.db.get(resolvedCategoryId);
+          categoryName = cat?.name;
+        }
+      }
+    }
 
     // Create the transfer record
     const transferId = await ctx.db.insert("transfers", {
@@ -94,6 +131,11 @@ export const createTransfer = mutation({
       updatedAt: now,
     });
 
+    // Shared entry fields for both from and to entries
+    const merchant = args.merchant?.trim() || undefined;
+    const title = args.title?.trim() || undefined;
+    const note = args.note?.trim() || undefined;
+
     // Create linked entries for the transfer (outflow and inflow)
     // This enables the transfer to show up in transaction lists
 
@@ -108,7 +150,16 @@ export const createTransfer = mutation({
         accountId: args.fromAccountId,
         transferId,
         isTransferSource: true,
-        category: "Transfer Out",
+        // Category fields - both the ID and name for display
+        categoryId: resolvedCategoryId,
+        category: categoryName,
+        // Propagate merchant/title/note into entries so manual transfers keep their context
+        merchant: merchant || note || undefined,
+        merchantRaw: merchant || note || undefined,
+        title,
+        note,
+        // Tag the entry as a transfer-out so it can be filtered without using category
+        tags: ["transfer_out"],
         excludeFromTotals: true,
         excludeFromBudgets: true,
         ignoredForBudgets: true,
@@ -135,7 +186,15 @@ export const createTransfer = mutation({
         accountId: args.toAccountId,
         transferId,
         isTransferSource: false,
-        category: "Transfer In",
+        // Category fields - both the ID and name for display
+        categoryId: resolvedCategoryId,
+        category: categoryName,
+        // Propagate merchant/title/note into entries so manual transfers keep their context
+        merchant: merchant || note || undefined,
+        merchantRaw: merchant || note || undefined,
+        title,
+        note,
+        tags: ["transfer_in"],
         excludeFromTotals: true,
         excludeFromBudgets: true,
         ignoredForBudgets: true,

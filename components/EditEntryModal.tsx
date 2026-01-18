@@ -115,16 +115,25 @@ export default function EditEntryModal({
   }, []);
   // Previously the modal allowed inline editing; we now use QuickLogForm.
 
-  async function handleDelete() {
-    if (!confirm("Delete this transaction? This cannot be undone.")) return;
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  async function handleDelete() {
+    console.log("[EditEntryModal] Delete button clicked");
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDelete() {
+    console.log("[EditEntryModal] Confirming delete for entry:", entry._id);
+    setShowDeleteConfirm(false);
     setDeleting(true);
     try {
       await deleteEntry({ id: entry._id as Id<"entries"> });
+      console.log("[EditEntryModal] Delete successful");
       toast.success("Entry deleted");
       onDeleted?.();
       onClose();
     } catch (e: unknown) {
+      console.error("[EditEntryModal] Delete failed:", e);
       const message = e instanceof Error ? e.message : "Failed to delete";
       setError(message);
       toast.error("Failed to delete", { description: message });
@@ -249,6 +258,12 @@ export default function EditEntryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop overlay */}
+      <div 
+        className="absolute inset-0 bg-black/40" 
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         role="dialog"
         aria-modal="true"
@@ -302,6 +317,41 @@ export default function EditEntryModal({
           />
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDeleteConfirm(false)} />
+          <div 
+            className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+              Delete Transaction?
+            </h3>
+            <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--danger)", color: "white" }}
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -56,6 +56,7 @@ export type Event =
   | { type: "SET_AMOUNT"; amount: string }
   | { type: "SET_DATE"; dateISO: string }
   | { type: "SET_MERCHANT"; merchant: string }
+  | { type: "SET_TITLE"; title: string }
   | { type: "SET_NOTE"; note: string }
   | { type: "SET_CATEGORY"; categoryId?: string }
   | { type: "SET_CONTEXT_SCOPE"; scope?: ContextScope }
@@ -82,6 +83,7 @@ export function createInitialState(args: InitArgs): QuickLogState {
     amount: args.existing?.amount ?? "",
     dateISO: args.existing?.dateISO ?? args.nowDateISO,
     merchant: args.existing?.merchant ?? "",
+    title: args.existing?.title ?? "",
     note: args.existing?.note ?? "",
     categoryId: args.existing?.categoryId,
     contextScope: args.existing?.contextScope,
@@ -198,6 +200,13 @@ export function reducer(state: QuickLogState, event: Event): QuickLogState {
         ...state,
         dirty: true,
         draft: { ...state.draft, merchant: event.merchant },
+      };
+
+    case "SET_TITLE":
+      return {
+        ...state,
+        dirty: true,
+        draft: { ...state.draft, title: event.title },
       };
 
     case "SET_NOTE":

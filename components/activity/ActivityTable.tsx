@@ -13,6 +13,50 @@ import { useRouter } from "next/navigation";
 // Swipe threshold in px
 const SWIPE_THRESHOLD = 80;
 
+// Helper to convert snake_case tags to display format (e.g., "transfer_in" -> "Transfer In")
+function formatTagForDisplay(tag: string): string {
+  return tag
+    .split("_")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// Column definitions
+type ColumnKey = "date" | "category" | "amount" | "merchant" | "title" | "account" | "context" | "intent" | "tags" | "recurring" | "goal" | "note";
+
+interface ColumnDef {
+  key: ColumnKey;
+  label: string;
+  incomeLabel?: string;
+  width: number;
+  minWidth?: number;
+  flex?: number; // If set, column will grow to fill space
+  sortable: boolean;
+  align?: "left" | "right" | "center";
+}
+
+const ALL_COLUMNS: ColumnDef[] = [
+  { key: "date", label: "Date", width: 80, sortable: true },
+  { key: "category", label: "Category", incomeLabel: "Source", width: 120, flex: 1, sortable: true },
+  { key: "amount", label: "Amount", width: 90, sortable: true, align: "right" },
+  { key: "merchant", label: "Merchant", width: 130, flex: 1, sortable: true },
+  { key: "account", label: "Payment", incomeLabel: "Account", width: 110, flex: 1, sortable: true },
+  { key: "title", label: "Title", width: 110, flex: 1, sortable: true },
+  { key: "context", label: "Context", width: 90, sortable: true },
+  { key: "intent", label: "Intent", width: 90, sortable: true },
+  { key: "tags", label: "Tags", width: 100, sortable: true },
+  { key: "recurring", label: "Recurring", width: 32, sortable: false, align: "center" },
+  { key: "goal", label: "Goal", width: 90, sortable: true },
+  { key: "note", label: "Note", width: 130, flex: 1, sortable: true },
+];
+
+// Default column orders for different views
+const COMPACT_COLUMNS: ColumnKey[] = ["date", "category", "amount", "merchant", "account", "title"];
+const EXTENDED_COLUMNS: ColumnKey[] = ["date", "category", "amount", "merchant", "account", "title", "context", "intent", "tags", "recurring", "goal", "note"];
+
+const STORAGE_KEY_COMPACT = "tallyup.activityTable.compactColumns";
+const STORAGE_KEY_EXTENDED = "tallyup.activityTable.extendedColumns";
+
 export default function ActivityTable({
   entries = [],
   viewMode = "cards",
@@ -24,9 +68,10 @@ export default function ActivityTable({
   onSelectModeChange,
   hasMore,
   onLoadMore,
+  onSortChange,
 }: {
   entries?: Doc<"entries">[];
-  viewMode?: "cards" | "table";
+  viewMode?: "cards" | "table" | "extended";
   typeFilter?: "all" | "expense" | "income";
   onDelete?: (id: Id<"entries">) => void;
   onSavePattern?: (entry: Doc<"entries">) => void;
@@ -35,6 +80,7 @@ export default function ActivityTable({
   onSelectModeChange?: (mode: boolean) => void;
   hasMore?: boolean;
   onLoadMore?: () => void;
+  onSortChange?: (column: string | null, direction: "asc" | "desc" | null) => void;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -87,6 +133,75 @@ export default function ActivityTable({
     const account = accounts.find((a) => a._id === accountId);
     return account?.name ?? null;
   }, [accounts]);
+
+  // Column order state with localStorage persistence
+  const [compactColumnOrder, setCompactColumnOrder] = useState<ColumnKey[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_COMPACT);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return COMPACT_COLUMNS;
+  });
+
+  const [extendedColumnOrder, setExtendedColumnOrder] = useState<ColumnKey[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_EXTENDED);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return EXTENDED_COLUMNS;
+  });
+
+  // Persist column orders
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_COMPACT, JSON.stringify(compactColumnOrder));
+    } catch {}
+  }, [compactColumnOrder]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_EXTENDED, JSON.stringify(extendedColumnOrder));
+    } catch {}
+  }, [extendedColumnOrder]);
+
+  // Get current column order based on view mode
+  const currentColumnOrder = viewMode === "extended" ? extendedColumnOrder : compactColumnOrder;
+  const setCurrentColumnOrder = viewMode === "extended" ? setExtendedColumnOrder : setCompactColumnOrder;
+
+  // Drag and drop state
+  const [draggedColumn, setDraggedColumn] = useState<ColumnKey | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<ColumnKey | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, columnKey: ColumnKey) => {
+    setDraggedColumn(columnKey);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, columnKey: ColumnKey) => {
+    e.preventDefault();
+    if (draggedColumn && draggedColumn !== columnKey) {
+      setDragOverColumn(columnKey);
+    }
+  };
+
+  const handleDragEnd = () => {
+    if (draggedColumn && dragOverColumn && draggedColumn !== dragOverColumn) {
+      const newOrder = [...currentColumnOrder];
+      const fromIndex = newOrder.indexOf(draggedColumn);
+      const toIndex = newOrder.indexOf(dragOverColumn);
+      if (fromIndex !== -1 && toIndex !== -1) {
+        newOrder.splice(fromIndex, 1);
+        newOrder.splice(toIndex, 0, draggedColumn);
+        setCurrentColumnOrder(newOrder);
+      }
+    }
+    setDraggedColumn(null);
+    setDragOverColumn(null);
+  };
   
   // Selection mode state - use external control if provided
   const [internalSelectMode, setInternalSelectMode] = useState(false);
@@ -97,6 +212,97 @@ export default function ActivityTable({
     () => Object.keys(selected).filter((k) => selected[k as Id<"entries">]) as Id<"entries">[],
     [selected]
   );
+
+  // Sorting state: column key and direction
+  type SortDirection = "asc" | "desc" | null;
+  type SortColumn = ColumnKey | null;
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
+  // Cycle through sort states: null -> asc -> desc -> null
+  const handleColumnSort = (column: SortColumn) => {
+    let newColumn: SortColumn = column;
+    let newDirection: SortDirection;
+    
+    if (sortColumn !== column) {
+      newDirection = "asc";
+    } else if (sortDirection === "asc") {
+      newDirection = "desc";
+    } else if (sortDirection === "desc") {
+      newColumn = null;
+      newDirection = null;
+    } else {
+      newDirection = "asc";
+    }
+    
+    setSortColumn(newColumn);
+    setSortDirection(newDirection);
+    onSortChange?.(newColumn, newDirection);
+  };
+
+  // Sort entries based on current sort state
+  const sortedEntries = useMemo(() => {
+    if (!sortColumn || !sortDirection) return entries;
+
+    return [...entries].sort((a, b) => {
+      let aVal: string | number = "";
+      let bVal: string | number = "";
+
+      switch (sortColumn) {
+        case "date":
+          aVal = a.date;
+          bVal = b.date;
+          break;
+        case "category":
+          aVal = (getCategoryDisplayName(a.categoryId ?? a.category ?? a.bucket, allCustomCategories) ?? "").toLowerCase();
+          bVal = (getCategoryDisplayName(b.categoryId ?? b.category ?? b.bucket, allCustomCategories) ?? "").toLowerCase();
+          break;
+        case "amount":
+          aVal = a.amountCents;
+          bVal = b.amountCents;
+          break;
+        case "merchant":
+          aVal = (a.merchant ?? "").toLowerCase();
+          bVal = (b.merchant ?? "").toLowerCase();
+          break;
+        case "title":
+          aVal = ((a as Doc<"entries"> & { title?: string }).title ?? "").toLowerCase();
+          bVal = ((b as Doc<"entries"> & { title?: string }).title ?? "").toLowerCase();
+          break;
+        case "account":
+          aVal = (getAccountName(a.accountId as string | undefined) ?? a.methodOrAccount ?? "").toLowerCase();
+          bVal = (getAccountName(b.accountId as string | undefined) ?? b.methodOrAccount ?? "").toLowerCase();
+          break;
+        case "context":
+          aVal = (a.contextTags ?? []).join(",").toLowerCase();
+          bVal = (b.contextTags ?? []).join(",").toLowerCase();
+          break;
+        case "intent":
+          aVal = (a.intentTags ?? []).join(",").toLowerCase();
+          bVal = (b.intentTags ?? []).join(",").toLowerCase();
+          break;
+        case "tags":
+          aVal = (a.tags ?? []).join(",").toLowerCase();
+          bVal = (b.tags ?? []).join(",").toLowerCase();
+          break;
+        case "goal":
+          aVal = (getGoalName(a.goalId as string | undefined) ?? "").toLowerCase();
+          bVal = (getGoalName(b.goalId as string | undefined) ?? "").toLowerCase();
+          break;
+        case "note":
+          aVal = (a.note ?? "").toLowerCase();
+          bVal = (b.note ?? "").toLowerCase();
+          break;
+      }
+
+      if (typeof aVal === "number" && typeof bVal === "number") {
+        return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+      }
+      
+      const comparison = String(aVal).localeCompare(String(bVal));
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [entries, sortColumn, sortDirection, allCustomCategories, getAccountName, getGoalName]);
   
   const bulkMarkReviewed = useMutation(api.entries.bulkMarkReviewed);
   const updateEntry = useMutation(api.entries.updateEntry);
@@ -293,21 +499,21 @@ export default function ActivityTable({
         </div>
       )}
 
-      {/* Transaction List - Table View */}
-      {viewMode === "table" && (
+      {/* Transaction List - Table View (compact or extended) */}
+      {(viewMode === "table" || viewMode === "extended") && (
         <div
-          className="rounded-xl overflow-y-auto overflow-x-auto min-h-0"
+          className="rounded-xl overflow-y-auto overflow-x-auto min-h-0 w-full"
           style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
         >
-          {/* Table Header - columns vary by typeFilter */}
+          {/* Table Header - draggable, sortable columns */}
           <div
-            className="flex items-center min-w-max sticky top-0 z-10"
+            className="flex items-center w-full sticky top-0 z-10"
             style={{ 
-              gap: 8,
-              padding: "12px 12px 8px",
+              gap: 12,
+              padding: "12px 16px 8px",
               backgroundColor: "var(--surface-subtle)", 
               borderBottom: "1px solid var(--border)",
-              fontSize: "0.8125rem",
+              fontSize: "0.875rem",
               fontWeight: 600,
               color: "var(--text-tertiary)",
               textTransform: "uppercase",
@@ -315,21 +521,73 @@ export default function ActivityTable({
             }}
           >
             {selectMode && <div style={{ width: 20, flexShrink: 0 }} />}
-            <div style={{ width: 72, flexShrink: 0 }}>Date</div>
-            <div style={{ width: 110, flexShrink: 0 }}>{typeFilter === "income" ? "Source" : "Category"}</div>
-            <div style={{ width: 80, flexShrink: 0, textAlign: "right" }}>Amount</div>
-            <div style={{ width: 120, flexShrink: 0 }}>{typeFilter === "income" ? "Title" : "Merchant"}</div>
-            <div style={{ width: 120, flexShrink: 0 }}>Note</div>
-            <div style={{ width: 100, flexShrink: 0 }}>{typeFilter === "income" ? "Account" : "Payment"}</div>
-            <div style={{ width: 80, flexShrink: 0 }}>Context</div>
-            <div style={{ width: 80, flexShrink: 0 }}>Intent</div>
-            <div style={{ width: 90, flexShrink: 0 }}>Tags</div>
-            <div style={{ width: 28, flexShrink: 0, textAlign: "center" }} title="Recurring">
-              <Lucide.Repeat className="h-3.5 w-3.5 inline" />
-            </div>
-            <div style={{ width: 80, flexShrink: 0 }}>Goal</div>
+            {currentColumnOrder.map((columnKey) => {
+              const colDef = ALL_COLUMNS.find(c => c.key === columnKey);
+              if (!colDef) return null;
+              
+              const label = typeFilter === "income" && colDef.incomeLabel ? colDef.incomeLabel : colDef.label;
+              const isDragging = draggedColumn === columnKey;
+              const isDragOver = dragOverColumn === columnKey;
+              
+              if (colDef.key === "recurring") {
+                return (
+                  <div
+                    key={columnKey}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, columnKey)}
+                    onDragOver={(e) => handleDragOver(e, columnKey)}
+                    onDragEnd={handleDragEnd}
+                    style={{ 
+                      minWidth: colDef.width, 
+                      flex: colDef.flex ? `${colDef.flex} 1 0%` : "0 0 auto",
+                      textAlign: "center",
+                      opacity: isDragging ? 0.5 : 1,
+                      borderLeft: isDragOver ? "2px solid var(--primary)" : "none",
+                      cursor: "grab",
+                    }} 
+                    title="Recurring"
+                  >
+                    <Lucide.Repeat className="h-4 w-4 inline" />
+                  </div>
+                );
+              }
+              
+              return (
+                <button
+                  key={columnKey}
+                  type="button"
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, columnKey)}
+                  onDragOver={(e) => handleDragOver(e, columnKey)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => colDef.sortable && handleColumnSort(columnKey)}
+                  className={`flex items-center gap-1 ${colDef.align === "right" ? "justify-end" : ""} hover:text-[var(--text)] transition-colors`}
+                  style={{ 
+                    minWidth: colDef.width, 
+                    flex: colDef.flex ? `${colDef.flex} 1 0%` : "0 0 auto",
+                    textAlign: colDef.align || "left",
+                    background: "none", 
+                    border: "none", 
+                    padding: 0, 
+                    cursor: "grab", 
+                    color: "inherit", 
+                    textTransform: "inherit", 
+                    letterSpacing: "inherit", 
+                    fontWeight: "inherit", 
+                    fontSize: "inherit",
+                    opacity: isDragging ? 0.5 : 1,
+                    borderLeft: isDragOver ? "2px solid var(--primary)" : "none",
+                  }}
+                >
+                  {label}
+                  {sortColumn === columnKey && colDef.sortable && (
+                    sortDirection === "asc" ? <Lucide.ArrowUp className="h-3 w-3" /> : <Lucide.ArrowDown className="h-3 w-3" />
+                  )}
+                </button>
+              );
+            })}
           </div>
-          {entries.map((r, i) => {
+          {sortedEntries.map((r, i) => {
             const isTransfer = r.type === "transfer";
             const isIncome = r.type === "income";
             const isTransferIn = isTransfer && r.isTransferSource === false;
@@ -351,13 +609,109 @@ export default function ActivityTable({
             const intentTags = r.intentTags ?? [];
             const otherTags = r.tags ?? [];
             
+            // Cell renderer
+            const renderCell = (columnKey: ColumnKey) => {
+              const colDef = ALL_COLUMNS.find(c => c.key === columnKey);
+              if (!colDef) return null;
+              
+              const baseStyle: React.CSSProperties = { 
+                minWidth: colDef.width, 
+                flex: colDef.flex ? `${colDef.flex} 1 0%` : "0 0 auto",
+                overflow: "hidden", 
+                textOverflow: "ellipsis", 
+                whiteSpace: "nowrap",
+                textAlign: colDef.align || "left",
+              };
+              
+              switch (columnKey) {
+                case "date":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.875rem", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
+                      {new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </div>
+                  );
+                case "category":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.9375rem", fontWeight: 600, color: "var(--text)" }}>
+                      {categoryLabel}
+                    </div>
+                  );
+                case "amount":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.9375rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: amountColor }}>
+                      {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
+                    </div>
+                  );
+                case "merchant":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.875rem", color: "var(--text-secondary)" }}>
+                      {r.merchant || "—"}
+                    </div>
+                  );
+                case "account":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>
+                      {accountName}
+                    </div>
+                  );
+                case "title":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.875rem", color: "var(--text-secondary)" }}>
+                      {(r as Doc<"entries"> & { title?: string }).title || "—"}
+                    </div>
+                  );
+                case "context":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>
+                      {contextTags.length > 0 ? contextTags.slice(0, 2).map(formatTagForDisplay).join(", ") : "—"}
+                    </div>
+                  );
+                case "intent":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>
+                      {intentTags.length > 0 ? intentTags.slice(0, 2).map(formatTagForDisplay).join(", ") : "—"}
+                    </div>
+                  );
+                case "tags":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>
+                      {otherTags.length > 0 ? otherTags.slice(0, 2).map(formatTagForDisplay).join(", ") : "—"}
+                    </div>
+                  );
+                case "recurring":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, textAlign: "center" }}>
+                      {r.recurringRuleId ? (
+                        <Lucide.Check className="h-4 w-4 inline" style={{ color: "var(--success)" }} />
+                      ) : (
+                        <span style={{ color: "var(--text-tertiary)", fontSize: "0.8125rem" }}>—</span>
+                      )}
+                    </div>
+                  );
+                case "goal":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.8125rem", color: goalName ? "var(--primary)" : "var(--text-tertiary)" }}>
+                      {goalName || "—"}
+                    </div>
+                  );
+                case "note":
+                  return (
+                    <div key={columnKey} style={{ ...baseStyle, fontSize: "0.875rem", color: "var(--text-secondary)" }}>
+                      {r.note || "—"}
+                    </div>
+                  );
+                default:
+                  return null;
+              }
+            };
+            
             return (
               <div
                 key={r._id}
-                className={`flex items-center min-w-max cursor-pointer hover:bg-[var(--surface-subtle)] transition-colors ${i > 0 ? "border-t" : ""}`}
+                className={`flex items-center w-full cursor-pointer hover:bg-[var(--surface-subtle)] transition-colors ${i > 0 ? "border-t" : ""}`}
                 style={{ 
-                  gap: 8,
-                  padding: "8px 12px",
+                  gap: 12,
+                  padding: "10px 16px",
                   borderColor: "var(--border)",
                 }}
                 onClick={() => {
@@ -379,74 +733,8 @@ export default function ActivityTable({
                   />
                 )}
                 
-                {/* Date */}
-                <div style={{ width: 72, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
-                  {new Date(r.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </div>
-                
-                {/* Category/Source */}
-                <div style={{ width: 110, flexShrink: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {categoryLabel}
-                </div>
-                
-                {/* Amount */}
-                <div
-                  style={{ 
-                    width: 80, 
-                    flexShrink: 0, 
-                    textAlign: "right", 
-                    fontSize: "0.875rem", 
-                    fontWeight: 700, 
-                    fontVariantNumeric: "tabular-nums",
-                    color: amountColor,
-                  }}
-                >
-                  {amountPrefix}{centsToDollars(Math.abs(r.amountCents))}
-                </div>
-                
-                {/* Merchant/Title */}
-                <div style={{ width: 120, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {r.merchant || "—"}
-                </div>
-                
-                {/* Note */}
-                <div style={{ width: 120, flexShrink: 0, fontSize: "0.8125rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {r.note || "—"}
-                </div>
-                
-                {/* Account/Payment Method */}
-                <div style={{ width: 100, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {accountName}
-                </div>
-                
-                {/* Context Tags */}
-                <div style={{ width: 80, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {contextTags.length > 0 ? contextTags.slice(0, 2).join(", ") : "—"}
-                </div>
-                
-                {/* Intent Tags */}
-                <div style={{ width: 80, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {intentTags.length > 0 ? intentTags.slice(0, 2).join(", ") : "—"}
-                </div>
-                
-                {/* Other Tags */}
-                <div style={{ width: 90, flexShrink: 0, fontSize: "0.75rem", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {otherTags.length > 0 ? otherTags.slice(0, 2).join(", ") : "—"}
-                </div>
-                
-                {/* Recurring indicator */}
-                <div style={{ width: 28, flexShrink: 0, textAlign: "center" }}>
-                  {r.recurringRuleId ? (
-                    <Lucide.Check className="h-4 w-4 inline" style={{ color: "var(--success)" }} />
-                  ) : (
-                    <span style={{ color: "var(--text-tertiary)", fontSize: "0.75rem" }}>—</span>
-                  )}
-                </div>
-                
-                {/* Goal */}
-                <div style={{ width: 80, flexShrink: 0, fontSize: "0.75rem", color: goalName ? "var(--primary)" : "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {goalName || "—"}
-                </div>
+                {/* Render columns in order */}
+                {currentColumnOrder.map(renderCell)}
               </div>
             );
           })}
@@ -653,7 +941,7 @@ export default function ActivityTable({
                             className="inline-block h-1.5 w-1.5 rounded-full mr-1"
                             style={{ backgroundColor: "var(--accent)" }}
                           />
-                          <span className="text-[11px]">{tag}</span>
+                          <span className="text-[11px]">{formatTagForDisplay(tag)}</span>
                         </span>
                       ))}
                     </>

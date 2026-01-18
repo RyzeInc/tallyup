@@ -1,7 +1,7 @@
 "use client";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc, Id } from "convex/_generated/dataModel";
@@ -112,15 +112,44 @@ export default function AccountsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
-  // Queries
+  // Queries - use getAccountsOverview to include balance snapshots
+  // Initialize 'now' and allow explicit refresh via `setNow`
+  const [now, setNow] = useState(() => Date.now());
+  const startDate = useMemo(() => now - 30 * 24 * 60 * 60 * 1000, [now]); // 30 days ago for change calculation
+  const accountsOverview = useQuery(api.accounts.getAccountsOverview, {
+    startDate,
+    endDate: now,
+  });
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  // When accountsOverview updates, stop the refreshing indicator
+  useEffect(() => {
+    if (refreshing) setRefreshing(false);
+  }, [accountsOverview]);
+
+  // Also fetch all accounts including archived for toggle
   const rawAccounts = useQuery(api.accounts.listAccounts, {
     includeArchived: showHidden || showClosed,
   }) as BackendAccount[] | undefined;
 
-  const accounts = useMemo(
-    () => (rawAccounts ?? []).map(mapBackendAccount),
-    [rawAccounts]
-  );
+  // Map accounts with balance data from overview
+  const accounts = useMemo(() => {
+    if (!rawAccounts) return [];
+    const overviewAccounts = accountsOverview?.accounts ?? [];
+    
+    return rawAccounts.map((account) => {
+      // Find matching account in overview to get balance data
+      const enriched = overviewAccounts.find((a) => a._id === account._id);
+      const latestSnapshot = enriched?.latestSnapshot;
+      
+      return {
+        ...mapBackendAccount(account),
+        balanceCurrentCents: latestSnapshot?.balance,
+        balanceAsOf: latestSnapshot?.asOf,
+      };
+    });
+  }, [rawAccounts, accountsOverview]);
 
   // Plaid queries
   const plaidItems = useQuery(api.plaid.listPlaidItems);
@@ -134,6 +163,9 @@ export default function AccountsPage() {
   const deleteAccount = useMutation(api.accounts.deleteAccount);
   const addSnapshot = useMutation(api.accounts.addAccountSnapshot);
   const [deleting, setDeleting] = useState(false);
+
+  // Delete confirmation state
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState<"idle" | "confirm" | "askTxns">("idle");
 
   function errorMessage(error: unknown): string | undefined {
     if (error instanceof Error) return error.message;
@@ -178,22 +210,19 @@ export default function AccountsPage() {
     return groups;
   }, [accounts]);
 
-  // Calculate totals
+  // Calculate totals - use the authoritative totals from getAccountsOverview
   const totals = useMemo(() => {
-    if (!accounts) return { assets: 0, liabilities: 0, netWorth: 0 };
-    let assets = 0;
-    let liabilities = 0;
-    for (const acc of accounts) {
-      if (acc.excludeFromNetWorth || acc.status !== "active") continue;
-      const balance = acc.balanceCurrentCents ?? 0;
-      if (acc.accountType === "credit_card" || acc.accountType === "loan") {
-        liabilities += Math.abs(balance);
-      } else {
-        assets += balance;
-      }
-    }
-    return { assets, liabilities, netWorth: assets - liabilities };
-  }, [accounts]);
+    if (!accountsOverview?.totals) return { assets: 0, liabilities: 0, netWorth: 0, asOf: null };
+    const { assets, debt, netWorth, asOf, assetsChangePct, debtChangePct } = accountsOverview.totals;
+    return {
+      assets,
+      liabilities: debt,
+      netWorth,
+      asOf,
+      assetsChangePct,
+      debtChangePct,
+    };
+  }, [accountsOverview]);
 
   function resetCreateForm() {
     setCreateName("");
@@ -220,6 +249,10 @@ export default function AccountsPage() {
       toast.error("Account name is required");
       return;
     }
+    if (!createInstitution.trim()) {
+      toast.error("Institution is required");
+      return;
+    }
     setCreating(true);
     try {
       const balanceCents = createBalance ? Math.round(parseFloat(createBalance) * 100) : 0;
@@ -227,9 +260,10 @@ export default function AccountsPage() {
       await createAccount({
         name: createName.trim(),
         type: ACCOUNT_TYPE_TO_BACKEND[createType],
-        institutionName: createInstitution.trim() || undefined,
+        institutionName: createInstitution.trim(),
         creditLimit: creditLimitCents,
         initialBalance: balanceCents,
+        asOf: now,
       });
       toast.success("Account created");
       setShowCreate(false);
@@ -311,9 +345,22 @@ export default function AccountsPage() {
             Net Worth
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold" style={{ color: "var(--text)" }}>
-              {formatMoney(totals.netWorth)}
-            </span>
+            <button
+              onClick={() => {
+                setRefreshing(true);
+                setNow(Date.now());
+              }}
+              title={refreshing ? "Refreshing..." : "Click to refresh net worth"}
+              className="text-left"
+              style={{ background: "none", border: "none", padding: 0 }}
+            >
+              <span className="text-3xl font-bold" style={{ color: "var(--text)", cursor: "pointer" }}>
+                {formatMoney(totals.netWorth)}
+              </span>
+            </button>
+            {refreshing && (
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Refreshing…</span>
+            )}
           </div>
           <div className="flex gap-4 mt-3 text-sm">
             <div>
@@ -835,20 +882,7 @@ export default function AccountsPage() {
                 {/* Delete Account */}
                 <div className="pt-4 mt-4 border-t" style={{ borderColor: "var(--border)" }}>
                   <button
-                    onClick={async () => {
-                      if (!editingAccount) return;
-                      if (!confirm(`Are you sure you want to delete "${editingAccount.name}"? This cannot be undone.`)) return;
-                      setDeleting(true);
-                      try {
-                        await deleteAccount({ id: editingAccount._id });
-                        toast.success("Account deleted");
-                        setEditingAccount(null);
-                      } catch (e: unknown) {
-                        toast.error("Failed to delete account", { description: errorMessage(e) });
-                      } finally {
-                        setDeleting(false);
-                      }
-                    }}
+                    onClick={() => setDeleteConfirmStep("confirm")}
                     disabled={deleting}
                     className="w-full py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
                     style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
@@ -856,9 +890,120 @@ export default function AccountsPage() {
                     {deleting ? "Deleting..." : "Delete Account"}
                   </button>
                   <p className="text-xs text-center mt-2" style={{ color: "var(--text-tertiary)" }}>
-                    Only accounts without transactions can be deleted. Plaid-linked accounts must be unlinked first.
+                    Archiving is reversible within 14 days. Plaid-linked accounts must be unlinked before permanent removal.
                   </p>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Dialog - Step 1 */}
+        {deleteConfirmStep === "confirm" && editingAccount && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60" onClick={() => setDeleteConfirmStep("idle")} />
+            <div 
+              className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+              style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+                Archive Account?
+              </h3>
+              <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+                Are you sure you want to archive &quot;{editingAccount.name}&quot;? It will be permanently deleted after 14 days.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDeleteConfirmStep("idle")}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                  style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setDeleteConfirmStep("askTxns")}
+                  className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                  style={{ backgroundColor: "var(--danger)", color: "white" }}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Dialog - Step 2: Ask about transactions */}
+        {deleteConfirmStep === "askTxns" && editingAccount && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60" onClick={() => setDeleteConfirmStep("idle")} />
+            <div 
+              className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+              style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+                Archive Transactions Too?
+              </h3>
+              <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+                Also archive all transactions associated with this account?
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={async () => {
+                    setDeleteConfirmStep("idle");
+                    setDeleting(true);
+                    try {
+                      const res = await deleteAccount({ id: editingAccount._id as Id<"accounts">, deleteTransactions: true });
+                      if (res && res.archived) {
+                        toast.success("Account archived — it will be permanently deleted in 14 days");
+                      } else {
+                        toast.success("Account deleted");
+                      }
+                      setEditingAccount(null);
+                    } catch (e: unknown) {
+                      const msg = errorMessage(e);
+                      toast.error("Failed to delete account", { description: msg });
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  disabled={deleting}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                  style={{ backgroundColor: "var(--danger)", color: "white" }}
+                >
+                  Yes, Archive Transactions
+                </button>
+                <button
+                  onClick={async () => {
+                    setDeleteConfirmStep("idle");
+                    setDeleting(true);
+                    try {
+                      const res = await deleteAccount({ id: editingAccount._id as Id<"accounts"> });
+                      if (res && res.archived) {
+                        toast.success("Account archived — it will be permanently deleted in 14 days");
+                      } else {
+                        toast.success("Account deleted");
+                      }
+                      setEditingAccount(null);
+                    } catch (e: unknown) {
+                      const msg = errorMessage(e);
+                      toast.error("Failed to delete account", { description: msg });
+                    } finally {
+                      setDeleting(false);
+                    }
+                  }}
+                  disabled={deleting}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                  style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+                >
+                  No, Keep Transactions
+                </button>
+                <button
+                  onClick={() => setDeleteConfirmStep("idle")}
+                  className="w-full py-2.5 rounded-lg text-sm font-medium"
+                  style={{ color: "var(--text-secondary)" }}
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           </div>

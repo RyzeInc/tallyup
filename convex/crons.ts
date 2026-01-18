@@ -10,4 +10,12 @@ crons.interval(
   {}
 );
 
+// Purge accounts that were archived more than 14 days ago (runs daily)
+crons.interval(
+  "purge_archived_accounts",
+  { minutes: 60 * 24 },
+  internal.accounts.purgeArchivedAccounts,
+  {}
+);
+
 export default crons;

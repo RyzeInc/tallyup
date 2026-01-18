@@ -101,6 +101,7 @@ export default function TransactionSheet({
   const [toAccountId, setToAccountId] = useState<Id<"accounts"> | "">("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const amountInputRef = useRef<HTMLInputElement>(null);
   const logStartRef = useRef<number | null>(null);
   const usedSuggestionRef = useRef(false);
@@ -351,14 +352,23 @@ export default function TransactionSheet({
 
   async function handleDelete() {
     if (!entry) return;
-    if (!confirm("Delete this transaction? This cannot be undone.")) return;
+    console.log("[TransactionSheet] Delete button clicked");
+    setShowDeleteConfirm(true);
+  }
+
+  async function confirmDelete() {
+    if (!entry) return;
+    console.log("[TransactionSheet] Confirming delete for entry:", entry._id);
+    setShowDeleteConfirm(false);
     setSaving(true);
     try {
       await deleteEntry({ id: entry._id });
+      console.log("[TransactionSheet] Delete successful");
       toast.success("Transaction deleted");
       onDeleted?.();
       onClose();
     } catch (e: unknown) {
+      console.error("[TransactionSheet] Delete failed:", e);
       const message = e instanceof Error ? e.message : "Failed to delete";
       setError(message);
     } finally {
@@ -648,6 +658,41 @@ export default function TransactionSheet({
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDeleteConfirm(false)} />
+          <div 
+            className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+              Delete Transaction?
+            </h3>
+            <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--danger)", color: "white" }}
+              >
+                {saving ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

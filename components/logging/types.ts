@@ -64,7 +64,8 @@ export type TxDraft = {
   type: TxType;
   amount: string; // keep as string while editing
   dateISO: string; // YYYY-MM-DD
-  merchant?: string;
+  merchant?: string; // Who you paid (e.g., Uber, Walmart)
+  title?: string; // What it was for (e.g., Groceries, Lunch with team)
   note?: string;
 
   categoryId?: string;

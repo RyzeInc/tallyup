@@ -129,6 +129,9 @@ export default function LogPage() {
           toAccountId: draft.account.toAccountId ?? undefined,
           transferType: "internal",
           note: draft.note?.trim() || undefined,
+          merchant: draft.merchant?.trim() || undefined,
+          title: draft.title?.trim() || undefined,
+          category: draft.categoryId || undefined,
         });
         quickLog.showToast("Saved: Transfer");
         return { ok: true, txId: res.id };
@@ -168,6 +171,7 @@ export default function LogPage() {
         type: entryType,
         categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
         note: draft.note?.trim() || undefined,
+        title: draft.title?.trim() || undefined,
         merchant: draft.merchant?.trim() || undefined,
         methodOrAccount: draft.account.method?.trim() || undefined,
         amountCents,

@@ -9,6 +9,7 @@ import {
   TypeToggle,
   AmountInput,
   MerchantInput,
+  TitleInput,
   DateButton,
   CategoryField,
   DetailsExpander,
@@ -123,9 +124,10 @@ export function QuickLogForm(props: QuickLogFormProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.status, props.mode]);
 
-  // Keyboard behavior: Enter from amount -> merchant, Enter from merchant -> submit if valid
+  // Keyboard behavior: Enter from amount -> merchant, Enter from merchant -> title, Enter from title -> submit if valid
   const amountRef = React.useRef<HTMLInputElement>(null);
   const merchantRef = React.useRef<HTMLInputElement>(null);
+  const titleRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (state.focusTarget === "amount") amountRef.current?.focus();
@@ -212,12 +214,6 @@ export function QuickLogForm(props: QuickLogFormProps) {
 
       {/* Body - Scrollable region */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 pt-2 pb-4 space-y-4">
-        {/* Type Toggle */}
-        <TypeToggle
-          value={state.draft.type}
-          onChange={(v) => dispatch({ type: "SET_TYPE", txType: v })}
-        />
-
         {/* Amount */}
         <AmountInput
           ref={amountRef}
@@ -228,13 +224,27 @@ export function QuickLogForm(props: QuickLogFormProps) {
           autoFocus
         />
 
-        {/* Merchant */}
-        <MerchantInput
-          ref={merchantRef}
-          value={state.draft.merchant ?? ""}
-          onChange={(v) => dispatch({ type: "SET_MERCHANT", merchant: v })}
-          onEnterSubmit={() => dispatch({ type: "SUBMIT" })}
+        {/* Type Toggle */}
+        <TypeToggle
+          value={state.draft.type}
+          onChange={(v) => dispatch({ type: "SET_TYPE", txType: v })}
         />
+
+        {/* Merchant + Title Row */}
+        <div className="flex gap-3">
+          <MerchantInput
+            ref={merchantRef}
+            value={state.draft.merchant ?? ""}
+            onChange={(v) => dispatch({ type: "SET_MERCHANT", merchant: v })}
+            onEnterNext={() => titleRef.current?.focus()}
+          />
+          <TitleInput
+            ref={titleRef}
+            value={state.draft.title ?? ""}
+            onChange={(v) => dispatch({ type: "SET_TITLE", title: v })}
+            onEnterNext={() => dispatch({ type: "SUBMIT" })}
+          />
+        </div>
 
         {/* Date + Category Row */}
         <div className="grid grid-cols-2 gap-3">

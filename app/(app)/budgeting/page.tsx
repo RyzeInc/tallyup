@@ -100,6 +100,7 @@ export default function BudgetingPage() {
 
   const createBudgetCategory = useMutation(api.budgets.createBudgetCategory);
   const updateBudgetCategory = useMutation(api.budgets.updateBudgetCategory);
+  const createBudgetPlan = useMutation(api.budgetEngine.createBudgetPlan);
 
   const categorySpending = useMemo(() => {
     if (!entries) return new Map<string, number>();
@@ -170,13 +171,29 @@ export default function BudgetingPage() {
         const amountStr = categoryAmounts[catId];
         const amountCents = amountStr ? Math.round(parseFloat(amountStr) * 100) : 0;
         if (amountCents > 0) {
-          await createBudgetCategory({
+          // Create the budget category
+          const res: any = await createBudgetCategory({
             name: catConfig.name,
             icon: catConfig.icon,
             periodType: "monthly",
             budgetAmountCents: amountCents,
             matchCategories: catConfig.matchCategories,
           });
+          // Also create a monthly budget plan so the budgeting engine materializes periods and responds to transactions
+          const budgetCategoryId = res?.id ?? res;
+          try {
+            await createBudgetPlan({
+              name: catConfig.name,
+              planType: "category",
+              budgetCategoryId,
+              frequency: "monthly",
+              amountCents: amountCents,
+              effectiveFrom: Date.now(),
+            });
+          } catch (e) {
+            // non-fatal: category is useful even if plan failed to create
+            console.error("createBudgetPlan failed", e);
+          }
         }
       }
       toast.success("Budgets created!");

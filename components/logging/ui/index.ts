@@ -1,6 +1,7 @@
 export { TypeToggle } from "./TypeToggle";
 export { AmountInput } from "./AmountInput";
 export { MerchantInput } from "./MerchantInput";
+export { TitleInput } from "./TitleInput";
 export { DateButton } from "./DateButton";
 export { CategoryField } from "./CategoryField";
 export { CategorySuggestionRow } from "./CategorySuggestionRow";

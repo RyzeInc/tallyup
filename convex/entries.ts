@@ -1,4 +1,4 @@
-import { mutation, query, internalQuery } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { Entry as DetectorEntry, Candidate as DetectorCandidate } from "./detector";
@@ -104,6 +104,74 @@ function getEffectiveCategory(entry: Pick<EntryDoc, "category" | "bucket">): str
   return entry.category ?? entry.bucket;
 }
 
+/**
+ * Update account balance for manual (non-Plaid-linked) accounts.
+ * 
+ * For manual accounts, we adjust the latest snapshot balance when entries are
+ * added, updated, or deleted. Plaid-linked accounts are skipped since they get
+ * authoritative balances from Plaid sync.
+ * 
+ * @param deltaAmountCents - Positive for inflows (income), negative for outflows (expense)
+ */
+async function adjustManualAccountBalance(
+  ctx: MutationCtx,
+  userId: string,
+  accountId: Id<"accounts"> | undefined,
+  deltaAmountCents: number
+) {
+  if (!accountId || deltaAmountCents === 0) return;
+
+  const account = await ctx.db.get(accountId);
+  if (!account || account.userId !== userId) return;
+
+  // Skip Plaid-linked accounts - they get authoritative balances from Plaid
+  if (account.isLinked) return;
+
+  const now = Date.now();
+
+  // Get the latest snapshot for this account
+  const latestSnapshots = await ctx.db
+    .query("accountSnapshots")
+    .withIndex("by_account_asOf", (q) => q.eq("accountId", accountId))
+    .order("desc")
+    .take(1);
+
+  const latestSnapshot = latestSnapshots[0];
+
+  if (latestSnapshot) {
+    // Update the existing snapshot's balance
+    const newBalance = latestSnapshot.balance + deltaAmountCents;
+    await ctx.db.patch(latestSnapshot._id, { balance: newBalance });
+  } else {
+    // No snapshot exists, create one with the delta as the starting balance
+    // This handles edge cases where an account was created without an initial balance
+    await ctx.db.insert("accountSnapshots", {
+      userId,
+      accountId,
+      asOf: now,
+      balance: deltaAmountCents,
+      createdAt: now,
+    });
+  }
+}
+
+/**
+ * Calculate the balance delta for an entry.
+ * Income increases balance, expenses decrease it.
+ * Transfers are excluded from balance calculations.
+ */
+function getEntryBalanceDelta(
+  type: "expense" | "income" | "transfer",
+  amountCents: number,
+  excludeFromTotals?: boolean
+): number {
+  // Don't affect balance if excluded from totals or is a transfer
+  if (excludeFromTotals || type === "transfer") return 0;
+  
+  // Income adds to balance, expense subtracts
+  return type === "income" ? amountCents : -amountCents;
+}
+
 function resolveBounds(args: { startDate?: number; endDate?: number }): { start: number; end: number } {
   return {
     start: args.startDate ?? 0,
@@ -120,6 +188,7 @@ export const addEntry = mutation({
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
     merchant: v.optional(v.string()),
+    title: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
     accountId: v.optional(v.id("accounts")),
     contextTags: v.optional(v.array(v.string())),
@@ -183,6 +252,7 @@ export const addEntry = mutation({
     }
 
     const note = cleanStr(args.note);
+    const title = cleanStr(args.title);
     const merchant = cleanStr(args.merchant);
     const methodOrAccount = cleanStr(args.methodOrAccount);
     const merchantNormalized = normalizeMerchant(merchant);
@@ -221,6 +291,7 @@ export const addEntry = mutation({
       categoryId: categoryIdInput ?? categoryId,
       tags,
       note,
+      title,
       merchant,
       merchantRaw: merchant,
       merchantNormalized,
@@ -267,6 +338,10 @@ export const addEntry = mutation({
       await enqueueBudgetDirty(ctx, userId, args.date, budgetCategoryId, "entry_created");
     }
 
+    // Update manual account balance if applicable
+    const balanceDelta = getEntryBalanceDelta(args.type, amountCents, excludeFromTotals);
+    await adjustManualAccountBalance(ctx, userId, args.accountId, balanceDelta);
+
     // Autolink: delegate to deterministic recurring matcher.
     try {
       await ctx.runMutation(internal.recurring.matchEntryToRecurring, { entryId: insertedId });
@@ -279,6 +354,125 @@ export const addEntry = mutation({
   },
 });
 
+// List archived entries for the current user (paginated)
+export const listArchivedEntries = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx as any);
+    const limit = Math.min(Math.max(args.limit ?? 200, 20), 1200);
+    const rows = await ctx.db
+      .query("entries")
+      .withIndex("by_user_date", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
+    return rows.filter((r) => r.isArchived);
+  },
+});
+
+// Internal: archive all entries for an account and reverse their effect on manual balances
+export const archiveEntriesForAccount = internalMutation({
+  args: { userId: v.string(), accountId: v.id("accounts"), archivedAt: v.number() },
+  handler: async (ctx, args) => {
+    const entries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_account", (q) => q.eq("userId", args.userId).eq("accountId", args.accountId))
+      .collect();
+    const now = Date.now();
+    let count = 0;
+    for (const e of entries) {
+      if (e.isArchived) continue;
+      // Reverse balance effect for manual accounts
+      const delta = getEntryBalanceDelta(e.type, e.amountCents, e.excludeFromTotals);
+      await adjustManualAccountBalance(ctx as any, args.userId, e.accountId, -delta);
+      await ctx.db.patch(e._id, { isArchived: true, archivedAt: args.archivedAt, updatedAt: now });
+      count += 1;
+    }
+    return { ok: true, archivedCount: count };
+  },
+});
+
+// Internal: restore archived entries for an account and reapply their balance effects
+export const restoreEntriesForAccount = internalMutation({
+  args: { userId: v.string(), accountId: v.id("accounts") },
+  handler: async (ctx, args) => {
+    const entries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_account", (q) => q.eq("userId", args.userId).eq("accountId", args.accountId))
+      .collect();
+    const now = Date.now();
+    let count = 0;
+    for (const e of entries) {
+      if (!e.isArchived) continue;
+      // Reapply balance effect for manual accounts
+      const delta = getEntryBalanceDelta(e.type, e.amountCents, e.excludeFromTotals);
+      await adjustManualAccountBalance(ctx as any, args.userId, e.accountId, delta);
+      await ctx.db.patch(e._id, { isArchived: false, archivedAt: undefined, updatedAt: now });
+      count += 1;
+    }
+    return { ok: true, restoredCount: count };
+  },
+});
+
+// Restore a single archived entry. If its account doesn't exist or is archived, clear accountId and set needsReview.
+export const restoreEntry = mutation({
+  args: { id: v.id("entries") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx as any);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) throw new Error("Entry not found");
+    if (!existing.isArchived) return { ok: true, restored: false };
+    const now = Date.now();
+
+    // Check account existence
+    let accountValid = false;
+    if (existing.accountId) {
+      const account = await ctx.db.get(existing.accountId);
+      if (account && !account.isArchived) accountValid = true;
+    }
+
+    const patch: any = { isArchived: false, archivedAt: undefined, updatedAt: now };
+    if (!accountValid) {
+      patch.accountId = undefined;
+      patch.needsReview = true;
+    }
+
+    await ctx.db.patch(args.id, patch);
+
+    // If account is valid, reapply balance effect
+    if (accountValid && existing.accountId) {
+      const delta = getEntryBalanceDelta(existing.type, existing.amountCents, existing.excludeFromTotals);
+      await adjustManualAccountBalance(ctx as any, userId, existing.accountId, delta);
+    }
+
+    return { ok: true, restored: true };
+  },
+});
+
+// Internal migration: convert existing transfer entries that used category "Transfer In"/"Transfer Out"
+// into tagged entries and clear their category so the category can be supplied by the UI later.
+export const migrateTransferEntriesToTags = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    // Find all transfer entries with the literal category values
+    const all = await ctx.db.query("entries").collect();
+    const found = all.filter((r) => r.type === "transfer");
+    let count = 0;
+    for (const e of found) {
+      if (!e.category) continue;
+      const c = (e.category || "").toLowerCase();
+      if (c === "transfer in" || c === "transfer out") {
+        const tags = (e.tags ?? []).slice();
+        if (c === "transfer in") tags.push("transfer_in");
+        else tags.push("transfer_out");
+        const patch: any = { tags, category: undefined, categoryId: undefined, updatedAt: Date.now() };
+        await ctx.db.patch(e._id, patch);
+        count += 1;
+      }
+    }
+    return { ok: true, migrated: count };
+  },
+});
+
 export const updateEntry = mutation({
   args: {
     id: v.id("entries"),
@@ -287,6 +481,7 @@ export const updateEntry = mutation({
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
+    title: v.optional(v.string()),
     merchant: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
     accountId: v.optional(v.union(v.id("accounts"), v.null())),
@@ -355,6 +550,7 @@ export const updateEntry = mutation({
     }
     if (args.tags !== undefined) patch.tags = cleanTags(args.tags);
     if (args.note !== undefined) patch.note = cleanStr(args.note);
+    if (args.title !== undefined) patch.title = cleanStr(args.title);
     if (args.merchant !== undefined) {
       const nextMerchant = cleanStr(args.merchant);
       patch.merchant = nextMerchant;
@@ -532,6 +728,36 @@ export const updateEntry = mutation({
         await ctx.db.delete(contribution._id);
       }
     }
+
+    // Update manual account balances if relevant fields changed
+    const balanceRelevantChange =
+      existing.amountCents !== nextEntry.amountCents ||
+      existing.type !== nextEntry.type ||
+      existing.accountId !== nextEntry.accountId ||
+      existing.excludeFromTotals !== nextEntry.excludeFromTotals;
+
+    if (balanceRelevantChange) {
+      // Calculate old and new balance effects
+      const oldDelta = getEntryBalanceDelta(existing.type, existing.amountCents, existing.excludeFromTotals);
+      const newDelta = getEntryBalanceDelta(nextEntry.type, nextEntry.amountCents, nextEntry.excludeFromTotals);
+
+      // If the account changed, reverse from old account and apply to new account
+      if (existing.accountId !== nextEntry.accountId) {
+        // Reverse the old entry's effect on the old account
+        if (existing.accountId) {
+          await adjustManualAccountBalance(ctx, userId, existing.accountId, -oldDelta);
+        }
+        // Apply the new entry's effect on the new account
+        if (nextEntry.accountId) {
+          await adjustManualAccountBalance(ctx, userId, nextEntry.accountId, newDelta);
+        }
+      } else if (existing.accountId) {
+        // Same account, just apply the difference
+        const netDelta = newDelta - oldDelta;
+        await adjustManualAccountBalance(ctx, userId, existing.accountId, netDelta);
+      }
+    }
+
     return { ok: true };
   },
 });
@@ -542,6 +768,39 @@ export const deleteEntry = mutation({
     const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
+    
+    // If entry is part of a transfer, delete the paired entry and transfer record too
+    if (existing.transferId) {
+      const transfer = await ctx.db.get(existing.transferId);
+      if (transfer) {
+        // Delete both linked entries
+        if (transfer.fromEntryId && transfer.fromEntryId !== args.id) {
+          const pairedEntry = await ctx.db.get(transfer.fromEntryId);
+          if (pairedEntry) {
+            // Reverse the paired entry's balance effect
+            if (pairedEntry.accountId) {
+              const delta = getEntryBalanceDelta(pairedEntry.type, pairedEntry.amountCents, pairedEntry.excludeFromTotals);
+              await adjustManualAccountBalance(ctx, userId, pairedEntry.accountId, -delta);
+            }
+            await ctx.db.delete(transfer.fromEntryId);
+          }
+        }
+        if (transfer.toEntryId && transfer.toEntryId !== args.id) {
+          const pairedEntry = await ctx.db.get(transfer.toEntryId);
+          if (pairedEntry) {
+            // Reverse the paired entry's balance effect
+            if (pairedEntry.accountId) {
+              const delta = getEntryBalanceDelta(pairedEntry.type, pairedEntry.amountCents, pairedEntry.excludeFromTotals);
+              await adjustManualAccountBalance(ctx, userId, pairedEntry.accountId, -delta);
+            }
+            await ctx.db.delete(transfer.toEntryId);
+          }
+        }
+        // Delete the transfer record
+        await ctx.db.delete(transfer._id);
+      }
+    }
+    
     await ctx.db.delete(args.id);
 
     if (existing.goalId) {
@@ -556,6 +815,13 @@ export const deleteEntry = mutation({
     if (shouldAffectBudgets(existing)) {
       await enqueueBudgetDirty(ctx, userId, existing.date, existing.budgetCategoryId, "entry_deleted");
     }
+
+    // Reverse the entry's effect on manual account balance
+    if (existing.accountId) {
+      const balanceDelta = getEntryBalanceDelta(existing.type, existing.amountCents, existing.excludeFromTotals);
+      await adjustManualAccountBalance(ctx, userId, existing.accountId, -balanceDelta);
+    }
+
     return { ok: true };
   },
 });
@@ -936,5 +1202,36 @@ export const listEntriesForUser = internalQuery({
     }
 
     return rows;
+  },
+});
+
+// Permanently delete an archived entry (bypasses archive flow)
+export const permanentDeleteEntry = mutation({
+  args: { id: v.id("entries") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) throw new Error("Entry not found");
+    
+    // If entry is linked to a transfer, also delete the paired entry and the transfer
+    if (existing.transferId) {
+      const transfer = await ctx.db.get(existing.transferId);
+      if (transfer) {
+        // Delete both linked entries
+        if (transfer.fromEntryId && transfer.fromEntryId !== args.id) {
+          await ctx.db.delete(transfer.fromEntryId);
+        }
+        if (transfer.toEntryId && transfer.toEntryId !== args.id) {
+          await ctx.db.delete(transfer.toEntryId);
+        }
+        // Delete the transfer record
+        await ctx.db.delete(transfer._id);
+      }
+    }
+    
+    // Delete the entry
+    await ctx.db.delete(args.id);
+    
+    return { ok: true };
   },
 });

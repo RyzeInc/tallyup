@@ -34,6 +34,7 @@ import Sparkles from "lucide-react/dist/esm/icons/sparkles.js";
 import TrendingUp from "lucide-react/dist/esm/icons/trending-up.js";
 import Plus from "lucide-react/dist/esm/icons/plus.js";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.js";
+import Archive from "lucide-react/dist/esm/icons/archive.js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme, APPEARANCE_OPTIONS, NAV_ITEM_CONFIG } from "@/components/ThemeProvider";
@@ -1438,6 +1439,24 @@ export default function SettingsPage() {
             <div className="flex-1">
               <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Recurring Patterns</div>
               <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Manage detected recurring entries</div>
+            </div>
+            <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
+          </div>
+        </Link>
+
+        {/* Archive link */}
+        <Link
+          href="/accounts/archived"
+          className="block rounded-xl p-4 transition-colors hover:bg-[var(--surface-subtle)]"
+          style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg" style={{ backgroundColor: "var(--surface-subtle)" }}>
+              <Archive className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-medium" style={{ color: "var(--text)" }}>Archive</div>
+              <div className="text-xs" style={{ color: "var(--text-secondary)" }}>Restore or permanently delete archived items</div>
             </div>
             <ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
           </div>

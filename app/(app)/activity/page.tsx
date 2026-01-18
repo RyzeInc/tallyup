@@ -47,10 +47,10 @@ export default function ActivityPage() {
   // Selection mode - controlled from here, passed to ActivityTable
   const [selectMode, setSelectMode] = useState(false);
   
-  // View mode - "cards" (default) or "table" (compact ledger view)
-  const [viewMode, setViewMode] = useState<"cards" | "table">(() => {
+  // View mode - "cards" (default), "table" (compact), or "extended" (full columns)
+  const [viewMode, setViewMode] = useState<"cards" | "table" | "extended">(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("tallyup.activityViewMode") as "cards" | "table") || "cards";
+      return (localStorage.getItem("tallyup.activityViewMode") as "cards" | "table" | "extended") || "cards";
     }
     return "cards";
   });
@@ -61,6 +61,13 @@ export default function ActivityPage() {
       localStorage.setItem("tallyup.activityViewMode", viewMode);
     } catch {}
   }, [viewMode]);
+  
+  // Cycle through view modes: cards -> table -> extended -> cards
+  const cycleViewMode = () => {
+    if (viewMode === "cards") setViewMode("table");
+    else if (viewMode === "table") setViewMode("extended");
+    else setViewMode("cards");
+  };
 
   // Filter state
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
@@ -820,9 +827,9 @@ export default function ActivityPage() {
             )}
           </div>
 
-          {/* View toggle - cards vs table */}
+          {/* View toggle - cards vs table vs extended */}
           <button
-            onClick={() => setViewMode(viewMode === "cards" ? "table" : "cards")}
+            onClick={cycleViewMode}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -836,10 +843,12 @@ export default function ActivityPage() {
               color: "var(--text)",
               border: "1px solid var(--border)",
             }}
-            title={viewMode === "cards" ? "Switch to table view" : "Switch to card view"}
+            title={viewMode === "cards" ? "Switch to table view" : viewMode === "table" ? "Switch to extended view" : "Switch to card view"}
           >
             {viewMode === "cards" ? (
               <Lucide.LayoutList className="h-4 w-4" />
+            ) : viewMode === "table" ? (
+              <Lucide.Table className="h-4 w-4" />
             ) : (
               <Lucide.LayoutGrid className="h-4 w-4" />
             )}

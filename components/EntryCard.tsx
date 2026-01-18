@@ -4,6 +4,14 @@ import { centsToDollars } from "./utils";
 import { useOptimisticLinks } from "./OptimisticLinksProvider";
 import type { Doc } from "convex/_generated/dataModel";
 
+// Helper to convert snake_case tags to display format
+function formatTagForDisplay(tag: string): string {
+  return tag
+    .split("_")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export default function EntryCard({
   entry,
   rightSlot,
@@ -51,7 +59,7 @@ export default function EntryCard({
               className="rounded-full border px-2 py-0.5 text-[11px]"
               style={{ borderColor: "var(--border)", backgroundColor: "transparent", color: "var(--muted-foreground)" }}
             >
-              {t}
+              {formatTagForDisplay(t)}
             </span>
           ))}
         </div>

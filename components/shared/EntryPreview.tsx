@@ -9,6 +9,14 @@ import { centsToDollars, getCategoryDisplayName } from "@/components/utils";
 import { useOptimisticLinks } from "@/components/OptimisticLinksProvider";
 import Link from "next/link";
 
+// Helper to convert snake_case tags to display format
+function formatTagForDisplay(tag: string): string {
+  return tag
+    .split("_")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 // Context tag icons - shared with ContextTagPicker
 const CONTEXT_TAG_ICONS: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   "Personal": Lucide.User,
@@ -300,7 +308,7 @@ export function EntryPreview({
                     className="inline-block h-1.5 w-1.5 rounded-full mr-1"
                     style={{ backgroundColor: "var(--accent)" }}
                   />
-                  <span className="text-[11px]">{tag}</span>
+                  <span className="text-[11px]">{formatTagForDisplay(tag)}</span>
                 </span>
               ))}
             </>

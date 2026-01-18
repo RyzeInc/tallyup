@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
@@ -483,10 +484,13 @@ export const getAccountsOverview = query({
   },
 });
 
-// Delete an account and its snapshots (only if not linked to Plaid)
+// Delete an account - archives it with 14-day retention, or permanently deletes if already archived
 export const deleteAccount = mutation({
   args: {
     id: v.id("accounts"),
+    deleteTransactions: v.optional(v.boolean()),
+    permanent: v.optional(v.boolean()), // If true, permanently delete (used from archive page)
+    force: v.optional(v.boolean()), // Force deletion even for Plaid-linked accounts
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -495,32 +499,217 @@ export const deleteAccount = mutation({
       throw new Error("Account not found");
     }
 
-    // Check if this account is linked to Plaid
-    if (account.isLinked) {
-      throw new Error("Cannot delete a Plaid-linked account. Please unlink the account first.");
+    // Check if this account is linked to Plaid (unless force is true)
+    if (account.isLinked && !args.force) {
+      throw new Error("Cannot delete a Plaid-linked account. Please unlink the account first, or use force delete.");
     }
 
-    // Check for entries linked to this account
-    const entries = await ctx.db
+    const now = Date.now();
+
+    // If permanent deletion is requested (or account is already archived), do hard delete
+    if (args.permanent || account.isArchived) {
+      // Delete all linked entries (including handling transfers)
+      const linkedEntries = await ctx.db
+        .query("entries")
+        .withIndex("by_user_account", (q) => q.eq("userId", userId).eq("accountId", args.id))
+        .collect();
+      
+      for (const entry of linkedEntries) {
+        // If entry is linked to a transfer, delete the transfer and paired entry
+        if (entry.transferId) {
+          const transfer = await ctx.db.get(entry.transferId);
+          if (transfer) {
+            // Delete both linked entries
+            if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
+              const pairedEntry = await ctx.db.get(transfer.fromEntryId);
+              if (pairedEntry) await ctx.db.delete(transfer.fromEntryId);
+            }
+            if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
+              const pairedEntry = await ctx.db.get(transfer.toEntryId);
+              if (pairedEntry) await ctx.db.delete(transfer.toEntryId);
+            }
+            // Delete the transfer record
+            await ctx.db.delete(transfer._id);
+          }
+        }
+        await ctx.db.delete(entry._id);
+      }
+      
+      // Delete snapshots
+      const snapshots = await ctx.db
+        .query("accountSnapshots")
+        .withIndex("by_account_asOf", (q) => q.eq("accountId", args.id))
+        .collect();
+      for (const s of snapshots) {
+        await ctx.db.delete(s._id);
+      }
+      
+      // Delete any linked plaidAccounts
+      const pAccounts = await ctx.db
+        .query("plaidAccounts")
+        .withIndex("by_account", (q) => q.eq("accountId", args.id))
+        .collect();
+      for (const p of pAccounts) {
+        await ctx.db.delete(p._id);
+      }
+      
+      // Finally delete the account
+      await ctx.db.delete(args.id);
+      
+      return { ok: true, deleted: true };
+    }
+
+    // Otherwise, archive the account (soft delete with 14-day retention)
+    await ctx.db.patch(args.id, { isArchived: true, archivedAt: now, updatedAt: now });
+
+    // Archive linked transactions and reverse their balance effects using internal helper.
+    try {
+      await ctx.runMutation(internal.entries.archiveEntriesForAccount, {
+        userId,
+        accountId: args.id,
+        archivedAt: now,
+      });
+    } catch (e) {
+      // Swallow errors here to avoid failing the archive operation; log for diagnostics.
+      console.error("archiveEntriesForAccount error:", e);
+    }
+
+    return { ok: true, archived: true };
+  },
+});
+
+export const restoreAccount = mutation({
+  args: { id: v.id("accounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const account = await ctx.db.get(args.id);
+    if (!account || account.userId !== userId) throw new Error("Account not found");
+    if (!account.isArchived) return { ok: true, restored: false };
+    const now = Date.now();
+    await ctx.db.patch(args.id, { isArchived: false, archivedAt: undefined, updatedAt: now });
+    // Restore entries via internal helper
+    try {
+      await ctx.runMutation(internal.entries.restoreEntriesForAccount, { userId, accountId: args.id });
+    } catch (e) {
+      console.error("restoreEntriesForAccount error:", e);
+    }
+    return { ok: true, restored: true };
+  },
+});
+
+// Purge archived accounts older than retention window (internal cron)
+export const purgeArchivedAccounts = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const retentionMs = 14 * 24 * 60 * 60 * 1000; // 14 days
+    const cutoff = Date.now() - retentionMs;
+
+    const allAccounts = await ctx.db.query("accounts").collect();
+    let deletedCount = 0;
+
+    for (const account of allAccounts) {
+      if (!account.isArchived) continue;
+      if (!account.archivedAt) continue;
+      if (account.archivedAt > cutoff) continue;
+
+      // Delete linked entries
+      const linkedEntries = await ctx.db
+        .query("entries")
+        .withIndex("by_user_account", (q) => q.eq("userId", account.userId).eq("accountId", account._id))
+        .collect();
+      for (const e of linkedEntries) {
+        await ctx.db.delete(e._id);
+      }
+
+      // Delete snapshots
+      const snapshots = await ctx.db
+        .query("accountSnapshots")
+        .withIndex("by_account_asOf", (q) => q.eq("accountId", account._id))
+        .collect();
+      for (const s of snapshots) {
+        await ctx.db.delete(s._id);
+      }
+
+      // Delete any linked plaidAccounts
+      const pAccounts = await ctx.db
+        .query("plaidAccounts")
+        .withIndex("by_account", (q) => q.eq("accountId", account._id))
+        .collect();
+      for (const p of pAccounts) {
+        await ctx.db.delete(p._id);
+      }
+
+      // Finally delete the account row itself
+      await ctx.db.delete(account._id);
+      deletedCount += 1;
+    }
+
+    return { ok: true, deletedCount };
+  },
+});
+
+// Permanently delete an archived account and all its entries
+export const permanentDeleteAccount = mutation({
+  args: { 
+    id: v.id("accounts"),
+    force: v.optional(v.boolean()), // Force deletion even for Plaid-linked accounts
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const account = await ctx.db.get(args.id);
+    if (!account || account.userId !== userId) throw new Error("Account not found");
+    
+    // For Plaid-linked accounts, require force flag (unless already archived)
+    if (account.isLinked && !account.isArchived && !args.force) {
+      throw new Error("Cannot delete a Plaid-linked account. Please unlink the account first, or use force delete.");
+    }
+    
+    // Delete all linked entries (including transfer entries)
+    const linkedEntries = await ctx.db
       .query("entries")
       .withIndex("by_user_account", (q) => q.eq("userId", userId).eq("accountId", args.id))
-      .take(1);
+      .collect();
     
-    if (entries.length > 0) {
-      throw new Error("Cannot delete account with transactions. Archive it instead.");
+    for (const entry of linkedEntries) {
+      // If entry is linked to a transfer, delete the transfer and paired entry
+      if (entry.transferId) {
+        const transfer = await ctx.db.get(entry.transferId);
+        if (transfer) {
+          // Delete both linked entries
+          if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
+            const pairedEntry = await ctx.db.get(transfer.fromEntryId);
+            if (pairedEntry) await ctx.db.delete(transfer.fromEntryId);
+          }
+          if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
+            const pairedEntry = await ctx.db.get(transfer.toEntryId);
+            if (pairedEntry) await ctx.db.delete(transfer.toEntryId);
+          }
+          // Delete the transfer record
+          await ctx.db.delete(transfer._id);
+        }
+      }
+      await ctx.db.delete(entry._id);
     }
-
-    // Delete all snapshots for this account
+    
+    // Delete snapshots
     const snapshots = await ctx.db
       .query("accountSnapshots")
       .withIndex("by_account_asOf", (q) => q.eq("accountId", args.id))
       .collect();
-    
-    for (const snapshot of snapshots) {
-      await ctx.db.delete(snapshot._id);
+    for (const s of snapshots) {
+      await ctx.db.delete(s._id);
     }
-
-    // Delete the account
+    
+    // Delete any linked plaidAccounts
+    const pAccounts = await ctx.db
+      .query("plaidAccounts")
+      .withIndex("by_account", (q) => q.eq("accountId", args.id))
+      .collect();
+    for (const p of pAccounts) {
+      await ctx.db.delete(p._id);
+    }
+    
+    // Finally delete the account
     await ctx.db.delete(args.id);
     
     return { ok: true };

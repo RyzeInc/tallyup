@@ -2,26 +2,26 @@
 
 import * as React from "react";
 
-export const MerchantInput = React.forwardRef<
+export const TitleInput = React.forwardRef<
   HTMLInputElement,
   {
     value: string;
     onChange: (v: string) => void;
     onEnterNext?: () => void;
   }
->(function MerchantInput({ value, onChange, onEnterNext }, ref) {
+>(function TitleInput({ value, onChange, onEnterNext }, ref) {
   return (
     <div className="flex-1">
       <div
         className="text-[10px] font-medium uppercase tracking-wider mb-1.5"
         style={{ color: "var(--text-tertiary)" }}
       >
-        Merchant
+        Title
       </div>
       <input
         ref={ref}
         type="text"
-        placeholder="e.g. Uber, Walmart..."
+        placeholder="What is this?"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {

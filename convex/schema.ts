@@ -23,6 +23,8 @@ export default defineSchema({
     note: v.optional(v.string()),
     // Optional explicit merchant/payee for cleaner analytics
     merchant: v.optional(v.string()),
+    // User-provided title/description for the transaction
+    title: v.optional(v.string()),
     methodOrAccount: v.optional(v.string()),
 
     // Money is stored as *integer cents* (validated in mutations).
@@ -119,6 +121,10 @@ export default defineSchema({
     reviewReason: v.optional(v.string()), // "NEEDS_CATEGORY", "NEEDS_CONTEXT", "NEEDS_ACCOUNT"
 
     needsReview: v.boolean(),
+
+    // Soft-delete fields for entries
+    isArchived: v.optional(v.boolean()),
+    archivedAt: v.optional(v.number()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -766,6 +772,8 @@ export default defineSchema({
 
     // Soft-delete
     isArchived: v.optional(v.boolean()),
+    // Timestamp when the account was archived (ms since epoch)
+    archivedAt: v.optional(v.number()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
