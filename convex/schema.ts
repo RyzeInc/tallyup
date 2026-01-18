@@ -273,6 +273,45 @@ export default defineSchema({
     .index("by_user_date", ["userId", "createdAt"]),
 
   // ============================================
+  // COACHING - Alpha-safe financial coaching memory
+  // ============================================
+  coachState: defineTable({
+    userId: v.string(),
+    preferences: v.optional(v.any()),
+    currentFocus: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
+  coachEvents: defineTable({
+    userId: v.string(),
+    createdAt: v.number(),
+    summaryBullets: v.array(v.string()),
+    actions: v.array(v.string()),
+    openQuestions: v.array(v.string()),
+    metricsUsed: v.optional(v.array(v.string())),
+    contextHash: v.string(),
+  })
+    .index("by_user_createdAt", ["userId", "createdAt"]),
+
+  coachContextCache: defineTable({
+    userId: v.string(),
+    hash: v.string(),
+    computedAt: v.number(),
+    expiresAt: v.number(),
+    packet: v.any(),
+  })
+    .index("by_user_computedAt", ["userId", "computedAt"]),
+
+  llmUsageDaily: defineTable({
+    userId: v.string(),
+    yyyymmdd: v.string(),
+    calls: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_day", ["userId", "yyyymmdd"]),
+
+  // ============================================
   // BUDGETS - Planning separated from logging
   // ============================================
   budgetCategories: defineTable({

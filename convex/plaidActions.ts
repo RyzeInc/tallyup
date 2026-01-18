@@ -27,6 +27,10 @@ function getPlaidClient() {
   const clientId = process.env.PLAID_CLIENT_ID;
   const secret = process.env.PLAID_SECRET;
   const env = (process.env.PLAID_ENV || "sandbox") as "sandbox" | "development" | "production";
+
+  if (env !== "sandbox") {
+    throw new Error("PLAID_ENV must be 'sandbox' for alpha.");
+  }
   
   if (!clientId || !secret) {
     throw new Error("Missing Plaid credentials. Set PLAID_CLIENT_ID and PLAID_SECRET environment variables.");
@@ -886,6 +890,11 @@ export const syncInvestments = action({
         const plaidSecurityIdInternal = securityIdMap.get(holding.security_id);
         if (!plaidSecurityIdInternal) continue;
         
+        const holdingWithUnvested = holding as typeof holding & {
+          unvested_quantity?: number | null;
+          unvested_value?: number | null;
+        };
+
         await ctx.runMutation(internal.plaid.upsertPlaidHolding, {
           userId: identity.subject,
           plaidAccountId: plaidAccountIdInternal,
@@ -898,8 +907,8 @@ export const syncInvestments = action({
           costBasis: holding.cost_basis ?? undefined,
           vestedQuantity: holding.vested_quantity ?? undefined,
           vestedValue: holding.vested_value ?? undefined,
-          unvestedQuantity: (holding as any).unvested_quantity ?? undefined,
-          unvestedValue: (holding as any).unvested_value ?? undefined,
+          unvestedQuantity: holdingWithUnvested.unvested_quantity ?? undefined,
+          unvestedValue: holdingWithUnvested.unvested_value ?? undefined,
           isoCurrencyCode: holding.iso_currency_code || undefined,
         });
         holdingsCount++;

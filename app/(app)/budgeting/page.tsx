@@ -172,7 +172,7 @@ export default function BudgetingPage() {
         const amountCents = amountStr ? Math.round(parseFloat(amountStr) * 100) : 0;
         if (amountCents > 0) {
           // Create the budget category
-          const res: any = await createBudgetCategory({
+          const budgetCategoryId = await createBudgetCategory({
             name: catConfig.name,
             icon: catConfig.icon,
             periodType: "monthly",
@@ -180,7 +180,6 @@ export default function BudgetingPage() {
             matchCategories: catConfig.matchCategories,
           });
           // Also create a monthly budget plan so the budgeting engine materializes periods and responds to transactions
-          const budgetCategoryId = res?.id ?? res;
           try {
             await createBudgetPlan({
               name: catConfig.name,

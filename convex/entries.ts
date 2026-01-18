@@ -358,7 +358,7 @@ export const addEntry = mutation({
 export const listArchivedEntries = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx as any);
+    const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 200, 20), 1200);
     const rows = await ctx.db
       .query("entries")
@@ -383,7 +383,7 @@ export const archiveEntriesForAccount = internalMutation({
       if (e.isArchived) continue;
       // Reverse balance effect for manual accounts
       const delta = getEntryBalanceDelta(e.type, e.amountCents, e.excludeFromTotals);
-      await adjustManualAccountBalance(ctx as any, args.userId, e.accountId, -delta);
+      await adjustManualAccountBalance(ctx, args.userId, e.accountId, -delta);
       await ctx.db.patch(e._id, { isArchived: true, archivedAt: args.archivedAt, updatedAt: now });
       count += 1;
     }
@@ -405,7 +405,7 @@ export const restoreEntriesForAccount = internalMutation({
       if (!e.isArchived) continue;
       // Reapply balance effect for manual accounts
       const delta = getEntryBalanceDelta(e.type, e.amountCents, e.excludeFromTotals);
-      await adjustManualAccountBalance(ctx as any, args.userId, e.accountId, delta);
+      await adjustManualAccountBalance(ctx, args.userId, e.accountId, delta);
       await ctx.db.patch(e._id, { isArchived: false, archivedAt: undefined, updatedAt: now });
       count += 1;
     }
@@ -417,7 +417,7 @@ export const restoreEntriesForAccount = internalMutation({
 export const restoreEntry = mutation({
   args: { id: v.id("entries") },
   handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx as any);
+    const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Entry not found");
     if (!existing.isArchived) return { ok: true, restored: false };
@@ -430,7 +430,7 @@ export const restoreEntry = mutation({
       if (account && !account.isArchived) accountValid = true;
     }
 
-    const patch: any = { isArchived: false, archivedAt: undefined, updatedAt: now };
+    const patch: Partial<EntryDoc> = { isArchived: false, archivedAt: undefined, updatedAt: now };
     if (!accountValid) {
       patch.accountId = undefined;
       patch.needsReview = true;
@@ -441,7 +441,7 @@ export const restoreEntry = mutation({
     // If account is valid, reapply balance effect
     if (accountValid && existing.accountId) {
       const delta = getEntryBalanceDelta(existing.type, existing.amountCents, existing.excludeFromTotals);
-      await adjustManualAccountBalance(ctx as any, userId, existing.accountId, delta);
+      await adjustManualAccountBalance(ctx, userId, existing.accountId, delta);
     }
 
     return { ok: true, restored: true };
@@ -464,7 +464,7 @@ export const migrateTransferEntriesToTags = internalMutation({
         const tags = (e.tags ?? []).slice();
         if (c === "transfer in") tags.push("transfer_in");
         else tags.push("transfer_out");
-        const patch: any = { tags, category: undefined, categoryId: undefined, updatedAt: Date.now() };
+        const patch: Partial<EntryDoc> = { tags, category: undefined, categoryId: undefined, updatedAt: Date.now() };
         await ctx.db.patch(e._id, patch);
         count += 1;
       }

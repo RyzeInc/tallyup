@@ -45,6 +45,26 @@ bun dev
 .
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Financial Coach (Alpha) Env Vars
+
+```bash
+# Alpha-safe defaults (no external LLM calls)
+ALPHA_COST_GUARD=true
+LLM_ENABLED=false
+LLM_PROVIDER=mock
+
+# Optional Groq provider (OpenAI-compatible)
+GROQ_API_KEY=...
+GROQ_MODEL=llama-3.1-8b-instant
+
+# Cost guardrails
+LLM_DAILY_USER_MAX=20
+LLM_DAILY_GLOBAL_MAX=500
+
+# Plaid must remain sandbox for alpha
+PLAID_ENV=sandbox
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
