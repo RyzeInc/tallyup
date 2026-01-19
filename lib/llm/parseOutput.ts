@@ -1,0 +1,160 @@
+import { CoachOutputSchema, type CoachOutput } from "./schema";
+
+type OutputCandidate = Partial<CoachOutput> & {
+  profileUpdates?: CoachOutput["profileUpdates"];
+  foundationUpdates?: CoachOutput["foundationUpdates"];
+  transactionDrilldownRequest?: CoachOutput["transactionDrilldownRequest"];
+  memoryDelta?: CoachOutput["memoryDelta"];
+  memoryUpdates?: CoachOutput["memoryUpdates"];
+};
+
+const SECTION_HEADERS = [
+  "summary",
+  "next actions",
+  "actions",
+  "questions",
+  "follow-ups",
+  "follow up",
+  "follow-up",
+];
+
+function isHeader(line: string): string | null {
+  const normalized = line.trim().toLowerCase().replace(/:$/, "");
+  if (!normalized) return null;
+  return SECTION_HEADERS.includes(normalized) ? normalized : null;
+}
+
+function stripBullet(line: string): string {
+  return line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, "").trim();
+}
+
+function extractSections(lines: string[]): {
+  summary: string[];
+  actions: string[];
+  questions: string[];
+} {
+  let current: string | null = null;
+  const summary: string[] = [];
+  const actions: string[] = [];
+  const questions: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const header = isHeader(line);
+    if (header) {
+      current = header;
+      continue;
+    }
+
+    const bullet = stripBullet(line);
+    if (!bullet) continue;
+
+    if (current === "summary") summary.push(bullet);
+    if (current === "next actions" || current === "actions") actions.push(bullet);
+    if (current === "questions" || (current && current.startsWith("follow"))) questions.push(bullet);
+  }
+
+  return { summary, actions, questions };
+}
+
+function extractQuestionsFromText(text: string): string[] {
+  const matches = text.match(/[^?]*\?/g);
+  if (!matches) return [];
+  const cleaned = matches
+    .map((match) => match.trim())
+    .map((match) => match.replace(/^\s*[-*]\s+/, "").trim())
+    .filter(Boolean);
+  const unique: string[] = [];
+  for (const question of cleaned.reverse()) {
+    if (!unique.includes(question)) unique.push(question);
+    if (unique.length >= 2) break;
+  }
+  return unique.reverse();
+}
+
+function coerceOutput(
+  candidate: OutputCandidate,
+  assistantMessage: string,
+  fallbackQuestions: string[]
+): CoachOutput {
+  const output: OutputCandidate = {
+    assistantMessage,
+    summaryBullets: Array.isArray(candidate.summaryBullets) ? candidate.summaryBullets : [],
+    actions: Array.isArray(candidate.actions) ? candidate.actions : [],
+    openQuestions: Array.isArray(candidate.openQuestions) ? candidate.openQuestions : fallbackQuestions,
+    metricsUsed: Array.isArray(candidate.metricsUsed) ? candidate.metricsUsed : [],
+  };
+
+  if (candidate.profileUpdates) output.profileUpdates = candidate.profileUpdates;
+  if (candidate.foundationUpdates) output.foundationUpdates = candidate.foundationUpdates;
+  if (candidate.memoryDelta) output.memoryDelta = candidate.memoryDelta;
+  if (candidate.memoryUpdates) output.memoryUpdates = candidate.memoryUpdates;
+  if (candidate.transactionDrilldownRequest) {
+    output.transactionDrilldownRequest = candidate.transactionDrilldownRequest;
+  }
+
+  return CoachOutputSchema.parse(output);
+}
+
+function extractJsonBlock(text: string): { json: OutputCandidate | null; cleaned: string } {
+  const match = text.match(/```json\s*([\s\S]*?)```/i);
+  if (!match) return { json: null, cleaned: text };
+
+  const raw = match[1]?.trim();
+  if (!raw) return { json: null, cleaned: text };
+
+  try {
+    const parsed = JSON.parse(raw) as OutputCandidate;
+    const cleaned = text.replace(match[0], "").trim();
+    return { json: parsed, cleaned: cleaned || text };
+  } catch {
+    return { json: null, cleaned: text };
+  }
+}
+
+export function parseCoachOutput(rawContent: string): CoachOutput {
+  const trimmed = rawContent.trim();
+  if (!trimmed) {
+    return CoachOutputSchema.parse({
+      assistantMessage: "I am ready when you are. Tell me what you want to focus on.",
+      summaryBullets: [],
+      actions: [],
+      openQuestions: [],
+      metricsUsed: [],
+    });
+  }
+
+  try {
+    const parsedJson = JSON.parse(trimmed) as OutputCandidate;
+    const fallbackQuestions = extractQuestionsFromText(trimmed);
+    const assistantMessage =
+      typeof parsedJson.assistantMessage === "string" && parsedJson.assistantMessage.trim()
+        ? parsedJson.assistantMessage
+        : trimmed;
+    return coerceOutput(parsedJson, assistantMessage, fallbackQuestions);
+  } catch {
+    // Fall through to text parsing.
+  }
+
+  const extracted = extractJsonBlock(trimmed);
+  if (extracted.json) {
+    const fallbackQuestions = extractQuestionsFromText(extracted.cleaned);
+    return coerceOutput(extracted.json, extracted.cleaned, fallbackQuestions);
+  }
+
+  const lines = trimmed.split("\n");
+  const sections = extractSections(lines);
+  const fallbackQuestions = sections.questions.length ? sections.questions : extractQuestionsFromText(trimmed);
+
+  return coerceOutput(
+    {
+      summaryBullets: sections.summary,
+      actions: sections.actions,
+      openQuestions: sections.questions.length ? sections.questions : undefined,
+    },
+    trimmed,
+    fallbackQuestions
+  );
+}

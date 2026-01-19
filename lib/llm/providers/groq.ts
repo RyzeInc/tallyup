@@ -1,5 +1,5 @@
 import type { CoachProvider, CoachProviderInput } from "../types";
-import { CoachOutputSchema } from "../schema";
+import { parseCoachOutput } from "../parseOutput";
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
@@ -26,17 +26,79 @@ async function callGroq(input: CoachProviderInput) {
     console.info(`[groq] model=${model} temp=${temperature} maxTokens=${maxTokens}`);
   }
 
-  const conversation = input.contextPacket.recentConversation.map((entry) => ({
-    role: entry.role,
-    content: entry.content,
-  }));
+  // Keep recent conversation (this is what makes it feel like an assistant)
+  const conversation = input.contextPacket.recentConversation
+    .slice(-10) // Last 10 messages max
+    .map((entry) => ({
+      role: entry.role,
+      content: entry.content,
+    }));
 
-  const userPayload = [
-    "User message:",
-    input.message,
+  // Build a human-readable financial summary instead of raw JSON
+  const parts: string[] = [];
+  
+  // Cashflow in plain English
+  const cf = input.contextPacket.cashflow;
+  if (cf) {
+    const net = cf.netCents / 100;
+    const income = cf.incomeCents / 100;
+    const expenses = cf.expenseCents / 100;
+    if (net < 0) {
+      parts.push(`This month: $${income.toLocaleString()} income, $${expenses.toLocaleString()} spent, $${Math.abs(net).toLocaleString()} in the red.`);
+    } else {
+      parts.push(`This month: $${income.toLocaleString()} income, $${expenses.toLocaleString()} spent, $${net.toLocaleString()} surplus.`);
+    }
+  }
+
+  // Top spending areas (brief)
+  const cats = input.contextPacket.spendByCategory?.slice(0, 3);
+  if (cats && cats.length > 0) {
+    const catStr = cats.map(c => `${c.category} ($${(c.amountCents/100).toLocaleString()})`).join(", ");
+    parts.push(`Top spending: ${catStr}.`);
+  }
+
+  // Upcoming bills (brief)
+  const bills = input.contextPacket.upcomingBills?.slice(0, 3);
+  if (bills && bills.length > 0) {
+    const billStr = bills.map(b => b.name).join(", ");
+    parts.push(`Upcoming bills: ${billStr}.`);
+  }
+
+  // Established facts from this session
+  const facts = input.contextPacket.establishedFacts;
+  if (facts && facts.length > 0) {
+    parts.push(`User has shared: ${facts.join("; ")}.`);
+  }
+
+  // Foundation snapshot (key user info)
+  const foundation = input.contextPacket.foundationSnapshot as Record<string, unknown> | null;
+  if (foundation) {
+    const foundationParts: string[] = [];
+    if (foundation.monthlyIncomeCents) {
+      foundationParts.push(`monthly income ~$${((foundation.monthlyIncomeCents as number) / 100).toLocaleString()}`);
+    }
+    if (foundation.primaryGoal) {
+      foundationParts.push(`goal: ${foundation.primaryGoal}`);
+    }
+    if (foundationParts.length > 0) {
+      parts.push(`Known about user: ${foundationParts.join(", ")}.`);
+    }
+  }
+
+  const financialContext = parts.length > 0 
+    ? parts.join(" ") 
+    : "No financial data available yet.";
+
+  // User's message is just their message - context goes in system or as a note
+  const userPayload = input.message;
+
+  // Append context as a brief system note, not in user message
+  const systemWithContext = [
+    input.systemPrompt,
     "",
-    "Context packet (JSON):",
-    JSON.stringify(input.contextPacket),
+    "---",
+    "User's financial context:",
+    financialContext,
   ].join("\n");
 
   const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
@@ -49,9 +111,8 @@ async function callGroq(input: CoachProviderInput) {
       model,
       temperature,
       max_tokens: maxTokens,
-      response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: input.systemPrompt },
+        { role: "system", content: systemWithContext },
         ...conversation,
         { role: "user", content: userPayload },
       ],
@@ -70,14 +131,7 @@ async function callGroq(input: CoachProviderInput) {
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error("Groq response missing content.");
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new Error("Groq response was not valid JSON.");
-  }
-
-  return CoachOutputSchema.parse(parsed);
+  return parseCoachOutput(content);
 }
 
 export function createGroqProvider(): CoachProvider {

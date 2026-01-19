@@ -22,6 +22,29 @@ const KNOWLEDGE_TTL_MS = 2 * 60 * 1000;
 
 type Ctx = QueryCtx | MutationCtx;
 
+function deepMerge(base: Record<string, unknown>, update: Record<string, unknown>): Record<string, unknown> {
+  const merged = { ...base };
+  for (const [key, value] of Object.entries(update)) {
+    if (Array.isArray(value) || value === null || value === undefined) {
+      merged[key] = value;
+      continue;
+    }
+    const baseValue = merged[key];
+    if (
+      typeof value === "object" &&
+      value &&
+      typeof baseValue === "object" &&
+      baseValue &&
+      !Array.isArray(baseValue)
+    ) {
+      merged[key] = deepMerge(baseValue as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged;
+}
+
 function monthLabel(year: number, month: number): string {
   const date = new Date(Date.UTC(year, month - 1, 1));
   return date.toLocaleString("en-US", { month: "short", year: "numeric" });
@@ -66,8 +89,18 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .first();
 
+  const sessionState = await ctx.db
+    .query("coachSessionState")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .first();
+
   const foundation = await ctx.db
     .query("coachFoundation")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .first();
+
+  const draft = await ctx.db
+    .query("coachDraft")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .first();
 
@@ -100,6 +133,11 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
   const recentActions = events.flatMap((event) => event.actions).slice(0, 12);
   const recentOpenQuestions = events.flatMap((event) => event.openQuestions).slice(0, 12);
 
+  // Get slot ledger and established facts from session state
+  const slotLedger = sessionState?.slotLedger ?? null;
+  const establishedFacts = sessionState?.establishedFacts ?? null;
+  const frustrationDetectedAt = sessionState?.frustrationDetectedAt ?? null;
+
   return {
     generatedAt: Date.now(),
     month: {
@@ -119,11 +157,18 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
           currentFocus: coachState.currentFocus ?? null,
         }
       : null,
+    sessionSummary: sessionState?.summary ?? null,
+    openLoops: sessionState?.openLoops ?? null,
+    slotLedger,
+    establishedFacts,
+    frustrationDetectedAt,
     recentSummaries,
     recentActions,
     recentOpenQuestions,
     recentConversation: conversation.slice(-8),
     foundationSnapshot: (foundation?.snapshot as CoachContextPacket["foundationSnapshot"]) ?? null,
+    draftProfile: (draft?.profileDraft as CoachContextPacket["draftProfile"]) ?? null,
+    draftFoundation: (draft?.foundationDraft as CoachContextPacket["draftFoundation"]) ?? null,
     transactionDrilldownOptIn: optInEnabled
       ? { enabled: true, windowDays, expiresAt: drilldownOptIn?.expiresAt ?? 0 }
       : { enabled: false, windowDays, expiresAt: drilldownOptIn?.expiresAt ?? 0 },
@@ -145,6 +190,29 @@ export function summarizePacket(packet: CoachContextPacket) {
       ? { updatedAt: packet.generatedAt, hasFoundation: true }
       : { updatedAt: packet.generatedAt, hasFoundation: false },
   };
+}
+
+export function classifyIntent(message: string): { domain?: string; task?: string } {
+  const lower = message.toLowerCase();
+  const hasAny = (terms: string[]) => terms.some((term) => lower.includes(term));
+
+  let domain: string | undefined;
+  if (hasAny(["debt", "loan", "credit", "apr", "interest"])) domain = "debt";
+  else if (hasAny(["invest", "ira", "401", "retire", "portfolio"])) domain = "investing";
+  else if (hasAny(["budget", "cashflow", "spend", "category", "bill", "rent", "mortgage"])) domain = "budgeting";
+  else if (hasAny(["tax", "withholding", "refund", "irs"])) domain = "tax";
+  else if (hasAny(["save", "savings", "emergency fund", "buffer"])) domain = "savings";
+  else if (hasAny(["app", "how do i", "where", "settings", "help"])) domain = "app_help";
+
+  let task: string | undefined;
+  if (hasAny(["plan", "roadmap", "strategy"])) task = "plan";
+  else if (hasAny(["why", "how", "what is", "explain"])) task = "explain";
+  else if (hasAny(["fix", "issue", "problem", "stuck"])) task = "troubleshoot";
+  else if (hasAny(["compare", "versus", "vs"])) task = "compare";
+  else if (hasAny(["summarize", "summary"])) task = "summarize";
+  else if (hasAny(["should i", "do i"])) task = "decide";
+
+  return { domain, task };
 }
 
 export const getOrBuildKnowledgeSnippets = internalMutation({
@@ -207,6 +275,38 @@ export const getOrBuildKnowledgeSnippets = internalMutation({
   },
 });
 
+export const getRelevantMemories = internalMutation({
+  args: {
+    userId: v.string(),
+    message: v.string(),
+    topK: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const memories = await ctx.db
+      .query("coachMemory")
+      .withIndex("by_user_updatedAt", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .take(200);
+
+    if (!memories.length) return [];
+
+    const queryEmbedding = embedText(args.message);
+    const scored = memories.map((memory) => ({
+      type: memory.type,
+      content: memory.content,
+      confidence: memory.confidence,
+      tags: memory.tags,
+      score: cosineSimilarity(queryEmbedding, memory.embedding),
+    }));
+
+    const topK = Math.min(Math.max(args.topK ?? 6, 1), 12);
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+      .filter((item) => item.score > 0);
+  },
+});
+
 export const getOrBuildContextPacket = internalMutation({
   args: {
     userId: v.string(),
@@ -266,6 +366,92 @@ export const getOrBuildContextPacket = internalMutation({
   },
 });
 
+export const upsertSessionState = internalMutation({
+  args: {
+    userId: v.string(),
+    summary: v.optional(v.string()),
+    openLoops: v.optional(v.array(v.string())),
+    slotLedger: v.optional(v.any()),
+    establishedFacts: v.optional(v.array(v.string())),
+    frustrationDetectedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("coachSessionState")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        summary: args.summary ?? existing.summary,
+        openLoops: args.openLoops ?? existing.openLoops,
+        slotLedger: args.slotLedger ?? existing.slotLedger,
+        establishedFacts: args.establishedFacts ?? existing.establishedFacts,
+        frustrationDetectedAt: args.frustrationDetectedAt ?? existing.frustrationDetectedAt,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    await ctx.db.insert("coachSessionState", {
+      userId: args.userId,
+      summary: args.summary,
+      openLoops: args.openLoops,
+      slotLedger: args.slotLedger,
+      establishedFacts: args.establishedFacts,
+      frustrationDetectedAt: args.frustrationDetectedAt,
+      updatedAt: now,
+    });
+  },
+});
+
+export const upsertCoachMemory = internalMutation({
+  args: {
+    userId: v.string(),
+    memories: v.array(
+      v.object({
+        type: v.string(),
+        content: v.string(),
+        confidence: v.optional(v.string()),
+        tags: v.optional(v.array(v.string())),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    for (const memory of args.memories) {
+      const contentKey = memory.content.trim();
+      if (!contentKey) continue;
+
+      const existing = await ctx.db
+        .query("coachMemory")
+        .withIndex("by_user_type", (q) => q.eq("userId", args.userId).eq("type", memory.type))
+        .filter((q) => q.eq(q.field("content"), contentKey))
+        .first();
+
+      const payload = {
+        userId: args.userId,
+        type: memory.type,
+        content: contentKey,
+        confidence: memory.confidence,
+        tags: memory.tags,
+        embedding: embedText(contentKey),
+        updatedAt: now,
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, payload);
+      } else {
+        await ctx.db.insert("coachMemory", {
+          ...payload,
+          createdAt: now,
+        });
+      }
+    }
+  },
+});
+
 export const storeCoachEvent = internalMutation({
   args: {
     userId: v.string(),
@@ -306,6 +492,73 @@ export const storeCoachEvent = internalMutation({
         updatedAt: now,
       });
     }
+  },
+});
+
+export const upsertCoachDraft = internalMutation({
+  args: {
+    userId: v.string(),
+    profileUpdates: v.optional(v.any()),
+    foundationUpdates: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("coachDraft")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+
+    const profileUpdates = (args.profileUpdates ?? {}) as Record<string, unknown>;
+    const foundationUpdates = (args.foundationUpdates ?? {}) as Record<string, unknown>;
+
+    if (existing) {
+      const nextProfile = Object.keys(profileUpdates).length
+        ? deepMerge((existing.profileDraft ?? {}) as Record<string, unknown>, profileUpdates)
+        : existing.profileDraft ?? undefined;
+      const nextFoundation = Object.keys(foundationUpdates).length
+        ? deepMerge((existing.foundationDraft ?? {}) as Record<string, unknown>, foundationUpdates)
+        : existing.foundationDraft ?? undefined;
+
+      await ctx.db.patch(existing._id, {
+        profileDraft: nextProfile,
+        foundationDraft: nextFoundation,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    if (Object.keys(profileUpdates).length === 0 && Object.keys(foundationUpdates).length === 0) {
+      return;
+    }
+
+    await ctx.db.insert("coachDraft", {
+      userId: args.userId,
+      profileDraft: Object.keys(profileUpdates).length ? profileUpdates : undefined,
+      foundationDraft: Object.keys(foundationUpdates).length ? foundationUpdates : undefined,
+      updatedAt: now,
+    });
+  },
+});
+
+export const clearCoachDraftFields = internalMutation({
+  args: {
+    userId: v.string(),
+    clearProfile: v.optional(v.boolean()),
+    clearFoundation: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("coachDraft")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .first();
+    if (!existing) return;
+
+    const updates: Record<string, unknown> = {};
+    if (args.clearProfile) updates.profileDraft = undefined;
+    if (args.clearFoundation) updates.foundationDraft = undefined;
+    if (Object.keys(updates).length === 0) return;
+
+    await ctx.db.patch(existing._id, updates);
   },
 });
 

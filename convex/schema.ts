@@ -282,6 +282,26 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"]),
+  coachSessionState: defineTable({
+    userId: v.string(),
+    summary: v.optional(v.string()),
+    openLoops: v.optional(v.array(v.string())),
+    // Slot ledger tracks what questions have been asked/answered to prevent loops
+    slotLedger: v.optional(v.any()),
+    // Track when user expressed frustration to trigger value-mode
+    frustrationDetectedAt: v.optional(v.number()),
+    // Rolling context of what facts have been established this session
+    establishedFacts: v.optional(v.array(v.string())),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+  coachDraft: defineTable({
+    userId: v.string(),
+    profileDraft: v.optional(v.any()),
+    foundationDraft: v.optional(v.any()),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
 
   coachEvents: defineTable({
     userId: v.string(),
@@ -311,6 +331,18 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"]),
+  coachMemory: defineTable({
+    userId: v.string(),
+    type: v.string(),
+    content: v.string(),
+    confidence: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    embedding: v.array(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_updatedAt", ["userId", "updatedAt"])
+    .index("by_user_type", ["userId", "type"]),
 
   coachKnowledge: defineTable({
     docId: v.string(),

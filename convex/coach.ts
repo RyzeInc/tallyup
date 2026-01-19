@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { buildContextPacket, hashContextPacket, summarizePacket } from "./coach_internal";
+import { buildContextPacket, hashContextPacket, summarizePacket, classifyIntent } from "./coach_internal";
 import { getCoachProvider } from "../lib/llm";
 import { buildCoachSystemPrompt } from "../lib/llm/prompt";
 import type { CoachOutput } from "../lib/llm/schema";
 import type { CoachContextPacket } from "../lib/llm/types";
-import { applyCoachResponseGuards } from "../lib/llm/responseGuard";
+import { applyAntiLoopGuards } from "../lib/llm/antiLoopGuard";
 import { CoachProfileUpdateSchema, type CoachProfileUpdate } from "../lib/coach/profile";
 import { CoachFoundationUpdateSchema, type CoachFoundationUpdate } from "../lib/coach/foundation";
 
@@ -79,15 +79,23 @@ export const chat: ReturnType<typeof action> = action({
       internal.coach_internal.getOrBuildKnowledgeSnippets,
       { userId, message: args.message, topK: 4 }
     );
+    const memorySnippets = await ctx.runMutation(
+      internal.coach_internal.getRelevantMemories,
+      { userId, message: args.message, topK: 6 }
+    );
+    const intent = classifyIntent(args.message);
     const packetWithKnowledge: CoachContextPacket = {
       ...packet,
       knowledgeSnippets,
+      memorySnippets,
+      intent,
     };
 
     const { provider, usesExternal, selected } = getCoachProvider();
     const systemPrompt = buildCoachSystemPrompt();
+    const rawMode = process.env.COACH_RAW_MODE === "true";
     if (process.env.COACH_DEBUG === "true") {
-      console.info(`[coach.chat] provider=${selected} external=${usesExternal}`);
+      console.info(`[coach.chat] provider=${selected} external=${usesExternal} rawMode=${rawMode}`);
     }
 
     if (usesExternal) {
@@ -109,7 +117,8 @@ export const chat: ReturnType<typeof action> = action({
         contextPacket: packetWithKnowledge,
         systemPrompt,
       });
-    } catch {
+    } catch (err) {
+      console.error(`[coach.chat] LLM provider error:`, err);
       const fallback = getCoachProvider({ forceMock: true });
       llmOutput = await fallback.provider.generate({
         message: args.message,
@@ -118,7 +127,35 @@ export const chat: ReturnType<typeof action> = action({
       });
     }
 
-    llmOutput = applyCoachResponseGuards(llmOutput, { userMessage: args.message, contextPacket: packet });
+    // In raw mode, skip all post-processing and just return the LLM response
+    if (rawMode) {
+      await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
+        userId,
+        userMessage: args.message,
+        llmOutput: {
+          assistantMessage: llmOutput.assistantMessage,
+          summaryBullets: llmOutput.summaryBullets ?? [],
+          actions: llmOutput.actions ?? [],
+          openQuestions: llmOutput.openQuestions ?? [],
+          metricsUsed: llmOutput.metricsUsed ?? [],
+        },
+        contextHash,
+      });
+
+      return {
+        assistantMessage: llmOutput.assistantMessage,
+        actions: llmOutput.actions ?? [],
+        followUps: llmOutput.openQuestions ?? [],
+        contextHash,
+      };
+    }
+
+    // Apply anti-loop guards and get updated state
+    const guardResult = applyAntiLoopGuards(llmOutput, {
+      userMessage: args.message,
+      contextPacket: packet,
+    });
+    llmOutput = guardResult.output;
 
     await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
       userId,
@@ -132,6 +169,36 @@ export const chat: ReturnType<typeof action> = action({
       },
       contextHash,
     });
+
+    const fallbackSummary = llmOutput.summaryBullets.length
+      ? llmOutput.summaryBullets.join(" ")
+      : undefined;
+    const fallbackOpenLoops = llmOutput.openQuestions.length ? llmOutput.openQuestions : undefined;
+
+    // Always update session state with slot ledger and established facts
+    await ctx.runMutation(internal.coach_internal.upsertSessionState, {
+      userId,
+      summary: llmOutput.memoryDelta?.summary ?? fallbackSummary,
+      openLoops: llmOutput.memoryDelta?.openLoops ?? fallbackOpenLoops,
+      slotLedger: guardResult.slotLedger,
+      establishedFacts: guardResult.establishedFacts,
+      frustrationDetectedAt: guardResult.frustrationDetectedAt ?? undefined,
+    });
+
+    if (llmOutput.memoryUpdates && llmOutput.memoryUpdates.length > 0) {
+      await ctx.runMutation(internal.coach_internal.upsertCoachMemory, {
+        userId,
+        memories: llmOutput.memoryUpdates,
+      });
+    }
+
+    if (llmOutput.profileUpdates || llmOutput.foundationUpdates) {
+      await ctx.runMutation(internal.coach_internal.upsertCoachDraft, {
+        userId,
+        profileUpdates: llmOutput.profileUpdates ?? undefined,
+        foundationUpdates: llmOutput.foundationUpdates ?? undefined,
+      });
+    }
 
     return {
       assistantMessage: llmOutput.assistantMessage,
@@ -165,6 +232,10 @@ export const updateCoachState = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, { preferences: nextPrefs, updatedAt: now });
+      await ctx.runMutation(internal.coach_internal.clearCoachDraftFields, {
+        userId,
+        clearProfile: true,
+      });
       return { ok: true };
     }
 
@@ -172,6 +243,11 @@ export const updateCoachState = mutation({
       userId,
       preferences: nextPrefs,
       updatedAt: now,
+    });
+
+    await ctx.runMutation(internal.coach_internal.clearCoachDraftFields, {
+      userId,
+      clearProfile: true,
     });
 
     return { ok: true };
@@ -224,6 +300,10 @@ export const updateCoachFoundation = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, { snapshot: nextSnapshot, updatedAt: now });
+      await ctx.runMutation(internal.coach_internal.clearCoachDraftFields, {
+        userId,
+        clearFoundation: true,
+      });
       return { ok: true };
     }
 
@@ -231,6 +311,11 @@ export const updateCoachFoundation = mutation({
       userId,
       snapshot: nextSnapshot,
       updatedAt: now,
+    });
+
+    await ctx.runMutation(internal.coach_internal.clearCoachDraftFields, {
+      userId,
+      clearFoundation: true,
     });
 
     return { ok: true };
@@ -270,6 +355,62 @@ export const setTransactionDrilldownOptIn = mutation({
       preferences: nextPrefs,
       updatedAt: now,
     });
+
+    return { ok: true };
+  },
+});
+
+/**
+ * Reset the coach session state, clearing slot ledger and established facts.
+ * Useful when the user wants to start fresh or the coach gets stuck in a loop.
+ */
+export const resetSession = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+    const now = Date.now();
+
+    // Clear session state (slot ledger, established facts, frustration)
+    const sessionState = await ctx.db
+      .query("coachSessionState")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    if (sessionState) {
+      await ctx.db.patch(sessionState._id, {
+        slotLedger: undefined,
+        establishedFacts: undefined,
+        frustrationDetectedAt: undefined,
+        summary: undefined,
+        openLoops: undefined,
+        updatedAt: now,
+      });
+    }
+
+    // Clear context cache to force rebuild
+    const contextCache = await ctx.db
+      .query("coachContextCache")
+      .withIndex("by_user_computedAt", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(1);
+
+    if (contextCache[0]) {
+      await ctx.db.delete(contextCache[0]._id);
+    }
+
+    // Clear draft
+    const draft = await ctx.db
+      .query("coachDraft")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    if (draft) {
+      await ctx.db.patch(draft._id, {
+        profileDraft: undefined,
+        foundationDraft: undefined,
+        updatedAt: now,
+      });
+    }
 
     return { ok: true };
   },

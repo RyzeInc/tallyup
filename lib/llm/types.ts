@@ -1,5 +1,6 @@
 import type { CoachOutput } from "./schema";
 import type { CoachFoundation } from "../coach/foundation";
+import type { SlotLedger } from "../coach/slotLedger";
 
 export type CoachContextPacket = {
   generatedAt: number;
@@ -33,13 +34,34 @@ export type CoachContextPacket = {
     content: string;
     createdAt: number;
   }>;
+  sessionSummary?: string | null;
+  openLoops?: string[] | null;
+  // Slot ledger for anti-loop tracking
+  slotLedger?: SlotLedger | null;
+  // Established facts this session (for incremental recaps)
+  establishedFacts?: string[] | null;
+  // Whether user recently expressed frustration about repetition
+  frustrationDetectedAt?: number | null;
+  intent?: {
+    domain?: string | null;
+    task?: string | null;
+  } | null;
   knowledgeSnippets?: Array<{
     docId: string;
     chunkIndex: number;
     content: string;
     score: number;
   }>;
+  memorySnippets?: Array<{
+    type: string;
+    content: string;
+    confidence?: string;
+    tags?: string[];
+    score: number;
+  }>;
   foundationSnapshot: CoachFoundation | null;
+  draftProfile?: Record<string, unknown> | null;
+  draftFoundation?: Record<string, unknown> | null;
   transactionDrilldownOptIn?: { enabled: boolean; windowDays: number; expiresAt: number } | null;
   transactionDrilldown?: {
     windowDays: number;
@@ -61,6 +83,6 @@ export type CoachProviderInput = {
 };
 
 export type CoachProvider = {
-  id: "mock" | "groq" | "cloudflare";
+  id: "mock" | "groq" | "cloudflare" | "openai";
   generate: (input: CoachProviderInput) => Promise<CoachOutput>;
 };

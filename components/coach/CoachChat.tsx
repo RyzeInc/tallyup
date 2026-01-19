@@ -41,6 +41,7 @@ export default function CoachChat() {
   const updateCoachState = useMutation(api.coach.updateCoachState);
   const updateCoachFoundation = useMutation(api.coach.updateCoachFoundation);
   const setTransactionDrilldownOptIn = useMutation(api.coach.setTransactionDrilldownOptIn);
+  const resetSession = useMutation(api.coach.resetSession);
 
   const [snapshot, setSnapshot] = useState<CoachSnapshot | null>(null);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -57,9 +58,19 @@ export default function CoachChat() {
   const [applyingProfile, setApplyingProfile] = useState(false);
   const [applyingFoundation, setApplyingFoundation] = useState(false);
   const [enablingDrilldown, setEnablingDrilldown] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,6 +177,33 @@ export default function CoachChat() {
     }
   };
 
+  const handleResetSession = async () => {
+    if (resetting) return;
+    setResetting(true);
+    try {
+      await resetSession({});
+      // Clear local state
+      setMessages([]);
+      setActions([]);
+      setFollowUps([]);
+      setProfileUpdate(null);
+      setFoundationUpdate(null);
+      setDrilldownRequest(null);
+      setContextHash(null);
+      // Invalidate snapshot cache
+      snapshotCache.current = null;
+      // Reload snapshot
+      const data = await convex.query(api.coach.getSnapshot, {});
+      if (data) {
+        snapshotCache.current = { data, fetchedAt: Date.now() };
+        setSnapshot(data);
+        setContextHash(data.contextHash);
+      }
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -259,12 +297,27 @@ export default function CoachChat() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Financial Coach</CardTitle>
-            <CardDescription>Ask for a plan, a budget check, or questions to focus.</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle>Financial Coach</CardTitle>
+              <CardDescription>Ask for a plan, a budget check, or questions to focus.</CardDescription>
+            </div>
+            {messages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleResetSession}
+                disabled={resetting}
+                className="text-xs"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                {resetting ? "Resetting..." : "New Chat"}
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div
+              ref={chatContainerRef}
               className="rounded-2xl border p-4 space-y-3 min-h-[260px] max-h-[360px] overflow-y-auto"
               style={{ borderColor: "var(--border)", backgroundColor: "var(--surface-2)" }}
             >
