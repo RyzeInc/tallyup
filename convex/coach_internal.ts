@@ -10,11 +10,22 @@ import {
   type MonthInput,
 } from "./finance_aggregates";
 import {
+  computeBalanceSheet,
+  computeBaselineObligations,
+  computeDebtSnapshot,
+  computeGoalSnapshot,
+  computeIncomeProfile,
+  computeRiskProfile,
+  computeTaxProfile,
+  computeTransactionDiagnostics,
+  computeHealthSummary,
+} from "./coach_aggregates";
+import {
   evaluateBudget,
   formatDayKey,
   GLOBAL_USAGE_USER_ID,
 } from "../lib/llm/budgetGuard";
-import type { CoachContextPacket } from "../lib/llm/types";
+import type { CoachContextPacket, ContextDepth } from "../lib/llm/types";
 import { cosineSimilarity, embedText } from "../lib/llm/embedding";
 
 const CONTEXT_TTL_MS = 2 * 60 * 1000;
@@ -77,12 +88,29 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
   };
   const { start, end } = monthBounds(currentMonth);
 
+  // Core financial data (always computed)
   const [cashflow, spendByCategory, upcomingBills, anomalies] = await Promise.all([
     computeMonthlyCashflow(ctx, userId, currentMonth),
     computeSpendByCategory(ctx, userId, currentMonth),
     computeUpcomingBills(ctx, userId, 30),
     computeAnomalies(ctx, userId),
   ]);
+
+  // Extended financial context (A-G) - computed in parallel
+  const [
+    balanceSheet,
+    incomeProfile,
+    debtSnapshot,
+    goalSnapshot,
+  ] = await Promise.all([
+    computeBalanceSheet(ctx, userId),
+    computeIncomeProfile(ctx, userId),
+    computeDebtSnapshot(ctx, userId),
+    computeGoalSnapshot(ctx, userId),
+  ]);
+
+  // Baseline obligations (depends on nothing else)
+  const baselineObligations = await computeBaselineObligations(ctx, userId);
 
   const coachState = await ctx.db
     .query("coachState")
@@ -104,6 +132,13 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .first();
 
+  // Compute risk and tax profiles (depend on foundation + other snapshots)
+  const foundationData = (foundation?.snapshot as Record<string, unknown>) ?? null;
+  const [riskProfile, taxProfile] = await Promise.all([
+    computeRiskProfile(ctx, userId, foundationData, balanceSheet, baselineObligations),
+    computeTaxProfile(ctx, userId, foundationData, incomeProfile),
+  ]);
+
   const drilldownOptIn = (coachState?.preferences as { transactionDrilldownOptIn?: { enabled?: boolean; windowDays?: number; expiresAt?: number } } | undefined)
     ?.transactionDrilldownOptIn;
   const optInEnabled = !!drilldownOptIn?.enabled && (drilldownOptIn.expiresAt ?? 0) > Date.now();
@@ -111,6 +146,11 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
   const drilldownItems = optInEnabled
     ? await computeTransactionDrilldown(ctx, userId, windowDays)
     : [];
+
+  // Transaction diagnostics only when drilldown is enabled (troubleshooting mode)
+  const transactionDiagnostics = optInEnabled
+    ? await computeTransactionDiagnostics(ctx, userId)
+    : null;
 
   const events = await ctx.db
     .query("coachEvents")
@@ -173,7 +213,45 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
       ? { enabled: true, windowDays, expiresAt: drilldownOptIn?.expiresAt ?? 0 }
       : { enabled: false, windowDays, expiresAt: drilldownOptIn?.expiresAt ?? 0 },
     transactionDrilldown: optInEnabled ? { windowDays, items: drilldownItems } : null,
+    
+    // Extended financial context (A-G)
+    balanceSheet,
+    incomeProfile,
+    baselineObligations,
+    debtSnapshot,
+    goalSnapshot,
+    riskProfile,
+    taxProfile,
+    transactionDiagnostics,
+    
+    // H) Pre-computed health summary
+    healthSummary: computeHealthSummary(balanceSheet, incomeProfile, debtSnapshot, riskProfile, cashflow),
+    
+    // Context depth for adaptive inclusion
+    contextDepth: computeContextDepth(balanceSheet, goalSnapshot, conversation),
   };
+}
+
+/**
+ * Determine context depth based on user's data completeness
+ */
+function computeContextDepth(
+  balanceSheet: CoachContextPacket["balanceSheet"],
+  goalSnapshot: CoachContextPacket["goalSnapshot"],
+  conversation: CoachContextPacket["recentConversation"]
+): ContextDepth {
+  const hasAccounts = balanceSheet && (
+    balanceSheet.checking.length > 0 || 
+    balanceSheet.savings.length > 0 ||
+    balanceSheet.creditCards.length > 0 ||
+    balanceSheet.loans.length > 0
+  );
+  const hasGoals = goalSnapshot && goalSnapshot.goals.length > 0;
+  const hasHistory = conversation && conversation.length > 3;
+  
+  if (!hasAccounts && !hasGoals) return "minimal"; // New user
+  if (!hasHistory) return "standard"; // Has data but new to coach
+  return "full"; // Established user
 }
 
 export function summarizePacket(packet: CoachContextPacket) {

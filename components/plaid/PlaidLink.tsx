@@ -92,16 +92,23 @@ export function PlaidLinkButton({
   
   // Handle exit
   const handleExit: PlaidLinkOnExit = useCallback(
-    (err) => {
-      // Note: err can be an empty object {} when user just closes the modal normally
-      // Only log actual errors (objects with properties)
-      if (err && Object.keys(err).length > 0) {
-        console.error("Plaid Link error:", err);
+    (err, metadata) => {
+      // User closing the modal normally is not an error
+      // Only log if there's an actual error code from Plaid
+      if (err?.error_code) {
+        console.error("Plaid Link error:", err.error_code, err.error_message);
+        toast.error(err.display_message || "Failed to connect to your bank. Please try again.");
+      } else if (metadata?.status === "requires_credentials") {
+        // User needs to re-authenticate - not an error, just closed
+        console.log("[PlaidLink] User exited - requires credentials");
+      } else {
+        // Normal close
+        console.log("[PlaidLink] User closed Link");
       }
       setLinkToken(null);
       onExit?.();
     },
-    [onExit]
+    [onExit, toast]
   );
   
   // Configure Plaid Link - usePlaidLink requires token to be null (not conditional object)

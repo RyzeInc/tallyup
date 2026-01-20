@@ -19,6 +19,7 @@ import type * as categoryCatalog from "../categoryCatalog.js";
 import type * as categoryResolver from "../categoryResolver.js";
 import type * as coach from "../coach.js";
 import type * as coachKnowledge from "../coachKnowledge.js";
+import type * as coach_aggregates from "../coach_aggregates.js";
 import type * as coach_internal from "../coach_internal.js";
 import type * as crons from "../crons.js";
 import type * as detector from "../detector.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   categoryResolver: typeof categoryResolver;
   coach: typeof coach;
   coachKnowledge: typeof coachKnowledge;
+  coach_aggregates: typeof coach_aggregates;
   coach_internal: typeof coach_internal;
   crons: typeof crons;
   detector: typeof detector;

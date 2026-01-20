@@ -1,8 +1,9 @@
 import type { CoachProvider, CoachProviderInput } from "../types";
 import { parseCoachOutput } from "../parseOutput";
+import { buildCompactContext, buildConversationMessages, estimateTokens } from "../contextBuilder";
 
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
-const DEFAULT_MODEL = "openai/gpt-oss-120b";
+const DEFAULT_MODEL = "llama-3.1-8b-instant";
 const DEFAULT_TEMPERATURE = 0.4;
 const DEFAULT_MAX_TOKENS = 900;
 
@@ -18,88 +19,33 @@ async function callGroq(input: CoachProviderInput) {
   if (!apiKey) throw new Error("Missing GROQ_API_KEY.");
 
   const model = process.env.GROQ_MODEL || DEFAULT_MODEL;
-
   const temperature = Math.min(Math.max(parseNumber(process.env.GROQ_TEMPERATURE, DEFAULT_TEMPERATURE), 0), 1);
   const maxTokens = Math.round(Math.max(parseNumber(process.env.GROQ_MAX_TOKENS, DEFAULT_MAX_TOKENS), 256));
 
-  if (process.env.COACH_DEBUG === "true") {
-    console.info(`[groq] model=${model} temp=${temperature} maxTokens=${maxTokens}`);
-  }
-
-  // Keep recent conversation (this is what makes it feel like an assistant)
-  const conversation = input.contextPacket.recentConversation
-    .slice(-10) // Last 10 messages max
-    .map((entry) => ({
-      role: entry.role,
-      content: entry.content,
-    }));
-
-  // Build a human-readable financial summary instead of raw JSON
-  const parts: string[] = [];
+  // Build compact context with intent gating
+  const intent = input.contextPacket.intent ?? undefined;
+  const compactContext = buildCompactContext(input.contextPacket, { intent });
   
-  // Cashflow in plain English
-  const cf = input.contextPacket.cashflow;
-  if (cf) {
-    const net = cf.netCents / 100;
-    const income = cf.incomeCents / 100;
-    const expenses = cf.expenseCents / 100;
-    if (net < 0) {
-      parts.push(`This month: $${income.toLocaleString()} income, $${expenses.toLocaleString()} spent, $${Math.abs(net).toLocaleString()} in the red.`);
-    } else {
-      parts.push(`This month: $${income.toLocaleString()} income, $${expenses.toLocaleString()} spent, $${net.toLocaleString()} surplus.`);
-    }
-  }
+  // Only last 4 messages (summarize-and-replace)
+  const conversation = buildConversationMessages(input.contextPacket, 4);
 
-  // Top spending areas (brief)
-  const cats = input.contextPacket.spendByCategory?.slice(0, 3);
-  if (cats && cats.length > 0) {
-    const catStr = cats.map(c => `${c.category} ($${(c.amountCents/100).toLocaleString()})`).join(", ");
-    parts.push(`Top spending: ${catStr}.`);
-  }
-
-  // Upcoming bills (brief)
-  const bills = input.contextPacket.upcomingBills?.slice(0, 3);
-  if (bills && bills.length > 0) {
-    const billStr = bills.map(b => b.name).join(", ");
-    parts.push(`Upcoming bills: ${billStr}.`);
-  }
-
-  // Established facts from this session
-  const facts = input.contextPacket.establishedFacts;
-  if (facts && facts.length > 0) {
-    parts.push(`User has shared: ${facts.join("; ")}.`);
-  }
-
-  // Foundation snapshot (key user info)
-  const foundation = input.contextPacket.foundationSnapshot as Record<string, unknown> | null;
-  if (foundation) {
-    const foundationParts: string[] = [];
-    if (foundation.monthlyIncomeCents) {
-      foundationParts.push(`monthly income ~$${((foundation.monthlyIncomeCents as number) / 100).toLocaleString()}`);
-    }
-    if (foundation.primaryGoal) {
-      foundationParts.push(`goal: ${foundation.primaryGoal}`);
-    }
-    if (foundationParts.length > 0) {
-      parts.push(`Known about user: ${foundationParts.join(", ")}.`);
-    }
-  }
-
-  const financialContext = parts.length > 0 
-    ? parts.join(" ") 
-    : "No financial data available yet.";
-
-  // User's message is just their message - context goes in system or as a note
-  const userPayload = input.message;
-
-  // Append context as a brief system note, not in user message
+  // System prompt with context
   const systemWithContext = [
     input.systemPrompt,
     "",
     "---",
-    "User's financial context:",
-    financialContext,
+    "STATE:",
+    compactContext,
   ].join("\n");
+
+  // Log token estimates
+  if (process.env.COACH_DEBUG === "true") {
+    const systemTokens = estimateTokens(systemWithContext);
+    const convTokens = estimateTokens(conversation.map(m => m.content).join(" "));
+    const msgTokens = estimateTokens(input.message);
+    console.info(`[groq] model=${model} temp=${temperature} maxTokens=${maxTokens}`);
+    console.info(`[groq] tokens est: system=${systemTokens} conv=${convTokens} msg=${msgTokens} total=${systemTokens + convTokens + msgTokens}`);
+  }
 
   const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
     method: "POST",
@@ -114,7 +60,7 @@ async function callGroq(input: CoachProviderInput) {
       messages: [
         { role: "system", content: systemWithContext },
         ...conversation,
-        { role: "user", content: userPayload },
+        { role: "user", content: input.message },
       ],
     }),
   });

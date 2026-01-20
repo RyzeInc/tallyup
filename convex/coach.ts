@@ -92,7 +92,13 @@ export const chat: ReturnType<typeof action> = action({
     };
 
     const { provider, usesExternal, selected } = getCoachProvider();
-    const systemPrompt = buildCoachSystemPrompt();
+    
+    // Dynamic system prompt based on user's health summary and context depth
+    const systemPrompt = buildCoachSystemPrompt({
+      healthSummary: packetWithKnowledge.healthSummary,
+      contextDepth: packetWithKnowledge.contextDepth,
+    });
+    
     const rawMode = process.env.COACH_RAW_MODE === "true";
     if (process.env.COACH_DEBUG === "true") {
       console.info(`[coach.chat] provider=${selected} external=${usesExternal} rawMode=${rawMode}`);

@@ -3,6 +3,7 @@
 import { useAction, useConvex, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import Card, { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
@@ -339,7 +340,25 @@ export default function CoachChat() {
                       border: "1px solid var(--border)",
                     }}
                   >
-                    {message.content}
+                    {message.role === "user" ? (
+                      message.content
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="list-disc pl-4 mb-2 last:mb-0">{children}</ul>,
+                          ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 last:mb-0">{children}</ol>,
+                          li: ({ children }) => <li className="mb-1">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                          em: ({ children }) => <em className="italic">{children}</em>,
+                          code: ({ children }) => (
+                            <code className="bg-black/10 dark:bg-white/10 px-1 rounded text-xs">{children}</code>
+                          ),
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </div>
               ))}

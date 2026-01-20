@@ -1,5 +1,6 @@
 import type { CoachProvider, CoachProviderInput } from "../types";
 import { parseCoachOutput } from "../parseOutput";
+import { buildCompactContext, buildConversationMessages, estimateTokens } from "../contextBuilder";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o";
@@ -21,23 +22,30 @@ async function callOpenAI(input: CoachProviderInput) {
   const temperature = Math.min(Math.max(parseNumber(process.env.OPENAI_TEMPERATURE, DEFAULT_TEMPERATURE), 0), 1);
   const maxTokens = Math.round(Math.max(parseNumber(process.env.OPENAI_MAX_TOKENS, DEFAULT_MAX_TOKENS), 256));
 
-  if (process.env.COACH_DEBUG === "true") {
-    console.info(`[openai] model=${model} temp=${temperature} maxTokens=${maxTokens}`);
-  }
+  // Build compact context with intent gating
+  const intent = input.contextPacket.intent ?? undefined;
+  const compactContext = buildCompactContext(input.contextPacket, { intent });
+  
+  // Only last 4 messages (summarize-and-replace)
+  const conversation = buildConversationMessages(input.contextPacket, 4);
 
-  const conversation = input.contextPacket.recentConversation.map((entry) => ({
-    role: entry.role,
-    content: entry.content,
-  }));
-
-  // Build user message - include context but don't force the model to use it
-  const userPayload = [
-    input.message,
+  // System prompt with context
+  const systemWithContext = [
+    input.systemPrompt,
     "",
     "---",
-    "Financial context (use only if relevant to what the user is asking):",
-    JSON.stringify(input.contextPacket, null, 0),
+    "STATE:",
+    compactContext,
   ].join("\n");
+
+  // Log token estimates
+  if (process.env.COACH_DEBUG === "true") {
+    const systemTokens = estimateTokens(systemWithContext);
+    const convTokens = estimateTokens(conversation.map(m => m.content).join(" "));
+    const msgTokens = estimateTokens(input.message);
+    console.info(`[openai] model=${model} temp=${temperature} maxTokens=${maxTokens}`);
+    console.info(`[openai] tokens est: system=${systemTokens} conv=${convTokens} msg=${msgTokens} total=${systemTokens + convTokens + msgTokens}`);
+  }
 
   const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
     method: "POST",
@@ -50,9 +58,9 @@ async function callOpenAI(input: CoachProviderInput) {
       temperature,
       max_tokens: maxTokens,
       messages: [
-        { role: "system", content: input.systemPrompt },
+        { role: "system", content: systemWithContext },
         ...conversation,
-        { role: "user", content: userPayload },
+        { role: "user", content: input.message },
       ],
     }),
   });

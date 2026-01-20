@@ -10,10 +10,6 @@ import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } fro
 // Environment configuration
 export const PLAID_ENV = (process.env.PLAID_ENV || "sandbox") as "sandbox" | "development" | "production";
 
-if (PLAID_ENV !== "sandbox") {
-  throw new Error("PLAID_ENV must be 'sandbox' for alpha.");
-}
-
 // Plaid client configuration
 const configuration = new Configuration({
   basePath: PlaidEnvironments[PLAID_ENV],
