@@ -9,6 +9,7 @@ import { formatMoney } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ToastProvider";
+import DeletionWarningDialog, { buildGoalDeletionImpact } from "@/components/shared/DeletionWarningDialog";
 
 /**
  * Goals Page - Connected to Convex API
@@ -29,6 +30,11 @@ interface Goal {
   color?: string;
   status: GoalStatus;
   priority?: number;
+  // Funding configuration
+  fundingAccountId?: Id<"accounts">;
+  fundingIncomeCategories?: string[];
+  autoAllocatePercent?: number;
+  autoAllocateEnabled?: boolean;
 }
 
 const GOAL_TYPES = [
@@ -65,12 +71,32 @@ export default function GoalsPage() {
   const [editName, setEditName] = useState("");
   const [editCurrentAmount, setEditCurrentAmount] = useState("");
   const [editTargetAmount, setEditTargetAmount] = useState("");
+  const [editFundingAccountId, setEditFundingAccountId] = useState<Id<"accounts"> | null>(null);
+  const [editFundingCategories, setEditFundingCategories] = useState<string[]>([]);
+  const [editAutoAllocatePercent, setEditAutoAllocatePercent] = useState<number>(10);
+  const [editAutoAllocateEnabled, setEditAutoAllocateEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showArchiveWarning, setShowArchiveWarning] = useState(false);
 
   // Queries
   const goals = useQuery(api.goals.listGoals, { includeCompleted: true }) as Goal[] | undefined;
   const plaidSuggestedGoals = useQuery(api.plaid.getPlaidSuggestedGoals, {});
   const manualSuggestedGoals = useQuery(api.entries.getManualGoalSuggestions, {});
+  const goalDeletionImpact = useQuery(
+    api.goals.getGoalDeletionImpact,
+    editingGoal ? { id: editingGoal._id } : "skip"
+  );
+  // Fetch accounts and income categories for funding configuration
+  const accounts = useQuery(api.accounts.listAccounts, {}) as
+    | { _id: Id<"accounts">; name: string; type?: string }[]
+    | undefined;
+  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string }[]
+    | undefined;
+  const incomeCategoryNames = useMemo(() => 
+    incomeCategories?.map(c => c.name) ?? [], 
+    [incomeCategories]
+  );
 
   // Mutations
   const createGoal = useMutation(api.goals.createGoal);
@@ -176,6 +202,11 @@ export default function GoalsPage() {
     setEditName(goal.name);
     setEditCurrentAmount((goal.currentAmountCents / 100).toFixed(2));
     setEditTargetAmount((goal.targetAmountCents / 100).toFixed(2));
+    // Populate funding settings
+    setEditFundingAccountId(goal.fundingAccountId ?? null);
+    setEditFundingCategories(goal.fundingIncomeCategories ?? []);
+    setEditAutoAllocatePercent(goal.autoAllocatePercent ?? 10);
+    setEditAutoAllocateEnabled(goal.autoAllocateEnabled ?? false);
   }
 
   async function handleCreate() {
@@ -211,8 +242,36 @@ export default function GoalsPage() {
       if (delta !== 0) {
         await updateGoalProgress({ id: editingGoal._id, deltaAmountCents: delta });
       }
-      if (editName.trim() !== editingGoal.name || targetCents !== editingGoal.targetAmountCents) {
-        await updateGoalMutation({ id: editingGoal._id, name: editName.trim(), targetAmountCents: targetCents });
+      
+      // Build update object including funding settings
+      const updates: {
+        name?: string;
+        targetAmountCents?: number;
+        fundingAccountId?: Id<"accounts"> | null;
+        fundingIncomeCategories?: string[];
+        autoAllocatePercent?: number;
+        autoAllocateEnabled?: boolean;
+      } = {};
+      
+      if (editName.trim() !== editingGoal.name) updates.name = editName.trim();
+      if (targetCents !== editingGoal.targetAmountCents) updates.targetAmountCents = targetCents;
+      
+      // Funding settings
+      if (editFundingAccountId !== (editingGoal.fundingAccountId ?? null)) {
+        updates.fundingAccountId = editFundingAccountId;
+      }
+      if (JSON.stringify(editFundingCategories) !== JSON.stringify(editingGoal.fundingIncomeCategories ?? [])) {
+        updates.fundingIncomeCategories = editFundingCategories;
+      }
+      if (editAutoAllocatePercent !== (editingGoal.autoAllocatePercent ?? 10)) {
+        updates.autoAllocatePercent = editAutoAllocatePercent;
+      }
+      if (editAutoAllocateEnabled !== (editingGoal.autoAllocateEnabled ?? false)) {
+        updates.autoAllocateEnabled = editAutoAllocateEnabled;
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await updateGoalMutation({ id: editingGoal._id, ...updates });
       }
       toast.success("Goal updated");
       setEditingGoal(null);
@@ -239,6 +298,17 @@ export default function GoalsPage() {
 
   async function handleAbandonGoal() {
     if (!editingGoal) return;
+    // Show warning dialog first if there's impact data
+    if (goalDeletionImpact && (goalDeletionImpact.linkedEntriesCount > 0 || goalDeletionImpact.contributionsCount > 0)) {
+      setShowArchiveWarning(true);
+      return;
+    }
+    await confirmAbandonGoal();
+  }
+
+  async function confirmAbandonGoal() {
+    if (!editingGoal) return;
+    setShowArchiveWarning(false);
     setSaving(true);
     try {
       await updateGoalMutation({ id: editingGoal._id, status: "abandoned" });
@@ -472,6 +542,87 @@ export default function GoalsPage() {
                 <div><label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Current Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-tertiary)" }}>$</span><input type="number" step="0.01" value={editCurrentAmount} onChange={(e) => setEditCurrentAmount(e.target.value)} className="w-full pl-7 pr-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }} /></div></div>
                 <div><label className="block text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Target Amount</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-tertiary)" }}>$</span><input type="number" step="0.01" value={editTargetAmount} onChange={(e) => setEditTargetAmount(e.target.value)} className="w-full pl-7 pr-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "var(--surface-2)", color: "var(--text)", border: "1px solid var(--border)" }} /></div></div>
 
+                {/* Auto-Funding Settings Section */}
+                <div className="pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lucide.Zap className="h-4 w-4" style={{ color: "var(--primary)" }} />
+                    <span className="text-sm font-medium" style={{ color: "var(--text)" }}>Auto-Funding</span>
+                  </div>
+
+                  {/* Funding Account */}
+                  <div className="mb-3">
+                    <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>Funding Account</label>
+                    <select
+                      value={editFundingAccountId || ""}
+                      onChange={(e) => setEditFundingAccountId(e.target.value ? (e.target.value as Id<"accounts">) : null)}
+                      className="w-full rounded-lg px-3 py-2 text-sm"
+                      style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}
+                    >
+                      <option value="">No account linked</option>
+                      {accounts?.map((a) => (
+                        <option key={a._id} value={a._id}>{a.name}{a.type ? ` (${a.type})` : ""}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Income Categories */}
+                  {incomeCategoryNames.length > 0 && (
+                    <div className="mb-3">
+                      <label className="block text-xs mb-1" style={{ color: "var(--text-tertiary)" }}>Fund from Income Categories</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {incomeCategoryNames.map((name) => {
+                          const isSelected = editFundingCategories.includes(name);
+                          return (
+                            <button
+                              key={name}
+                              type="button"
+                              onClick={() => setEditFundingCategories(prev => 
+                                isSelected ? prev.filter(c => c !== name) : [...prev, name]
+                              )}
+                              className="px-2 py-1 rounded-full text-xs font-medium transition-colors"
+                              style={{
+                                backgroundColor: isSelected ? "var(--primary)" : "var(--surface-2)",
+                                color: isSelected ? "var(--on-primary)" : "var(--text-secondary)",
+                                border: `1px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
+                              }}
+                            >
+                              {isSelected && <Lucide.Check className="inline h-3 w-3 mr-1" />}
+                              {name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Auto-Allocate Toggle & Percent */}
+                  <label className="flex items-center justify-between cursor-pointer mb-2">
+                    <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Enable auto-allocation</span>
+                    <input
+                      type="checkbox"
+                      checked={editAutoAllocateEnabled}
+                      onChange={(e) => setEditAutoAllocateEnabled(e.target.checked)}
+                      className="h-4 w-4 rounded"
+                      style={{ accentColor: "var(--primary)" }}
+                    />
+                  </label>
+                  {editAutoAllocateEnabled && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>Allocate</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={editAutoAllocatePercent}
+                        onChange={(e) => setEditAutoAllocatePercent(Math.max(1, Math.min(100, parseInt(e.target.value) || 10)))}
+                        className="w-16 px-2 py-1 rounded-lg text-sm text-center"
+                        style={{ backgroundColor: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--text)" }}
+                      />
+                      <span className="text-xs" style={{ color: "var(--text-tertiary)" }}>% of selected income</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex gap-2 pt-2">
                   <button onClick={handleAbandonGoal} disabled={saving} className="px-3 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}>Archive</button>
                   <button onClick={handleCompleteGoal} disabled={saving} className="px-3 py-2.5 rounded-xl text-sm font-medium" style={{ backgroundColor: "var(--success-subtle)", color: "var(--success)" }}>Complete</button>
@@ -481,6 +632,16 @@ export default function GoalsPage() {
             </div>
           </div>
         )}
+
+        {/* Goal Archive Warning Dialog */}
+        <DeletionWarningDialog
+          open={showArchiveWarning}
+          onClose={() => setShowArchiveWarning(false)}
+          onConfirm={confirmAbandonGoal}
+          impact={buildGoalDeletionImpact(goalDeletionImpact ?? null)}
+          loading={saving}
+          confirmLabel="Archive"
+        />
       </SignedIn>
     </div>
   );

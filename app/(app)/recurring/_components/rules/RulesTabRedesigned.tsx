@@ -3,11 +3,12 @@
 import { useState } from "react";
 import * as Lucide from "lucide-react";
 import type { Doc } from "convex/_generated/dataModel";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { formatMoney } from "@/components/utils";
 import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ToastProvider";
+import DeletionWarningDialog, { buildRecurringRuleDeletionImpact } from "@/components/shared/DeletionWarningDialog";
 
 type Rule = Doc<"recurringRules">;
 type ExpectedCharge = Doc<"expectedCharges">;
@@ -222,6 +223,14 @@ function RuleRow({
   const updateRule = useMutation(api.recurring.updateRecurringRule);
   const deleteRule = useMutation(api.recurring.deleteRecurringRule);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Query deletion impact when warning dialog is shown
+  const ruleDeletionImpact = useQuery(
+    api.recurring.getRecurringRuleDeletionImpact,
+    showDeleteWarning ? { id: rule._id } : "skip"
+  );
 
   // Get next expected charge for this rule
   const nextCharge = (expectedCharges ?? [])
@@ -252,15 +261,24 @@ function RuleRow({
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this rule?")) return;
+    setMenuOpen(false);
+    setShowDeleteWarning(true);
+  };
+
+  const confirmDelete = async () => {
+    setDeleting(true);
     try {
       await deleteRule({ id: rule._id });
       toast.success("Rule deleted");
+      setShowDeleteWarning(false);
     } catch {
       toast.error("Failed to delete rule");
+    } finally {
+      setDeleting(false);
     }
-    setMenuOpen(false);
   };
+
+  const ruleName = rule.displayName ?? rule.name ?? rule.category ?? "Unnamed rule";
 
   return (
     <div
@@ -364,6 +382,16 @@ function RuleRow({
           </>
         )}
       </div>
+
+      {/* Recurring Rule Delete Warning Dialog */}
+      <DeletionWarningDialog
+        open={showDeleteWarning}
+        onClose={() => setShowDeleteWarning(false)}
+        onConfirm={confirmDelete}
+        impact={buildRecurringRuleDeletionImpact(ruleDeletionImpact ?? null, ruleName)}
+        loading={deleting}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

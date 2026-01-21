@@ -1,4 +1,4 @@
-# Data Integrity Testing Guide
+A# Data Integrity Testing Guide
 
 This document describes how to test the bidirectional data integrity features added to TallyUp.
 
@@ -306,23 +306,6 @@ const displayImpact = buildEntryDeletionImpact(entryImpact, "Coffee Purchase");
 />
 ```
 
-### 6.2 Test: GoalFundingModal
-
-```tsx
-import GoalFundingModal from "@/components/shared/GoalFundingModal";
-
-<GoalFundingModal
-  goalId={goal._id}
-  goalName={goal.name}
-  currentFundingAccountId={goal.fundingAccountId}
-  currentFundingCategories={goal.fundingIncomeCategories}
-  currentAutoAllocatePercent={goal.autoAllocatePercent}
-  currentAutoAllocateEnabled={goal.autoAllocateEnabled}
-  onClose={() => setShowFundingModal(false)}
-  onSaved={() => refetchGoals()}
-/>
-```
-
 ---
 
 ## 7. Manual End-to-End Testing Checklist
@@ -335,11 +318,11 @@ import GoalFundingModal from "@/components/shared/GoalFundingModal";
 - [ ] Verify expected charges are deleted
 
 ### Goals
-- [ ] Create a goal with funding configuration via GoalFundingModal
-- [ ] Link an account and income categories
-- [ ] Enable auto-allocation
+- [ ] Create a goal with funding configuration via the Goals page edit modal
+- [ ] Link an account and income categories using the Auto-Funding settings
+- [ ] Enable auto-allocation with a percentage
 - [ ] Verify `getGoalsForIncomeCategory` returns the goal
-- [ ] Delete the goal
+- [ ] Delete/archive the goal
 - [ ] Verify linked entries are unlinked
 - [ ] Verify contributions are deleted
 

@@ -208,7 +208,8 @@ export function buildEntryDeletionImpact(
 export function buildRecurringRuleDeletionImpact(
   result: {
     linkedEntriesCount: number;
-    totalLinkedCents: number;
+    linkedEntriesTotalCents?: number;
+    totalLinkedCents?: number; // Legacy alias
     upcomingChargesCount: number;
   } | null,
   ruleName?: string
@@ -216,6 +217,7 @@ export function buildRecurringRuleDeletionImpact(
   if (!result) return null;
 
   const warnings: DeletionImpact["warnings"] = [];
+  const totalAmount = result.linkedEntriesTotalCents ?? result.totalLinkedCents ?? 0;
 
   if (result.linkedEntriesCount > 0) {
     warnings.push({
@@ -223,10 +225,12 @@ export function buildRecurringRuleDeletionImpact(
       value: result.linkedEntriesCount,
       isCritical: true,
     });
-    warnings.push({
-      label: "Total amount linked",
-      value: result.totalLinkedCents,
-    });
+    if (totalAmount > 0) {
+      warnings.push({
+        label: "Total amount linked",
+        value: totalAmount,
+      });
+    }
   }
 
   if (result.upcomingChargesCount > 0) {

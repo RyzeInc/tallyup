@@ -11,6 +11,7 @@ import Link from "next/link";
 import EmptyState from "@/components/ui/EmptyState";
 import PageHeader from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ToastProvider";
+import DeletionWarningDialog, { type DeletionImpact } from "@/components/shared/DeletionWarningDialog";
 
 /**
  * Accounts Management Page
@@ -166,6 +167,65 @@ export default function AccountsPage() {
 
   // Delete confirmation state
   const [deleteConfirmStep, setDeleteConfirmStep] = useState<"idle" | "confirm" | "askTxns">("idle");
+  
+  // Query account deletion impact when editing account
+  const accountDeletionImpact = useQuery(
+    api.accounts.getAccountDeletionImpact,
+    editingAccount ? { id: editingAccount._id } : "skip"
+  );
+  
+  // Build deletion impact for the warning dialog
+  const accountDeletionImpactForDialog = useMemo<DeletionImpact | null>(() => {
+    if (!accountDeletionImpact || !editingAccount) return null;
+    
+    const warnings: DeletionImpact["warnings"] = [];
+    
+    if (accountDeletionImpact.entriesCount > 0) {
+      warnings.push({
+        label: "Transactions",
+        value: accountDeletionImpact.entriesCount,
+        isCritical: true,
+      });
+    }
+    
+    if (accountDeletionImpact.goalsCount > 0) {
+      warnings.push({
+        label: "Goals with this funding account",
+        value: accountDeletionImpact.goalsCount,
+      });
+    }
+    
+    if (accountDeletionImpact.recurringRulesCount > 0) {
+      warnings.push({
+        label: "Recurring rules linked",
+        value: accountDeletionImpact.recurringRulesCount,
+      });
+    }
+    
+    if (accountDeletionImpact.investmentsCount > 0) {
+      warnings.push({
+        label: "Investments tracked",
+        value: accountDeletionImpact.investmentsCount,
+      });
+    }
+    
+    if (accountDeletionImpact.isLinked) {
+      warnings.push({
+        label: "Plaid connection",
+        value: "Account is linked to Plaid",
+        isCritical: true,
+      });
+    }
+    
+    return {
+      itemName: editingAccount.name,
+      itemType: "account" as const,
+      warnings,
+      confirmationText: accountDeletionImpact.entriesCount > 0
+        ? "You'll be asked about what to do with linked transactions."
+        : "This account will be archived for 14 days before permanent deletion.",
+    };
+  }, [accountDeletionImpact, editingAccount]);
 
   function errorMessage(error: unknown): string | undefined {
     if (error instanceof Error) return error.message;
@@ -898,38 +958,93 @@ export default function AccountsPage() {
           </div>
         )}
 
-        {/* Delete Confirmation Dialog - Step 1 */}
+        {/* Delete Confirmation Dialog - Step 1 (Enhanced with DeletionWarningDialog when impact exists) */}
         {deleteConfirmStep === "confirm" && editingAccount && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setDeleteConfirmStep("idle")} />
-            <div 
-              className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
-              style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-            >
-              <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
-                Archive Account?
-              </h3>
-              <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
-                Are you sure you want to archive &quot;{editingAccount.name}&quot;? It will be permanently deleted after 14 days.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setDeleteConfirmStep("idle")}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-medium"
-                  style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+          accountDeletionImpactForDialog && (
+            accountDeletionImpactForDialog.warnings.length > 0 ? (
+              <DeletionWarningDialog
+                open={true}
+                onClose={() => setDeleteConfirmStep("idle")}
+                onConfirm={() => {
+                  if (accountDeletionImpact && accountDeletionImpact.entriesCount > 0) {
+                    setDeleteConfirmStep("askTxns");
+                  } else {
+                    // No transactions, proceed directly to deletion
+                    setDeleteConfirmStep("idle");
+                    setDeleting(true);
+                    deleteAccount({ id: editingAccount._id as Id<"accounts"> })
+                      .then((res) => {
+                        if (res && res.archived) {
+                          toast.success("Account archived — it will be permanently deleted in 14 days");
+                        } else {
+                          toast.success("Account deleted");
+                        }
+                        setEditingAccount(null);
+                      })
+                      .catch((e: unknown) => {
+                        toast.error("Failed to delete account", { description: errorMessage(e) });
+                      })
+                      .finally(() => setDeleting(false));
+                  }
+                }}
+                impact={accountDeletionImpactForDialog}
+                loading={deleting}
+                confirmLabel="Continue"
+              />
+            ) : (
+              // No significant impact - show simple dialog
+              <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/60" onClick={() => setDeleteConfirmStep("idle")} />
+                <div 
+                  className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+                  style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setDeleteConfirmStep("askTxns")}
-                  className="flex-1 py-2.5 rounded-lg text-sm font-medium"
-                  style={{ backgroundColor: "var(--danger)", color: "white" }}
-                >
-                  Continue
-                </button>
+                  <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+                    Archive Account?
+                  </h3>
+                  <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+                    Are you sure you want to archive &quot;{editingAccount.name}&quot;? It will be permanently deleted after 14 days.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setDeleteConfirmStep("idle")}
+                      className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                      style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (accountDeletionImpact && accountDeletionImpact.entriesCount > 0) {
+                          setDeleteConfirmStep("askTxns");
+                        } else {
+                          setDeleteConfirmStep("idle");
+                          setDeleting(true);
+                          deleteAccount({ id: editingAccount._id as Id<"accounts"> })
+                            .then((res) => {
+                              if (res && res.archived) {
+                                toast.success("Account archived — it will be permanently deleted in 14 days");
+                              } else {
+                                toast.success("Account deleted");
+                              }
+                              setEditingAccount(null);
+                            })
+                            .catch((e: unknown) => {
+                              toast.error("Failed to delete account", { description: errorMessage(e) });
+                            })
+                            .finally(() => setDeleting(false));
+                        }
+                      }}
+                      className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                      style={{ backgroundColor: "var(--danger)", color: "white" }}
+                    >
+                      Continue
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )
+          )
         )}
 
         {/* Delete Confirmation Dialog - Step 2: Ask about transactions */}

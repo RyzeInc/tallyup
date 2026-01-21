@@ -7,8 +7,9 @@ import type { Id } from "convex/_generated/dataModel";
 import { QuickLogForm } from "@/components/logging";
 import type { TxDraft, AccountOption, GoalOption, ContextFlag, CategoryOption } from "@/components/logging/types";
 import { amountToCents, todayISO } from "@/components/logging/machine";
-import { yyyymmddToLocalMidnightTs } from "@/components/utils";
+import { yyyymmddToLocalMidnightTs, centsToDollars } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
+import DeletionWarningDialog, { buildEntryDeletionImpact } from "@/components/shared/DeletionWarningDialog";
 
 interface Entry {
   _id: string;
@@ -59,6 +60,7 @@ export default function EditEntryModal({
   const incomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
     | { _id: string; name: string }[]
     | undefined;
+  const entryDeletionImpact = useQuery(api.entries.getEntryDeletionImpact, { id: entry._id as Id<"entries"> });
 
   useEffect(() => {
     ensureSystemCategories().catch(() => {});
@@ -115,16 +117,26 @@ export default function EditEntryModal({
   }, []);
   // Previously the modal allowed inline editing; we now use QuickLogForm.
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
 
   async function handleDelete() {
     console.log("[EditEntryModal] Delete button clicked");
-    setShowDeleteConfirm(true);
+    // Show warning dialog if entry has relationships
+    if (entryDeletionImpact && (
+      entryDeletionImpact.hasRecurringRule ||
+      entryDeletionImpact.hasGoal ||
+      entryDeletionImpact.hasBudgetCategory ||
+      entryDeletionImpact.hasTransferPair
+    )) {
+      setShowDeleteWarning(true);
+      return;
+    }
+    await confirmDelete();
   }
 
   async function confirmDelete() {
     console.log("[EditEntryModal] Confirming delete for entry:", entry._id);
-    setShowDeleteConfirm(false);
+    setShowDeleteWarning(false);
     setDeleting(true);
     try {
       await deleteEntry({ id: entry._id as Id<"entries"> });
@@ -141,6 +153,14 @@ export default function EditEntryModal({
       setDeleting(false);
     }
   }
+
+  // Build entry title for the warning dialog
+  const entryTitle = useMemo(() => {
+    const amount = `$${centsToDollars(entry.amountCents)}`;
+    if (entry.merchant) return `${entry.merchant} - ${amount}`;
+    if (entry.category) return `${entry.category} - ${amount}`;
+    return `${amount} ${entry.type}`;
+  }, [entry]);
 
   // Map the existing entry into the QuickLog TxDraft shape - memoized to avoid re-creating on every render
   const existingDraft = useMemo<TxDraft>(() => {
@@ -318,40 +338,15 @@ export default function EditEntryModal({
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setShowDeleteConfirm(false)} />
-          <div 
-            className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
-            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
-              Delete Transaction?
-            </h3>
-            <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
-              This action cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium"
-                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--danger)", color: "white" }}
-              >
-                {deleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Entry Delete Warning Dialog */}
+      <DeletionWarningDialog
+        open={showDeleteWarning}
+        onClose={() => setShowDeleteWarning(false)}
+        onConfirm={confirmDelete}
+        impact={buildEntryDeletionImpact(entryDeletionImpact ?? null, entryTitle)}
+        loading={deleting}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }

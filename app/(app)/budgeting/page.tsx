@@ -11,6 +11,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useToast } from "@/components/ToastProvider";
+import DeletionWarningDialog, { buildBudgetCategoryDeletionImpact } from "@/components/shared/DeletionWarningDialog";
 
 /**
  * Budgeting Page - Connected to Convex API
@@ -79,11 +80,16 @@ export default function BudgetingPage() {
   const [editRollover, setEditRollover] = useState(false);
   const [editHardLimit, setEditHardLimit] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showArchiveWarning, setShowArchiveWarning] = useState(false);
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
   const plaidBudgetSuggestions = useQuery(api.plaid.getPlaidBudgetSuggestions, {});
   const manualBudgetSuggestions = useQuery(api.entries.getManualBudgetSuggestions, {});
+  const budgetDeletionImpact = useQuery(
+    api.budgets.getBudgetCategoryDeletionImpact,
+    editingBudget ? { id: editingBudget._id } : "skip"
+  );
   const timezoneOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
   const asOfDate = useMemo(() => Date.now(), []);
   const budgetStatus = useQuery(api.budgetEngine.getBudgetStatus, {
@@ -262,6 +268,17 @@ export default function BudgetingPage() {
 
   async function handleArchiveBudget() {
     if (!editingBudget) return;
+    // Show warning dialog first if there's impact data
+    if (budgetDeletionImpact && (budgetDeletionImpact.linkedEntriesCount > 0 || budgetDeletionImpact.groupMembershipsCount > 0)) {
+      setShowArchiveWarning(true);
+      return;
+    }
+    await confirmArchiveBudget();
+  }
+
+  async function confirmArchiveBudget() {
+    if (!editingBudget) return;
+    setShowArchiveWarning(false);
     setSaving(true);
     try {
       await updateBudgetCategory({ id: editingBudget._id, archived: true });
@@ -568,6 +585,16 @@ export default function BudgetingPage() {
             </div>
           </div>
         )}
+
+        {/* Budget Archive Warning Dialog */}
+        <DeletionWarningDialog
+          open={showArchiveWarning}
+          onClose={() => setShowArchiveWarning(false)}
+          onConfirm={confirmArchiveBudget}
+          impact={buildBudgetCategoryDeletionImpact(budgetDeletionImpact ?? null)}
+          loading={saving}
+          confirmLabel="Archive"
+        />
       </SignedIn>
     </div>
   );
