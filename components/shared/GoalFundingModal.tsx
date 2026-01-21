@@ -4,7 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
-import { X, Wallet, Tag, Percent, Info, Check } from "lucide-react";
+import * as Lucide from "lucide-react";
 import { useToast } from "@/components/ToastProvider";
 
 interface GoalFundingModalProps {
@@ -109,7 +109,7 @@ export default function GoalFundingModal({
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-subtle)]">
-            <X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
+            <Lucide.X className="h-5 w-5" style={{ color: "var(--text-secondary)" }} />
           </button>
         </div>
 
@@ -119,7 +119,7 @@ export default function GoalFundingModal({
             className="flex gap-3 p-3 rounded-xl"
             style={{ backgroundColor: "var(--primary-subtle)" }}
           >
-            <Info className="h-5 w-5 shrink-0 mt-0.5" style={{ color: "var(--primary)" }} />
+            <Lucide.Info className="h-5 w-5 shrink-0 mt-0.5" style={{ color: "var(--primary)" }} />
             <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
               <p className="font-medium mb-1" style={{ color: "var(--text)" }}>
                 How auto-funding works
@@ -134,7 +134,7 @@ export default function GoalFundingModal({
           {/* Funding Account */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Wallet className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+              <Lucide.Wallet className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
               <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
                 Funding Account
               </span>
@@ -167,7 +167,7 @@ export default function GoalFundingModal({
           {/* Income Categories */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <Tag className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+              <Lucide.Tag className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
               <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
                 Fund from Income Categories
               </span>
@@ -191,7 +191,7 @@ export default function GoalFundingModal({
                         border: `1px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
                       }}
                     >
-                      {isSelected && <Check className="h-3.5 w-3.5" />}
+                      {isSelected && <Lucide.Check className="h-3.5 w-3.5" />}
                       {name}
                     </button>
                   );
@@ -210,7 +210,7 @@ export default function GoalFundingModal({
           >
             <label className="flex items-center justify-between cursor-pointer">
               <div className="flex items-center gap-2">
-                <Percent className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
+                <Lucide.Percent className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                 <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
                   Enable Auto-Allocation
                 </span>

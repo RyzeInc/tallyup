@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertTriangle, X } from "lucide-react";
+import * as Lucide from "lucide-react";
 import { centsToDollars } from "@/components/utils";
 
 export interface DeletionImpact {
@@ -52,7 +52,7 @@ export default function DeletionWarningDialog({
           className="absolute top-4 right-4 p-1 rounded-full hover:bg-black/10"
           style={{ color: "var(--text-secondary)" }}
         >
-          <X size={18} />
+          <Lucide.X size={18} />
         </button>
 
         {/* Header */}
@@ -61,7 +61,7 @@ export default function DeletionWarningDialog({
             className="p-2 rounded-full"
             style={{ backgroundColor: hasCriticalWarnings ? "var(--danger-subtle, #fef2f2)" : "var(--warning-subtle, #fffbeb)" }}
           >
-            <AlertTriangle
+            <Lucide.AlertTriangle
               size={24}
               style={{ color: hasCriticalWarnings ? "var(--danger)" : "var(--warning, #f59e0b)" }}
             />
