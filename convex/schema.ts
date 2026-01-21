@@ -678,8 +678,23 @@ export default defineSchema({
     // Suggested monthly contribution (computed or user-set)
     suggestedMonthlyCents: v.optional(v.number()),
     
-    // Funding source - link to account or method
+    // Funding source - link to account or method (legacy - kept for compatibility)
     fundingSource: v.optional(v.string()),
+    
+    // ========== NEW: Proper account and income linking for auto-funding ==========
+    // Link to a specific account to fund this goal from
+    fundingAccountId: v.optional(v.id("accounts")),
+    
+    // Income categories that auto-contribute to this goal (e.g., "Side Gig" income → "Emergency Fund")
+    // When income with these categories comes in, optionally auto-allocate a percentage
+    fundingIncomeCategories: v.optional(v.array(v.string())),
+    
+    // Auto-allocation percentage from linked income (0-100)
+    // e.g., 20 means 20% of income from fundingIncomeCategories goes to this goal
+    autoAllocatePercent: v.optional(v.number()),
+    
+    // Whether auto-allocation is enabled
+    autoAllocateEnabled: v.optional(v.boolean()),
     
     // Priority for ordering
     priority: v.optional(v.number()),

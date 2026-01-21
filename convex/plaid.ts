@@ -1465,14 +1465,96 @@ export const getPlaidSuggestedGoals = query({
 // PUBLIC MUTATIONS
 // ============================================
 
+/**
+ * Get the impact of unlinking a Plaid item.
+ * Use this to show a warning dialog before unlinking.
+ */
+export const getPlaidItemUnlinkImpact = query({
+  args: { plaidItemId: v.id("plaidItems") },
+  handler: async (ctx, { plaidItemId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    
+    const item = await ctx.db.get(plaidItemId);
+    if (!item || item.userId !== identity.subject) return null;
+
+    // Get all linked accounts
+    const plaidAccounts = await ctx.db
+      .query("plaidAccounts")
+      .withIndex("by_plaidItem", (q) => q.eq("plaidItemId", plaidItemId))
+      .collect();
+
+    // Count transactions
+    let transactionsCount = 0;
+    for (const plaidAccount of plaidAccounts) {
+      const txns = await ctx.db
+        .query("plaidTransactions")
+        .withIndex("by_plaidAccount", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      transactionsCount += txns.length;
+    }
+
+    // Count investment transactions
+    let investmentTxnsCount = 0;
+    for (const plaidAccount of plaidAccounts) {
+      const invTxns = await ctx.db
+        .query("plaidInvestmentTransactions")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      investmentTxnsCount += invTxns.length;
+    }
+
+    // Count holdings
+    let holdingsCount = 0;
+    for (const plaidAccount of plaidAccounts) {
+      const holdings = await ctx.db
+        .query("plaidHoldings")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      holdingsCount += holdings.length;
+    }
+
+    // Count liabilities
+    let liabilitiesCount = 0;
+    for (const plaidAccount of plaidAccounts) {
+      const liabilities = await ctx.db
+        .query("plaidLiabilities")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      liabilitiesCount += liabilities.length;
+    }
+
+    // Count recurring streams
+    let streamsCount = 0;
+    for (const plaidAccount of plaidAccounts) {
+      const streams = await ctx.db
+        .query("plaidRecurringStreams")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      streamsCount += streams.length;
+    }
+
+    return {
+      institutionName: item.institutionName,
+      accountsCount: plaidAccounts.length,
+      transactionsCount,
+      investmentTxnsCount,
+      holdingsCount,
+      liabilitiesCount,
+      recurringStreamsCount: streamsCount,
+    };
+  },
+});
+
 export const unlinkPlaidItem = mutation({
   args: { plaidItemId: v.id("plaidItems") },
   handler: async (ctx, { plaidItemId }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
     
     const item = await ctx.db.get(plaidItemId);
-    if (!item || item.userId !== identity.subject) {
+    if (!item || item.userId !== userId) {
       throw new Error("Item not found");
     }
     
@@ -1481,9 +1563,73 @@ export const unlinkPlaidItem = mutation({
       .query("plaidAccounts")
       .withIndex("by_plaidItem", (q) => q.eq("plaidItemId", plaidItemId))
       .collect();
-    
-    // Update linked TallyUp accounts to unlink them
+
+    let deletedTransactions = 0;
+    let deletedHoldings = 0;
+    let deletedLiabilities = 0;
+    let deletedStreams = 0;
+    let deletedInvestmentTxns = 0;
+
     for (const plaidAccount of plaidAccounts) {
+      // Delete plaid transactions for this account
+      const transactions = await ctx.db
+        .query("plaidTransactions")
+        .withIndex("by_plaidAccount", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      
+      for (const txn of transactions) {
+        await ctx.db.delete(txn._id);
+        deletedTransactions++;
+      }
+
+      // Delete plaid investment transactions for this account
+      const investmentTxns = await ctx.db
+        .query("plaidInvestmentTransactions")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      
+      for (const invTxn of investmentTxns) {
+        await ctx.db.delete(invTxn._id);
+        deletedInvestmentTxns++;
+      }
+
+      // Delete plaid holdings for this account
+      const holdings = await ctx.db
+        .query("plaidHoldings")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      
+      for (const holding of holdings) {
+        await ctx.db.delete(holding._id);
+        deletedHoldings++;
+      }
+
+      // Delete plaid liabilities for this account
+      const liabilities = await ctx.db
+        .query("plaidLiabilities")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      
+      for (const liability of liabilities) {
+        await ctx.db.delete(liability._id);
+        deletedLiabilities++;
+      }
+
+      // Delete plaid recurring streams for this account
+      // But first, clear the linkedRuleId on any linked recurring rules
+      const streams = await ctx.db
+        .query("plaidRecurringStreams")
+        .withIndex("by_account", (q) => q.eq("plaidAccountId", plaidAccount._id))
+        .collect();
+      
+      for (const stream of streams) {
+        // If stream was linked to a recurring rule, we don't delete the rule
+        // but we could optionally notify the user
+        await ctx.db.delete(stream._id);
+        deletedStreams++;
+      }
+
+      // Update linked TallyUp account to unlink it
       await ctx.db.patch(plaidAccount.accountId, {
         isLinked: false,
         plaidAccountId: undefined,
@@ -1508,7 +1654,16 @@ export const unlinkPlaidItem = mutation({
     // Delete the item
     await ctx.db.delete(plaidItemId);
     
-    return { success: true };
+    return { 
+      success: true,
+      deletedAccounts: plaidAccounts.length,
+      deletedTransactions,
+      deletedInvestmentTxns,
+      deletedHoldings,
+      deletedLiabilities,
+      deletedStreams,
+      deletedSyncLogs: syncLogs.length,
+    };
   },
 });
 

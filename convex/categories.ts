@@ -273,3 +273,164 @@ export const deleteCategory = mutation({
     });
   },
 });
+
+/**
+ * Get the impact of archiving/deleting a category.
+ * Use this to show a warning dialog before the action.
+ */
+export const getCategoryDeletionImpact = query({
+  args: { id: v.id("categories") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const userId = identity.subject;
+
+    const category = await ctx.db.get(args.id);
+    if (!category || category.userId !== userId) return null;
+
+    // Count entries with this categoryId
+    const linkedEntries = await ctx.db
+      .query("entries")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), userId),
+          q.eq(q.field("categoryId"), args.id)
+        )
+      )
+      .collect();
+
+    // Count child categories
+    const childCategories = await ctx.db
+      .query("categories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("parentId"), args.id))
+      .collect();
+
+    // Count category rules using this category
+    const categoryRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const rulesUsingCategory = categoryRules.filter((r) => r.assignCategoryId === args.id);
+
+    // Count merchant rules using this category
+    const merchantRules = await ctx.db
+      .query("merchantRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const merchantRulesUsingCategory = merchantRules.filter((r) => r.defaultCategoryId === args.id);
+
+    return {
+      categoryName: category.name,
+      categoryType: category.categoryType,
+      isSystem: category.isSystem,
+      linkedEntriesCount: linkedEntries.length,
+      childCategoriesCount: childCategories.length,
+      childCategoryNames: childCategories.map((c) => c.name),
+      categoryRulesCount: rulesUsingCategory.length,
+      merchantRulesCount: merchantRulesUsingCategory.length,
+    };
+  },
+});
+
+/**
+ * Archive a category with proper cleanup.
+ * This clears categoryId on linked entries and handles child categories.
+ */
+export const archiveCategory = mutation({
+  args: {
+    id: v.id("categories"),
+    clearEntryLinks: v.optional(v.boolean()), // Default true - clear categoryId on entries
+    promoteChildren: v.optional(v.boolean()), // Default true - promote children to top-level
+    archiveChildren: v.optional(v.boolean()), // Alternative: also archive children
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const category = await ctx.db.get(args.id);
+    if (!category || category.userId !== userId) {
+      throw new Error("Category not found");
+    }
+
+    if (category.isSystem) {
+      throw new Error("Cannot archive system category");
+    }
+
+    const now = Date.now();
+    const clearEntryLinks = args.clearEntryLinks ?? true;
+    const promoteChildren = args.promoteChildren ?? true;
+    const archiveChildren = args.archiveChildren ?? false;
+
+    // Handle child categories
+    const childCategories = await ctx.db
+      .query("categories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("parentId"), args.id))
+      .collect();
+
+    for (const child of childCategories) {
+      if (archiveChildren) {
+        // Recursively archive children
+        await ctx.db.patch(child._id, { archived: true, updatedAt: now });
+      } else if (promoteChildren) {
+        // Promote to top-level (clear parentId)
+        await ctx.db.patch(child._id, { parentId: undefined, updatedAt: now });
+      }
+    }
+
+    // Clear categoryId on linked entries if requested
+    if (clearEntryLinks) {
+      const linkedEntries = await ctx.db
+        .query("entries")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("categoryId"), args.id)
+          )
+        )
+        .collect();
+
+      for (const entry of linkedEntries) {
+        await ctx.db.patch(entry._id, { categoryId: undefined, updatedAt: now });
+      }
+    }
+
+    // Clear assignCategoryId on category rules that use this category
+    const categoryRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    for (const rule of categoryRules) {
+      if (rule.assignCategoryId === args.id) {
+        await ctx.db.patch(rule._id, { assignCategoryId: undefined, updatedAt: now });
+      }
+    }
+
+    // Clear defaultCategoryId on merchant rules that use this category
+    const merchantRules = await ctx.db
+      .query("merchantRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    for (const rule of merchantRules) {
+      if (rule.defaultCategoryId === args.id) {
+        await ctx.db.patch(rule._id, { defaultCategoryId: undefined, updatedAt: now });
+      }
+    }
+
+    // Archive the category
+    await ctx.db.patch(args.id, {
+      archived: true,
+      updatedAt: now,
+    });
+
+    return { 
+      ok: true,
+      childrenPromoted: promoteChildren ? childCategories.length : 0,
+      childrenArchived: archiveChildren ? childCategories.length : 0,
+    };
+  },
+});

@@ -153,6 +153,12 @@ export const createRecurringRule = mutation({
       committed: v.boolean(),
       rollupKey: v.optional(v.string()),
     })),
+    // Options for auto-generating entries
+    generateHistoricalEntries: v.optional(v.boolean()), // Generate past entries based on cadence
+    historicalStartDate: v.optional(v.number()),        // How far back to generate (default: 3 months)
+    generateFutureEntries: v.optional(v.boolean()),     // Generate future expected charges
+    futureMonths: v.optional(v.number()),               // How many months ahead (default: 6)
+    defaultAccountId: v.optional(v.id("accounts")),     // Account to assign to generated entries
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -198,7 +204,88 @@ export const createRecurringRule = mutation({
       updatedAt: now,
     });
 
-    return { ok: true, id };
+    // Auto-generate historical entries if requested
+    let generatedEntries = 0;
+    if (args.generateHistoricalEntries && args.amountCents !== undefined) {
+      const startDate = args.historicalStartDate ?? (now - 90 * 24 * 60 * 60 * 1000); // Default 3 months back
+      const cadence = args.cadence ?? { 
+        kind: (args.cadenceType as CadenceKind) ?? "monthly",
+        intervalDays: args.intervalDays,
+      };
+      
+      // Generate entries from startDate to now based on cadence
+      let currentDate = startDate;
+      while (currentDate <= now) {
+        const entryDate = currentDate;
+        
+        // Create entry
+        await ctx.db.insert("entries", {
+          userId,
+          type: args.type,
+          transactionType: args.type === "income" ? "RECEIVED" : "SPENT",
+          category: args.category,
+          bucket: args.bucket,
+          tags: args.tags?.map(t => t.trim()).filter(Boolean) || undefined,
+          note: args.note ?? `Auto-generated from recurring: ${args.displayName ?? args.name ?? args.category}`,
+          amountCents: args.amountCents,
+          date: entryDate,
+          occurredAt: entryDate,
+          enteredAt: now,
+          status: "posted",
+          entryType: args.type === "income" ? "income" : "purchase",
+          needsReview: false,
+          accountId: args.defaultAccountId,
+          recurringRuleId: id,
+          recurringMatch: {
+            ruleId: id,
+            matchType: "auto",
+            score: 100,
+            explain: { source: "rule_creation_backfill" },
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+        generatedEntries++;
+
+        // Advance to next occurrence
+        currentDate = nextExpectedDate(currentDate, cadence);
+      }
+    }
+
+    // Generate future expected charges if requested (or by default for active rules)
+    let generatedCharges = 0;
+    if ((args.generateFutureEntries !== false) && status === "active") {
+      const futureMonths = args.futureMonths ?? 6;
+      const cadence = args.cadence ?? { 
+        kind: (args.cadenceType as CadenceKind) ?? "monthly",
+        intervalDays: args.intervalDays,
+      };
+      
+      // Start from now and generate future expected charges
+      let currentDate = now;
+      const endDate = now + futureMonths * 30 * 24 * 60 * 60 * 1000;
+      
+      while (currentDate <= endDate) {
+        await ctx.db.insert("expectedCharges", {
+          userId,
+          ruleId: id,
+          expectedDate: currentDate,
+          expectedAmountCents: args.amountCents,
+          state: currentDate <= now ? "due" : "upcoming",
+          generatedAt: now,
+        });
+        generatedCharges++;
+        
+        currentDate = nextExpectedDate(currentDate, cadence);
+      }
+    }
+
+    return { 
+      ok: true, 
+      id,
+      generatedEntries,
+      generatedCharges,
+    };
   },
 });
 
@@ -301,15 +388,171 @@ export const updateRecurringRule = mutation({
 });
 
 export const deleteRecurringRule = mutation({
-  args: { id: v.id("recurringRules") },
+  args: { 
+    id: v.id("recurringRules"),
+    // Options for handling linked data
+    deleteLinkedEntries: v.optional(v.boolean()),   // Delete all entries linked to this rule
+    unlinkEntries: v.optional(v.boolean()),         // Just remove the link, keep entries
+    deleteExpectedCharges: v.optional(v.boolean()), // Delete future expected charges (default true)
+  },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
 
+    const now = Date.now();
+    const deleteExpected = args.deleteExpectedCharges !== false; // Default true
+
+    // Get linked entries
+    const linkedEntries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_recurring", (q) => q.eq("userId", userId).eq("recurringRuleId", args.id))
+      .collect();
+
+    // Get expected charges
+    const expectedCharges = await ctx.db
+      .query("expectedCharges")
+      .withIndex("by_user_rule", (q) => q.eq("userId", userId).eq("ruleId", args.id))
+      .collect();
+
+    // Handle linked entries based on user choice
+    if (args.deleteLinkedEntries) {
+      // Delete all linked entries (with proper cleanup)
+      for (const entry of linkedEntries) {
+        // Reverse balance effects for manual accounts
+        if (entry.accountId) {
+          const delta = entry.type === "income" ? entry.amountCents : -entry.amountCents;
+          const account = await ctx.db.get(entry.accountId);
+          if (account && !account.isLinked) {
+            const latestSnapshots = await ctx.db
+              .query("accountSnapshots")
+              .withIndex("by_account_asOf", (q) => q.eq("accountId", entry.accountId!))
+              .order("desc")
+              .take(1);
+            if (latestSnapshots[0]) {
+              await ctx.db.patch(latestSnapshots[0]._id, { 
+                balance: latestSnapshots[0].balance - delta 
+              });
+            }
+          }
+        }
+        
+        // Remove goal contributions if linked
+        if (entry.goalId) {
+          const contribution = await ctx.db
+            .query("goalContributions")
+            .withIndex("by_entry", (q) => q.eq("entryId", entry._id))
+            .first();
+          if (contribution) {
+            const goal = await ctx.db.get(entry.goalId);
+            if (goal) {
+              await ctx.db.patch(entry.goalId, {
+                currentAmountCents: Math.max(0, goal.currentAmountCents - entry.amountCents),
+                updatedAt: now,
+              });
+            }
+            await ctx.db.delete(contribution._id);
+          }
+        }
+
+        await ctx.db.delete(entry._id);
+      }
+    } else if (args.unlinkEntries !== false) {
+      // Default: unlink entries (keep them but remove recurring link)
+      for (const entry of linkedEntries) {
+        await ctx.db.patch(entry._id, { 
+          recurringRuleId: undefined,
+          recurringMatch: undefined,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // Handle expected charges
+    if (deleteExpected) {
+      for (const charge of expectedCharges) {
+        // Only delete unmatched future charges
+        if (charge.state === "upcoming" || charge.state === "due") {
+          await ctx.db.delete(charge._id);
+        }
+      }
+    }
+
+    // Delete recurring inbox items related to this rule
+    const inboxItems = await ctx.db
+      .query("recurringInbox")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("ruleId"), args.id))
+      .collect();
+    for (const item of inboxItems) {
+      await ctx.db.delete(item._id);
+    }
+
+    // Clear linkedRuleId on any plaid recurring streams that reference this rule
+    const plaidStreams = await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_recurringRule", (q) => q.eq("recurringRuleId", args.id))
+      .collect();
+    
+    for (const stream of plaidStreams) {
+      await ctx.db.patch(stream._id, { 
+        recurringRuleId: undefined,
+        updatedAt: now,
+      });
+    }
+
     await ctx.db.delete(args.id);
-    // Note: we do not automatically remove links from entries here; consider a background backfill
-    return { ok: true };
+    
+    return { 
+      ok: true,
+      deletedEntries: args.deleteLinkedEntries ? linkedEntries.length : 0,
+      unlinkedEntries: !args.deleteLinkedEntries ? linkedEntries.length : 0,
+      deletedExpectedCharges: deleteExpected ? expectedCharges.filter(c => c.state === "upcoming" || c.state === "due").length : 0,
+      unlinkedPlaidStreams: plaidStreams.length,
+    };
+  },
+});
+
+/**
+ * Get info about what would be affected by deleting a recurring rule
+ * Call this before deleteRecurringRule to show user a warning
+ */
+export const getRecurringRuleDeletionImpact = query({
+  args: { id: v.id("recurringRules") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) return null;
+
+    const linkedEntries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_recurring", (q) => q.eq("userId", userId).eq("recurringRuleId", args.id))
+      .collect();
+
+    const expectedCharges = await ctx.db
+      .query("expectedCharges")
+      .withIndex("by_user_rule", (q) => q.eq("userId", userId).eq("ruleId", args.id))
+      .collect();
+
+    const upcomingCharges = expectedCharges.filter(c => c.state === "upcoming" || c.state === "due");
+    const matchedCharges = expectedCharges.filter(c => c.state === "matched");
+
+    // Calculate total amount in linked entries
+    const totalLinkedAmount = linkedEntries.reduce((sum, e) => sum + e.amountCents, 0);
+
+    return {
+      ruleName: existing.displayName ?? existing.name ?? existing.category ?? "Unnamed rule",
+      linkedEntriesCount: linkedEntries.length,
+      linkedEntriesTotalCents: totalLinkedAmount,
+      upcomingChargesCount: upcomingCharges.length,
+      matchedChargesCount: matchedCharges.length,
+      oldestLinkedEntry: linkedEntries.length > 0 
+        ? Math.min(...linkedEntries.map(e => e.date))
+        : null,
+      newestLinkedEntry: linkedEntries.length > 0
+        ? Math.max(...linkedEntries.map(e => e.date))
+        : null,
+    };
   },
 });
 

@@ -762,12 +762,119 @@ export const updateEntry = mutation({
   },
 });
 
-export const deleteEntry = mutation({
+/**
+ * Get the impact of deleting an entry - shows what would be affected.
+ * Use this to show a warning dialog before deletion.
+ */
+export const getEntryDeletionImpact = query({
   args: { id: v.id("entries") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const entry = await ctx.db.get(args.id);
+    if (!entry || entry.userId !== userId) {
+      return null;
+    }
+
+    const impact = {
+      hasRecurringRule: false,
+      recurringRuleName: null as string | null,
+      recurringRuleId: null as Id<"recurringRules"> | null,
+      linkedEntriesInRule: 0,
+      hasGoal: false,
+      goalName: null as string | null,
+      hasBudgetCategory: false,
+      budgetCategoryName: null as string | null,
+      hasTransferPair: false,
+      amountCents: entry.amountCents,
+    };
+
+    // Check if linked to a recurring rule
+    if (entry.recurringRuleId) {
+      impact.hasRecurringRule = true;
+      impact.recurringRuleId = entry.recurringRuleId;
+      const rule = await ctx.db.get(entry.recurringRuleId);
+      if (rule) {
+        impact.recurringRuleName = rule.displayName || rule.category || "Unnamed Rule";
+        // Count how many entries are linked to this rule
+        const linkedEntries = await ctx.db
+          .query("entries")
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("userId"), userId),
+              q.eq(q.field("recurringRuleId"), entry.recurringRuleId)
+            )
+          )
+          .collect();
+        impact.linkedEntriesInRule = linkedEntries.length;
+      }
+    }
+
+    // Check if linked to a goal
+    if (entry.goalId) {
+      impact.hasGoal = true;
+      const goal = await ctx.db.get(entry.goalId);
+      if (goal) {
+        impact.goalName = goal.name;
+      }
+    }
+
+    // Check if linked to a budget category
+    if (entry.budgetCategoryId) {
+      impact.hasBudgetCategory = true;
+      const budgetCat = await ctx.db.get(entry.budgetCategoryId);
+      if (budgetCat) {
+        impact.budgetCategoryName = budgetCat.name;
+      }
+    }
+
+    // Check if part of a transfer
+    if (entry.transferId) {
+      impact.hasTransferPair = true;
+    }
+
+    return impact;
+  },
+});
+
+export const deleteEntry = mutation({
+  args: { 
+    id: v.id("entries"),
+    // New options for handling recurring rule link
+    unlinkFromRecurringRule: v.optional(v.boolean()), // Default true - just unlink
+    // If false and entry is linked, throw error (force user to decide)
+  },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
+
+    // Handle recurring rule link
+    if (existing.recurringRuleId) {
+      const unlinkFromRule = args.unlinkFromRecurringRule ?? true;
+      if (!unlinkFromRule) {
+        throw new Error("Entry is linked to a recurring rule. Set unlinkFromRecurringRule: true to proceed.");
+      }
+      // Entry will be deleted, no need to explicitly unlink since the entry is going away
+      
+      // Clear matchedEntryId on any expected charges that reference this entry
+      const matchedCharges = await ctx.db
+        .query("expectedCharges")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("matchedEntryId"), args.id)
+          )
+        )
+        .collect();
+      
+      for (const charge of matchedCharges) {
+        await ctx.db.patch(charge._id, {
+          matchedEntryId: undefined,
+          state: "missed", // Mark as missed since matched entry is being deleted
+          resolutionNote: "Matched entry was deleted",
+        });
+      }
+    }
     
     // If entry is part of a transfer, delete the paired entry and transfer record too
     if (existing.transferId) {
@@ -799,6 +906,50 @@ export const deleteEntry = mutation({
         // Delete the transfer record
         await ctx.db.delete(transfer._id);
       }
+    }
+
+    // Clean up budget entry impacts that reference this entry
+    const budgetImpacts = await ctx.db
+      .query("budgetEntryImpacts")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), userId),
+          q.eq(q.field("entryId"), args.id)
+        )
+      )
+      .collect();
+    
+    for (const impact of budgetImpacts) {
+      await ctx.db.delete(impact._id);
+    }
+
+    // Clear originalEntryId on any entries that reference this as their original (refunds)
+    const refundEntries = await ctx.db
+      .query("entries")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), userId),
+          q.eq(q.field("originalEntryId"), args.id)
+        )
+      )
+      .collect();
+    
+    for (const refund of refundEntries) {
+      await ctx.db.patch(refund._id, { originalEntryId: undefined, updatedAt: Date.now() });
+    }
+
+    // Dismiss recurring inbox items that reference this entry
+    const recurringInboxItems = await ctx.db
+      .query("recurringInbox")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("entryId"), args.id))
+      .collect();
+    
+    for (const item of recurringInboxItems) {
+      await ctx.db.patch(item._id, { 
+        status: "dismissed", 
+        resolvedAt: Date.now() 
+      });
     }
     
     await ctx.db.delete(args.id);
@@ -1213,6 +1364,27 @@ export const permanentDeleteEntry = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Entry not found");
     
+    // Handle recurring rule link - clear matchedEntryId on any expected charges
+    if (existing.recurringRuleId) {
+      const matchedCharges = await ctx.db
+        .query("expectedCharges")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("matchedEntryId"), args.id)
+          )
+        )
+        .collect();
+      
+      for (const charge of matchedCharges) {
+        await ctx.db.patch(charge._id, {
+          matchedEntryId: undefined,
+          state: "missed",
+          resolutionNote: "Matched entry was permanently deleted",
+        });
+      }
+    }
+    
     // If entry is linked to a transfer, also delete the paired entry and the transfer
     if (existing.transferId) {
       const transfer = await ctx.db.get(existing.transferId);
@@ -1226,6 +1398,60 @@ export const permanentDeleteEntry = mutation({
         }
         // Delete the transfer record
         await ctx.db.delete(transfer._id);
+      }
+    }
+
+    // Clean up budget entry impacts that reference this entry
+    const budgetImpacts = await ctx.db
+      .query("budgetEntryImpacts")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), userId),
+          q.eq(q.field("entryId"), args.id)
+        )
+      )
+      .collect();
+    
+    for (const impact of budgetImpacts) {
+      await ctx.db.delete(impact._id);
+    }
+
+    // Clear originalEntryId on any entries that reference this as their original (refunds)
+    const refundEntries = await ctx.db
+      .query("entries")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("userId"), userId),
+          q.eq(q.field("originalEntryId"), args.id)
+        )
+      )
+      .collect();
+    
+    for (const refund of refundEntries) {
+      await ctx.db.patch(refund._id, { originalEntryId: undefined, updatedAt: Date.now() });
+    }
+
+    // Dismiss recurring inbox items that reference this entry
+    const recurringInboxItems = await ctx.db
+      .query("recurringInbox")
+      .withIndex("by_user_status", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("entryId"), args.id))
+      .collect();
+    
+    for (const item of recurringInboxItems) {
+      await ctx.db.patch(item._id, { 
+        status: "dismissed", 
+        resolvedAt: Date.now() 
+      });
+    }
+
+    // Handle goal contributions
+    if (existing.goalId) {
+      const contribution = await getGoalContributionByEntry(ctx, args.id);
+      const amount = contribution?.amountCents ?? existing.amountCents;
+      await applyGoalDelta(ctx, userId, existing.goalId, -amount);
+      if (contribution) {
+        await ctx.db.delete(contribution._id);
       }
     }
     

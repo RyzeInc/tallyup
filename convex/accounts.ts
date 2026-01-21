@@ -484,6 +484,81 @@ export const getAccountsOverview = query({
   },
 });
 
+/**
+ * Get the impact of deleting an account before doing so.
+ * Shows all linked data that will be affected.
+ */
+export const getAccountDeletionImpact = query({
+  args: { id: v.id("accounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const account = await ctx.db.get(args.id);
+    if (!account || account.userId !== userId) {
+      throw new Error("Account not found");
+    }
+
+    // Count linked entries
+    const entries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_account", (q) => q.eq("userId", userId).eq("accountId", args.id))
+      .collect();
+
+    // Count snapshots
+    const snapshots = await ctx.db
+      .query("accountSnapshots")
+      .withIndex("by_account_asOf", (q) => q.eq("accountId", args.id))
+      .collect();
+
+    // Count linked Plaid accounts
+    const plaidAccounts = await ctx.db
+      .query("plaidAccounts")
+      .withIndex("by_account", (q) => q.eq("accountId", args.id))
+      .collect();
+
+    // Count goals with this funding account
+    const goals = await ctx.db
+      .query("goals")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const goalsWithAccount = goals.filter(g => g.fundingAccountId === args.id);
+
+    // Count investments linked to this account
+    const investments = await ctx.db
+      .query("investments")
+      .withIndex("by_account", (q) => q.eq("accountId", args.id))
+      .collect();
+
+    // Count category rules that match this account
+    const categoryRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    const rulesWithAccount = categoryRules.filter(r => r.matchAccountId === args.id);
+
+    // Count recurring rules that have this account in accountScope
+    const recurringRules = await ctx.db
+      .query("recurringRules")
+      .withIndex("by_user_active", (q) => q.eq("userId", userId))
+      .collect();
+    const recurringWithAccount = recurringRules.filter(r => 
+      r.accountScope?.accountIds?.includes(args.id)
+    );
+
+    return {
+      accountName: account.name,
+      accountType: account.type,
+      isLinked: account.isLinked ?? false,
+      entriesCount: entries.length,
+      snapshotsCount: snapshots.length,
+      plaidAccountsCount: plaidAccounts.length,
+      goalsCount: goalsWithAccount.length,
+      investmentsCount: investments.length,
+      categoryRulesCount: rulesWithAccount.length,
+      recurringRulesCount: recurringWithAccount.length,
+    };
+  },
+});
+
 // Delete an account - archives it with 14-day retention, or permanently deletes if already archived
 export const deleteAccount = mutation({
   args: {
@@ -552,6 +627,54 @@ export const deleteAccount = mutation({
       for (const p of pAccounts) {
         await ctx.db.delete(p._id);
       }
+
+      // Clear fundingAccountId on any goals that reference this account
+      const goalsWithAccount = await ctx.db
+        .query("goals")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      for (const goal of goalsWithAccount) {
+        if (goal.fundingAccountId === args.id) {
+          await ctx.db.patch(goal._id, { fundingAccountId: undefined, updatedAt: now });
+        }
+      }
+
+      // Clear accountId on any investments linked to this account
+      const investments = await ctx.db
+        .query("investments")
+        .withIndex("by_account", (q) => q.eq("accountId", args.id))
+        .collect();
+      for (const inv of investments) {
+        await ctx.db.patch(inv._id, { accountId: undefined, updatedAt: now });
+      }
+
+      // Clear matchAccountId on any category rules that reference this account
+      const categoryRules = await ctx.db
+        .query("categoryRules")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      for (const rule of categoryRules) {
+        if (rule.matchAccountId === args.id) {
+          await ctx.db.patch(rule._id, { matchAccountId: undefined, updatedAt: now });
+        }
+      }
+
+      // Remove this account from accountScope on any recurring rules
+      const recurringRules = await ctx.db
+        .query("recurringRules")
+        .withIndex("by_user_active", (q) => q.eq("userId", userId))
+        .collect();
+      for (const rule of recurringRules) {
+        if (rule.accountScope?.accountIds?.includes(args.id)) {
+          const newAccountIds = rule.accountScope.accountIds.filter(id => id !== args.id);
+          await ctx.db.patch(rule._id, { 
+            accountScope: newAccountIds.length > 0 
+              ? { kind: rule.accountScope.kind, accountIds: newAccountIds }
+              : undefined,
+            updatedAt: now 
+          });
+        }
+      }
       
       // Finally delete the account
       await ctx.db.delete(args.id);
@@ -562,6 +685,54 @@ export const deleteAccount = mutation({
     // Otherwise, archive the account (soft delete with 14-day retention)
     await ctx.db.patch(args.id, { isArchived: true, archivedAt: now, updatedAt: now });
 
+    // Also clear foreign key references when archiving (so these features remain functional)
+    // Clear fundingAccountId on any goals
+    const goalsWithAccount = await ctx.db
+      .query("goals")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const goal of goalsWithAccount) {
+      if (goal.fundingAccountId === args.id) {
+        await ctx.db.patch(goal._id, { fundingAccountId: undefined, updatedAt: now });
+      }
+    }
+
+    // Clear accountId on investments
+    const investments = await ctx.db
+      .query("investments")
+      .withIndex("by_account", (q) => q.eq("accountId", args.id))
+      .collect();
+    for (const inv of investments) {
+      await ctx.db.patch(inv._id, { accountId: undefined, updatedAt: now });
+    }
+
+    // Clear matchAccountId on category rules
+    const categoryRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    for (const rule of categoryRules) {
+      if (rule.matchAccountId === args.id) {
+        await ctx.db.patch(rule._id, { matchAccountId: undefined, updatedAt: now });
+      }
+    }
+
+    // Remove this account from accountScope on recurring rules
+    const recurringRules = await ctx.db
+      .query("recurringRules")
+      .withIndex("by_user_active", (q) => q.eq("userId", userId))
+      .collect();
+    for (const rule of recurringRules) {
+      if (rule.accountScope?.accountIds?.includes(args.id)) {
+        const newAccountIds = rule.accountScope.accountIds.filter(id => id !== args.id);
+        await ctx.db.patch(rule._id, { 
+          accountScope: newAccountIds.length > 0 
+            ? { kind: rule.accountScope.kind, accountIds: newAccountIds }
+            : undefined,
+          updatedAt: now 
+        });
+      }
+    }
     // Archive linked transactions and reverse their balance effects using internal helper.
     try {
       await ctx.runMutation(internal.entries.archiveEntriesForAccount, {
@@ -707,6 +878,58 @@ export const permanentDeleteAccount = mutation({
       .collect();
     for (const p of pAccounts) {
       await ctx.db.delete(p._id);
+    }
+
+    // Clear fundingAccountId on any goals that reference this account
+    const goalsWithAccount = await ctx.db
+      .query("goals")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    
+    for (const goal of goalsWithAccount) {
+      if (goal.fundingAccountId === args.id) {
+        await ctx.db.patch(goal._id, { fundingAccountId: undefined, updatedAt: Date.now() });
+      }
+    }
+
+    // Clear accountId on any investments linked to this account
+    const investments = await ctx.db
+      .query("investments")
+      .withIndex("by_account", (q) => q.eq("accountId", args.id))
+      .collect();
+    
+    for (const inv of investments) {
+      await ctx.db.patch(inv._id, { accountId: undefined, updatedAt: Date.now() });
+    }
+
+    // Clear matchAccountId on any category rules that reference this account
+    const categoryRules = await ctx.db
+      .query("categoryRules")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+    
+    for (const rule of categoryRules) {
+      if (rule.matchAccountId === args.id) {
+        await ctx.db.patch(rule._id, { matchAccountId: undefined, updatedAt: Date.now() });
+      }
+    }
+
+    // Remove this account from accountScope on any recurring rules
+    const recurringRules = await ctx.db
+      .query("recurringRules")
+      .withIndex("by_user_active", (q) => q.eq("userId", userId))
+      .collect();
+    
+    for (const rule of recurringRules) {
+      if (rule.accountScope?.accountIds?.includes(args.id)) {
+        const newAccountIds = rule.accountScope.accountIds.filter(id => id !== args.id);
+        await ctx.db.patch(rule._id, { 
+          accountScope: newAccountIds.length > 0 
+            ? { kind: rule.accountScope.kind, accountIds: newAccountIds }
+            : undefined,
+          updatedAt: Date.now() 
+        });
+      }
     }
     
     // Finally delete the account
