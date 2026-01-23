@@ -4,21 +4,26 @@ import * as React from "react";
 import type { CategoryOption } from "../types";
 import { CategoryCombobox } from "@/components/ui/CategoryCombobox";
 
+type CategoryFieldProps = {
+  value?: string;
+  categories: CategoryOption[];
+  onChange: (id?: string) => void;
+  /** Called when user types a new category name that doesn't exist */
+  onCreateCategory?: (name: string) => Promise<CategoryOption> | CategoryOption;
+  required?: boolean;
+  showError?: boolean;
+  placeholder?: string;
+};
+
 export function CategoryField({
   value,
   categories,
   onChange,
+  onCreateCategory,
   required,
   showError,
   placeholder = "Category",
-}: {
-  value?: string;
-  categories: CategoryOption[];
-  onChange: (id?: string) => void;
-  required?: boolean;
-  showError?: boolean;
-  placeholder?: string;
-}) {
+}: CategoryFieldProps) {
   const [searchText, setSearchText] = React.useState("");
 
   // Find selected category name to populate search text when value changes externally
@@ -43,6 +48,20 @@ export function CategoryField({
       description: c.description,
     }));
   }, [categories]);
+
+  // Handle creating a new category
+  const handleCreate = React.useMemo(() => {
+    if (!onCreateCategory) return undefined;
+    
+    return async (name: string) => {
+      const created = await onCreateCategory(name);
+      return {
+        id: created.id,
+        label: created.name,
+        description: created.description,
+      };
+    };
+  }, [onCreateCategory]);
 
   return (
     <div>
@@ -77,6 +96,7 @@ export function CategoryField({
           valueText={searchText}
           onChangeText={setSearchText}
           placeholder={placeholder}
+          onCreate={handleCreate}
         />
       </div>
     </div>

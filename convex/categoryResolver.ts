@@ -4,9 +4,8 @@ import {
   SYSTEM_CATEGORY_BY_NAME,
   SYSTEM_CATEGORY_BY_SLUG,
   normalizeCategoryLabel,
+  type CategoryType,
 } from "./categoryCatalog";
-
-type CategoryType = "expense" | "income";
 
 async function ensureSystemCategory(
   ctx: MutationCtx,

@@ -40,11 +40,25 @@ export default function LogPage() {
   const goalsData = useQuery(api.goals.listGoals, {}) as
     | Doc<"goals">[]
     | undefined;
-  const expenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
-    | { _id: string; name: string }[]
+  // Top-level expense categories only (for the Category dropdown)
+  const expenseParentCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense", topLevelOnly: true }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
     | undefined;
-  const incomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
-    | { _id: string; name: string }[]
+  // All expense categories including subcategories (for SubcategoryField)
+  const allExpenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
+    | undefined;
+  // Top-level income categories only
+  const incomeParentCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income", topLevelOnly: true }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
+    | undefined;
+  // All income categories
+  const allIncomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
+    | undefined;
+  // All transfer categories (including subcategories for From/To selection)
+  const transferCategoriesData = useQuery(api.categories.listCategories, { categoryType: "transfer" }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
     | undefined;
   
   // Fetch user preferences for hidden categories/tags
@@ -73,19 +87,61 @@ export default function LogPage() {
     }));
   }, [goalsData]);
 
+  // Parent categories only (for the Category dropdown) - NO SUBCATEGORIES
   const expenseCategories: CategoryOption[] = useMemo(() => {
-    if (!expenseCategoriesData) return [];
-    return expenseCategoriesData.map((c) => ({ id: c._id, name: c.name }));
-  }, [expenseCategoriesData]);
+    if (!expenseParentCategoriesData) return [];
+    return expenseParentCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [expenseParentCategoriesData]);
 
   const incomeCategories: CategoryOption[] = useMemo(() => {
-    if (!incomeCategoriesData) return [];
-    return incomeCategoriesData.map((c) => ({ id: c._id, name: c.name }));
-  }, [incomeCategoriesData]);
+    if (!incomeParentCategoriesData) return [];
+    return incomeParentCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [incomeParentCategoriesData]);
+
+  // All categories including subcategories (for SubcategoryField)
+  const allExpenseCategories: CategoryOption[] = useMemo(() => {
+    if (!allExpenseCategoriesData) return [];
+    return allExpenseCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [allExpenseCategoriesData]);
+
+  const allIncomeCategories: CategoryOption[] = useMemo(() => {
+    if (!allIncomeCategoriesData) return [];
+    return allIncomeCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [allIncomeCategoriesData]);
+
+  const transferCategories: CategoryOption[] = useMemo(() => {
+    if (!transferCategoriesData) return [];
+    return transferCategoriesData.map((c) => ({
+      id: c._id,
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [transferCategoriesData]);
 
   const allCategories = useMemo(
-    () => [...(expenseCategoriesData ?? []), ...(incomeCategoriesData ?? [])],
-    [expenseCategoriesData, incomeCategoriesData]
+    () => [...(allExpenseCategoriesData ?? []), ...(allIncomeCategoriesData ?? [])],
+    [allExpenseCategoriesData, allIncomeCategoriesData]
   );
 
   // Build tags catalog
@@ -247,6 +303,9 @@ export default function LogPage() {
             goals={goals}
             expenseCategories={expenseCategories}
             incomeCategories={incomeCategories}
+            allExpenseCategories={allExpenseCategories}
+            allIncomeCategories={allIncomeCategories}
+            transferCategories={transferCategories}
             onSubmit={handleSubmit}
             hiddenExpenseCategories={userPrefs?.hiddenExpenseCategories ?? []}
             hiddenIncomeCategories={userPrefs?.hiddenIncomeCategories ?? []}

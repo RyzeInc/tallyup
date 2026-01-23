@@ -69,6 +69,13 @@ export type TxDraft = {
   note?: string;
 
   categoryId?: string;
+  /** Subcategory within the selected category */
+  subcategoryId?: string;
+  
+  /** For transfers: Transfer In category (from where) */
+  transferFromCategoryId?: string;
+  /** For transfers: Transfer Out category (to where) */
+  transferToCategoryId?: string;
 
   // richer metadata
   contextScope?: ContextScope;
@@ -95,7 +102,8 @@ export type SheetKey =
   | "tags"
   | "note"
   | "recurring"
-  | "goal";
+  | "goal"
+  | "subcategory";
 
 // ============================================
 // Submit Result
@@ -111,6 +119,12 @@ export type CategoryOption = {
   id: string;
   name: string;
   description?: string;
+  /** Category slug for matching */
+  slug?: string;
+  /** Parent category ID for hierarchical categories */
+  parentId?: string;
+  /** Whether this is a parent category (has children) */
+  hasChildren?: boolean;
 };
 
 export type AccountOption = {

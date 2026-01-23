@@ -51,16 +51,16 @@ interface BudgetStatusSummary {
 }
 
 const DEFAULT_BUDGET_CATEGORIES = [
-  { id: "housing", name: "Housing", icon: "🏠", description: "Rent, mortgage, property taxes", suggestedPercent: 30, matchCategories: ["rent", "mortgage", "housing"] },
-  { id: "utilities", name: "Utilities", icon: "💡", description: "Electric, gas, water, internet, phone", suggestedPercent: 8, matchCategories: ["utilities", "electric", "gas", "water", "internet", "phone"] },
-  { id: "food", name: "Food", icon: "🍽️", description: "Groceries and dining out", suggestedPercent: 12, matchCategories: ["groceries", "food", "dining", "restaurants"] },
-  { id: "transportation", name: "Transportation", icon: "🚗", description: "Gas, car payments, transit", suggestedPercent: 10, matchCategories: ["transportation", "gas", "fuel", "car", "uber", "lyft", "transit"] },
-  { id: "insurance", name: "Insurance", icon: "🛡️", description: "Health, auto, home, life insurance", suggestedPercent: 8, matchCategories: ["insurance"] },
-  { id: "debt", name: "Debt Payments", icon: "💳", description: "Credit cards, student loans", suggestedPercent: 10, matchCategories: ["debt", "loan", "credit card"] },
-  { id: "healthcare", name: "Health Care", icon: "🏥", description: "Medical, dental, prescriptions", suggestedPercent: 5, matchCategories: ["healthcare", "medical", "dental", "pharmacy"] },
-  { id: "personal", name: "Personal Care", icon: "✨", description: "Clothing, haircuts, gym", suggestedPercent: 5, matchCategories: ["personal", "clothing", "gym"] },
-  { id: "entertainment", name: "Entertainment", icon: "🎬", description: "Movies, games, streaming", suggestedPercent: 5, matchCategories: ["entertainment", "movies", "games", "streaming"] },
-  { id: "savings", name: "Savings", icon: "💰", description: "Emergency fund, investments", suggestedPercent: 10, matchCategories: ["savings", "investments"] },
+  { id: "housing", name: "Housing", icon: "🏠", description: "Rent, mortgage, property taxes", suggestedPercent: 30, matchCategories: ["rent", "mortgage", "rent_utilities_rent", "loan_payments_mortgage"] },
+  { id: "utilities", name: "Utilities", icon: "💡", description: "Electric, gas, water, internet, phone", suggestedPercent: 8, matchCategories: ["utilities", "rent_utilities", "electricity", "gas_electricity", "water", "internet", "telephone"] },
+  { id: "food", name: "Food", icon: "🍽️", description: "Groceries and dining out", suggestedPercent: 12, matchCategories: ["food", "groceries", "food_groceries", "food_restaurant", "food_coffee", "food_fast_food", "food_and_drink"] },
+  { id: "transportation", name: "Transportation", icon: "🚗", description: "Gas, car payments, transit", suggestedPercent: 10, matchCategories: ["transportation", "transport", "transport_gas", "transport_parking", "transport_public_transit", "transport_rideshare"] },
+  { id: "insurance", name: "Insurance", icon: "🛡️", description: "Health, auto, home, life insurance", suggestedPercent: 8, matchCategories: ["insurance", "services_insurance"] },
+  { id: "debt", name: "Debt Payments", icon: "💳", description: "Credit cards, student loans", suggestedPercent: 10, matchCategories: ["debt", "loan", "loan_payments", "credit_card", "loan_payments_credit_card", "loan_payments_student_loan", "loan_payments_car"] },
+  { id: "healthcare", name: "Health Care", icon: "🏥", description: "Medical, dental, prescriptions", suggestedPercent: 5, matchCategories: ["healthcare", "medical", "dental", "pharmacy", "medical_dental", "medical_pharmacies", "medical_primary_care"] },
+  { id: "personal", name: "Personal Care", icon: "✨", description: "Clothing, haircuts, gym", suggestedPercent: 5, matchCategories: ["personal", "personal_care", "clothing", "gym", "personal_care_gyms", "personal_care_hair", "merchandise_clothing"] },
+  { id: "entertainment", name: "Entertainment", icon: "🎬", description: "Movies, games, streaming", suggestedPercent: 5, matchCategories: ["entertainment", "movies", "games", "streaming", "entertainment_tv_movies", "entertainment_games", "entertainment_music"] },
+  { id: "savings", name: "Savings", icon: "💰", description: "Emergency fund, investments", suggestedPercent: 10, matchCategories: ["savings", "investments", "transfer_out_savings", "transfer_out_investment"] },
 ];
 
 export default function BudgetingPage() {

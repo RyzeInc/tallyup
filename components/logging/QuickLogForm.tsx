@@ -28,21 +28,31 @@ export type QuickLogFormProps = {
   accounts: AccountOption[];
   tagsCatalog: string[];
   goals: GoalOption[];
+  /** Top-level expense categories (no subcategories) - for the Category dropdown */
   expenseCategories: CategoryOption[];
+  /** Top-level income categories (no subcategories) - for the Category dropdown */
   incomeCategories: CategoryOption[];
+  /** All expense categories including subcategories - for SubcategoryField */
+  allExpenseCategories?: CategoryOption[];
+  /** All income categories including subcategories - for SubcategoryField */
+  allIncomeCategories?: CategoryOption[];
+  /** Transfer categories (includes subcategories for From/To) */
+  transferCategories?: CategoryOption[];
 
   // persist:
   onSubmit: (draft: TxDraft) => Promise<{ ok: true; txId: string } | { ok: false; error: string }>;
 
   // optional:
   onClose?: () => void;
+  
+  /** Called when user creates a custom category by typing */
+  onCreateCategory?: (name: string, type: "expense" | "income") => Promise<CategoryOption> | CategoryOption;
 
   // Hidden categories/tags from user preferences (filter out from UI)
   hiddenExpenseCategories?: string[];
   hiddenIncomeCategories?: string[];
   hiddenContextTags?: string[];
 };
-
 export function QuickLogForm(props: QuickLogFormProps) {
   const [state, dispatch] = React.useReducer(
     reducer,
@@ -53,8 +63,12 @@ export function QuickLogForm(props: QuickLogFormProps) {
     })
   );
 
-  // Determine categories based on txType, filtering out hidden ones
+  // Top-level categories for the Category dropdown (no subcategories)
   const categories = React.useMemo(() => {
+    // For transfers, use transfer categories (filter to top-level only)
+    if (state.draft.type === "transfer") {
+      return (props.transferCategories ?? []).filter(c => !c.parentId);
+    }
     const baseCategories =
       state.draft.type === "received"
         ? props.incomeCategories
@@ -66,15 +80,34 @@ export function QuickLogForm(props: QuickLogFormProps) {
           : props.hiddenExpenseCategories
       )?.map((c) => c.toLowerCase())
     );
-    return baseCategories.filter(
-      (cat) => !hiddenSet.has(cat.name.toLowerCase())
-    );
+    // These should already be top-level only, but double-check
+    return baseCategories
+      .filter((cat) => !cat.parentId)
+      .filter((cat) => !hiddenSet.has(cat.name.toLowerCase()));
   }, [
     state.draft.type,
     props.expenseCategories,
     props.incomeCategories,
+    props.transferCategories,
     props.hiddenExpenseCategories,
     props.hiddenIncomeCategories,
+  ]);
+
+  // All categories including subcategories (for SubcategoryField)
+  const allCategoriesForSubcategory = React.useMemo(() => {
+    if (state.draft.type === "transfer") {
+      return props.transferCategories ?? [];
+    }
+    return state.draft.type === "received"
+      ? (props.allIncomeCategories ?? props.incomeCategories)
+      : (props.allExpenseCategories ?? props.expenseCategories);
+  }, [
+    state.draft.type,
+    props.allExpenseCategories,
+    props.allIncomeCategories,
+    props.expenseCategories,
+    props.incomeCategories,
+    props.transferCategories,
   ]);
 
   // keep mode/existing in sync if parent changes (dialog re-open, etc.)
@@ -256,8 +289,9 @@ export function QuickLogForm(props: QuickLogFormProps) {
 
           <CategoryField
             value={state.draft.categoryId}
-            categories={categories}
+            categories={categories} // Already filtered to top-level only
             onChange={(id) => dispatch({ type: "SET_CATEGORY", categoryId: id })}
+            onCreateCategory={props.onCreateCategory ? (name) => props.onCreateCategory!(name, state.draft.type === "received" ? "income" : "expense") : undefined}
             required={props.mode === "resolve"}
             showError={showValidationErrors && missing.includes("category")}
           />
@@ -349,6 +383,23 @@ export function QuickLogForm(props: QuickLogFormProps) {
           goalId={state.draft.goalId}
           goals={props.goals}
           onSetGoal={(goalId) => dispatch({ type: "SET_GOAL", goalId })}
+          // Subcategory - pass ALL subcategories, let DetailsExpander filter by selected category
+          subcategoryId={state.draft.subcategoryId}
+          allSubcategories={allCategoriesForSubcategory.filter(c => c.parentId)} // All items with a parentId
+          selectedCategoryId={state.draft.categoryId}
+          onSetSubcategory={(subcatId, parentCategoryId) => {
+            // Cross-entity sync: if subcategory selected and no category, auto-set category
+            if (subcatId && parentCategoryId && !state.draft.categoryId) {
+              dispatch({ type: "SET_CATEGORY", categoryId: parentCategoryId });
+            }
+            dispatch({ type: "SET_SUBCATEGORY", subcategoryId: subcatId });
+          }}
+          transferFromId={state.draft.transferFromCategoryId}
+          transferToId={state.draft.transferToCategoryId}
+          transferCategories={props.transferCategories}
+          onSetTransferFrom={(id) => dispatch({ type: "SET_TRANSFER_FROM", categoryId: id })}
+          onSetTransferTo={(id) => dispatch({ type: "SET_TRANSFER_TO", categoryId: id })}
+          parentSlug={allCategoriesForSubcategory.find(c => c.id === state.draft.categoryId)?.slug ?? null}
         />
 
         {/* Summary Chips */}

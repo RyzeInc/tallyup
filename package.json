@@ -6,6 +6,10 @@
     "url": "git@github.com:RyzeInc/tallyup.git"
   },
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",

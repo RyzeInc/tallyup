@@ -39,6 +39,7 @@ export function CategoryCombobox({
 }: CategoryComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [highlightedIndex, setHighlightedIndex] = React.useState(0);
+  const [dropdownPosition, setDropdownPosition] = React.useState<"below" | "above">("below");
   const containerRef = React.useRef<HTMLDivElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
 
@@ -52,10 +53,25 @@ export function CategoryCombobox({
   // - else show selected label
   const inputValue = open ? valueText : (valueText || selected?.label || "");
 
+  // Show all options, but sort matching items to the top
   const filtered = React.useMemo(() => {
     const q = normalize(valueText);
     if (!q) return options;
-    return options.filter((o) => normalize(o.label).includes(q));
+    
+    // Separate matching and non-matching options
+    const matches: Option[] = [];
+    const nonMatches: Option[] = [];
+    
+    for (const opt of options) {
+      if (normalize(opt.label).includes(q)) {
+        matches.push(opt);
+      } else {
+        nonMatches.push(opt);
+      }
+    }
+    
+    // Return matches first, then non-matches
+    return [...matches, ...nonMatches];
   }, [options, valueText]);
 
   const hasExactMatch = React.useMemo(() => {
@@ -160,6 +176,24 @@ export function CategoryCombobox({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
+  // Calculate dropdown position to avoid overflow
+  React.useEffect(() => {
+    if (!open || !containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const dropdownHeight = 256; // max-h-64 = 256px
+    const viewportHeight = window.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    
+    // If not enough space below but more space above, position above
+    if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
+      setDropdownPosition("above");
+    } else {
+      setDropdownPosition("below");
+    }
+  }, [open]);
+
   // Scroll highlighted item into view
   React.useEffect(() => {
     if (!open || !listRef.current) return;
@@ -208,7 +242,10 @@ export function CategoryCombobox({
         <div
           id="category-combobox-listbox"
           ref={listRef}
-          className="absolute z-50 top-full left-0 right-0 mt-1 rounded-xl shadow-lg border max-h-64 overflow-y-auto"
+          className={cn(
+            "absolute z-50 left-0 right-0 rounded-xl shadow-lg border max-h-64 overflow-y-auto",
+            dropdownPosition === "above" ? "bottom-full mb-1" : "top-full mt-1"
+          )}
           style={{
             backgroundColor: "var(--surface)",
             borderColor: "var(--border)",

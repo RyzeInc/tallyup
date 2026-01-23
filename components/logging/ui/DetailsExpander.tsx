@@ -65,6 +65,19 @@ type DetailsExpanderProps = {
   goals: GoalOption[];
   onSetGoal: (goalId?: GoalOption["id"]) => void;
 
+  // Subcategory
+  subcategoryId?: string | null;
+  allSubcategories: Array<{ id: string; name: string; slug?: string; parentId?: string | null }>;
+  selectedCategoryId?: string | null;
+  onSetSubcategory: (id: string | null, parentCategoryId?: string | null) => void;
+  // Transfer subcategories
+  transferFromId?: string | null;
+  transferToId?: string | null;
+  transferCategories?: Array<{ id: string; name: string; slug?: string; parentId?: string | null }>;
+  onSetTransferFrom?: (id: string | null) => void;
+  onSetTransferTo?: (id: string | null) => void;
+  parentSlug?: string | null;
+
   // Account creation callback (optional)
   onAccountCreated?: (accountId: string, accountName: string) => void;
   
@@ -197,6 +210,143 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 // ============================================
+// Subcategory Combobox Component
+// ============================================
+type SubcategoryItem = { id: string; name: string; slug?: string; parentId?: string | null };
+
+function SubcategoryCombobox({
+  subcategories,
+  value,
+  onChange,
+  placeholder = "Select subcategory...",
+  helperText,
+}: {
+  subcategories: SubcategoryItem[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  placeholder?: string;
+  helperText?: string;
+}) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+
+  const selectedItem = subcategories.find(s => s.id === value) ?? null;
+
+  // Filter subcategories by search
+  const filtered = React.useMemo(() => {
+    if (!search.trim()) return subcategories;
+    const q = search.toLowerCase();
+    return subcategories.filter(s => s.name.toLowerCase().includes(q));
+  }, [subcategories, search]);
+
+  // Handle click outside to close
+  React.useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        inputRef.current && !inputRef.current.contains(e.target as Node) &&
+        listRef.current && !listRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative">
+      {helperText && (
+        <p className="text-[10px] mb-1.5" style={{ color: "var(--text-tertiary)" }}>
+          {helperText}
+        </p>
+      )}
+      <div
+        className="relative flex items-center h-10 rounded-xl border px-3"
+        style={{
+          backgroundColor: "var(--input)",
+          borderColor: isOpen ? "var(--primary)" : "var(--border)",
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          value={isOpen ? search : (selectedItem?.name ?? "")}
+          onChange={(e) => setSearch(e.target.value)}
+          onFocus={() => {
+            setIsOpen(true);
+            setSearch("");
+          }}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-sm outline-none"
+          style={{ color: "var(--text)" }}
+        />
+        {value && !isOpen && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange(null);
+              setSearch("");
+            }}
+            className="p-1 rounded-full hover:bg-[var(--surface-subtle)]"
+          >
+            <Lucide.X className="h-3.5 w-3.5" style={{ color: "var(--text-tertiary)" }} />
+          </button>
+        )}
+        <Lucide.ChevronDown
+          className="h-4 w-4 ml-1 transition-transform"
+          style={{ 
+            color: "var(--text-tertiary)",
+            transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+          }}
+        />
+      </div>
+
+      {isOpen && (
+        <div
+          ref={listRef}
+          className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-auto rounded-xl border shadow-lg"
+          style={{
+            backgroundColor: "var(--surface)",
+            borderColor: "var(--border)",
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div className="p-3 text-center text-sm" style={{ color: "var(--text-tertiary)" }}>
+              No subcategories found
+            </div>
+          ) : (
+            filtered.map((item) => {
+              const isSelected = value === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(item.id);
+                    setSearch("");
+                    setIsOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--surface-subtle)] transition-colors"
+                  style={{
+                    backgroundColor: isSelected ? "var(--accent-subtle)" : undefined,
+                    color: isSelected ? "var(--primary)" : "var(--text)",
+                  }}
+                >
+                  {item.name}
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
 // Main DetailsExpander Component
 // ============================================
 export function DetailsExpander(props: DetailsExpanderProps) {
@@ -214,9 +364,10 @@ export function DetailsExpander(props: DetailsExpanderProps) {
     account,
     accounts,
     onSetAccount,
-    tags,
-    tagsCatalog,
-    onSetTags,
+    // Tags props - kept in interface for compatibility but no longer rendered
+    tags: _tags,
+    tagsCatalog: _tagsCatalog,
+    onSetTags: _onSetTags,
     note,
     onSetNote,
     recurring,
@@ -227,11 +378,31 @@ export function DetailsExpander(props: DetailsExpanderProps) {
     onAccountCreated,
     onGoalCreated,
     hiddenContextTags,
+    // Subcategory props
+    subcategoryId,
+    allSubcategories,
+    selectedCategoryId,
+    onSetSubcategory,
+    transferFromId,
+    transferToId,
+    transferCategories,
+    onSetTransferFrom,
+    onSetTransferTo,
+    parentSlug,
   } = props;
 
-  const [tagSearch, setTagSearch] = React.useState("");
   const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false);
   const [showAddGoalDialog, setShowAddGoalDialog] = React.useState(false);
+
+  // Filter subcategories by selected category (if one is selected)
+  const filteredSubcategories = React.useMemo(() => {
+    if (!selectedCategoryId) {
+      // No category selected - show ALL subcategories grouped or just return all
+      return allSubcategories;
+    }
+    // Filter to only subcategories of the selected category
+    return allSubcategories.filter(c => c.parentId === selectedCategoryId);
+  }, [allSubcategories, selectedCategoryId]);
 
   // Create hidden tags set (lowercase for case-insensitive comparison)
   const hiddenTagsSet = React.useMemo(() => {
@@ -256,20 +427,14 @@ export function DetailsExpander(props: DetailsExpanderProps) {
     });
   }, [hiddenTagsSet]);
 
-  // Filter tags catalog
-  const filteredTags = React.useMemo(() => {
-    if (!tagSearch.trim()) return tagsCatalog;
-    const s = tagSearch.toLowerCase();
-    return tagsCatalog.filter((t) => t.toLowerCase().includes(s));
-  }, [tagsCatalog, tagSearch]);
-
-  // Render context badges
-  const contextBadge = React.useMemo(() => {
-    const parts: string[] = [];
-    if (contextScope) parts.push(contextScope.charAt(0).toUpperCase());
-    if (contextFlags.length) parts.push(`+${contextFlags.length}`);
-    return parts.length ? parts.join("") : undefined;
-  }, [contextScope, contextFlags]);
+  // Render combined tags badge (context scope + flags + user tags)
+  const tagsBadge = React.useMemo(() => {
+    const count = 
+      (contextScope ? 1 : 0) + 
+      contextFlags.length + 
+      counts.tags;
+    return count > 0 ? String(count) : undefined;
+  }, [contextScope, contextFlags.length, counts.tags]);
 
   // Render intent badge
   const intentBadge = React.useMemo(() => {
@@ -282,10 +447,10 @@ export function DetailsExpander(props: DetailsExpanderProps) {
       {/* Primary Pills Row */}
       <div className="flex flex-wrap gap-1.5">
         <Pill
-          label="Personal / Joint"
-          badge={contextBadge}
-          isExpanded={expandedSection === "context"}
-          onClick={() => onToggleSection("context")}
+          label="Tags"
+          badge={tagsBadge}
+          isExpanded={expandedSection === "tags"}
+          onClick={() => onToggleSection("tags")}
         />
         <Pill
           label="Intent"
@@ -300,16 +465,16 @@ export function DetailsExpander(props: DetailsExpanderProps) {
           onClick={() => onToggleSection("account")}
         />
         <Pill
-          label="Tags"
-          badge={counts.tags ? String(counts.tags) : undefined}
-          isExpanded={expandedSection === "tags"}
-          onClick={() => onToggleSection("tags")}
-        />
-        <Pill
           label="Note"
           badge={counts.hasNote ? "•" : undefined}
           isExpanded={expandedSection === "note"}
           onClick={() => onToggleSection("note")}
+        />
+        <Pill
+          label="Subcategory"
+          badge={subcategoryId ? "•" : undefined}
+          isExpanded={expandedSection === "subcategory"}
+          onClick={() => onToggleSection("subcategory")}
         />
       </div>
 
@@ -331,10 +496,11 @@ export function DetailsExpander(props: DetailsExpanderProps) {
         />
       </div>
 
-      {/* Context Expansion */}
-      <ExpandableSection isExpanded={expandedSection === "context"}>
-        <SectionLabel>Who&apos;s this for?</SectionLabel>
-        <div className="flex flex-wrap gap-1.5 mb-1">
+      {/* Tags Expansion - Combined context + user tags */}
+      <ExpandableSection isExpanded={expandedSection === "tags"}>
+        {/* Context: Who's this for? */}
+        <SectionLabel>Context</SectionLabel>
+        <div className="flex flex-wrap gap-1.5 mb-2">
           {filteredScopeOptions.map((opt) => {
             const isSelected = contextScope === opt.value;
             return (
@@ -342,48 +508,39 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                 key={opt.value}
                 type="button"
                 onClick={() => onSetContextScope(isSelected ? undefined : opt.value)}
-                className="h-8 px-3 rounded-lg text-xs font-medium transition-colors flex flex-col items-center justify-center"
+                className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
                 style={{
                   backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
-                  color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                  color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
                   border: isSelected ? "none" : "1px solid var(--border)",
-                  minWidth: "70px",
                 }}
               >
-                <span>{opt.label}</span>
+                {opt.label}
               </button>
             );
           })}
         </div>
-        <p className="text-[10px] mb-3" style={{ color: "var(--text-tertiary)" }}>
-          {contextScope === "personal" && "Just for you — counts towards your personal spending."}
-          {contextScope === "shared" && "Split with someone — e.g., splitting a bill."}
-          {contextScope === "household" && "Joint expense — from a shared account or household budget."}
-          {contextScope === "partner" && "Paid by your partner — track for visibility but not your expense."}
-          {!contextScope && "Optional: helps separate personal vs. shared spending in reports."}
-        </p>
-        <div className="mt-3">
-          <SectionLabel>Additional Flags</SectionLabel>
-          <div className="flex flex-wrap gap-1.5">
-            {filteredFlagOptions.map((opt) => {
-              const isSelected = contextFlags.includes(opt.value);
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => onToggleContextFlag(opt.value)}
-                  className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-                  style={{
-                    backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
-                    color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
-                    border: isSelected ? "none" : "1px solid var(--border)",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+
+        {/* Context Flags */}
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {filteredFlagOptions.map((opt) => {
+            const isSelected = contextFlags.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onToggleContextFlag(opt.value)}
+                className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                  color: isSelected ? "var(--primary-foreground)" : "var(--text-secondary)",
+                  border: isSelected ? "none" : "1px solid var(--border)",
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
       </ExpandableSection>
 
@@ -586,114 +743,70 @@ export function DetailsExpander(props: DetailsExpanderProps) {
         )}
       </ExpandableSection>
 
-      {/* Tags Expansion */}
-      <ExpandableSection isExpanded={expandedSection === "tags"}>
-        {/* Selected tags */}
-        {tags.length > 0 && (
-          <div className="mb-3">
-            <SectionLabel>Selected</SectionLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {tags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => onSetTags(tags.filter((t) => t !== tag))}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium"
-                  style={{
-                    backgroundColor: "var(--primary)",
-                    color: "var(--primary-foreground)",
-                  }}
-                >
-                  {tag}
-                  <Lucide.X className="h-3 w-3" />
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Search */}
-        <div className="relative mb-2">
-          <input
-            type="text"
-            value={tagSearch}
-            onChange={(e) => setTagSearch(e.target.value)}
-            placeholder="Search or add..."
-            className="w-full h-8 pl-2.5 pr-16 text-xs rounded-md"
-            style={{
-              backgroundColor: "var(--surface)",
-              color: "var(--text)",
-              border: "1px solid var(--border)",
-              outline: "none",
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && tagSearch.trim()) {
-                e.preventDefault();
-                if (!tags.includes(tagSearch.trim())) {
-                  onSetTags([...tags, tagSearch.trim()]);
-                }
-                setTagSearch("");
-              }
-            }}
-          />
-          {tagSearch.trim() && !tagsCatalog.includes(tagSearch.trim()) && (
-            <button
-              type="button"
-              onClick={() => {
-                if (!tags.includes(tagSearch.trim())) {
-                  onSetTags([...tags, tagSearch.trim()]);
-                }
-                setTagSearch("");
-              }}
-              className="absolute right-1 top-1 h-6 px-2 rounded text-[10px] font-medium"
-              style={{
-                backgroundColor: "var(--primary)",
-                color: "var(--primary-foreground)",
-              }}
-            >
-              Add
-            </button>
-          )}
-        </div>
-
-        {/* Suggestions */}
-        <div className="flex flex-wrap gap-1.5">
-          {filteredTags
-            .filter((t) => !tags.includes(t))
-            .slice(0, 10)
-            .map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => onSetTags([...tags, tag])}
-                className="h-7 px-2.5 rounded-md text-xs font-medium transition-colors"
-                style={{
-                  backgroundColor: "var(--surface)",
-                  color: "var(--text-secondary)",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                {tag}
-              </button>
-            ))}
-        </div>
-      </ExpandableSection>
-
-      {/* Note Expansion */}
+      {/* Note Expansion (Inline) */}
       <ExpandableSection isExpanded={expandedSection === "note"}>
+        <SectionLabel>Note</SectionLabel>
         <textarea
           value={note}
           onChange={(e) => onSetNote(e.target.value)}
-          placeholder="Add a note..."
-          rows={2}
-          className="w-full px-2.5 py-2 text-xs rounded-md resize-none"
+          placeholder="Add any details or context..."
+          rows={3}
+          className="w-full rounded-lg border px-3 py-2 text-sm resize-none"
           style={{
-            backgroundColor: "var(--surface)",
+            backgroundColor: "var(--input)",
+            borderColor: "var(--border)",
             color: "var(--text)",
-            border: "1px solid var(--border)",
-            outline: "none",
           }}
         />
+        <p className="text-[10px] mt-2" style={{ color: "var(--text-tertiary)" }}>
+          Add any additional context or details about this transaction.
+        </p>
+      </ExpandableSection>
+
+      {/* Subcategory Expansion - Combo Box */}
+      <ExpandableSection isExpanded={expandedSection === "subcategory"}>
+        <SectionLabel>Subcategory</SectionLabel>
+        {parentSlug === "transfer_in" || parentSlug === "transfer_out" ? (
+          // Transfer: From / To selection
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[10px] mb-1.5" style={{ color: "var(--text-tertiary)" }}>From</p>
+              <SubcategoryCombobox
+                subcategories={(transferCategories ?? []).filter(c => {
+                  const transferInParent = (transferCategories ?? []).find(cat => cat.slug === "transfer_in" && !cat.parentId);
+                  return transferInParent && c.parentId === transferInParent.id;
+                })}
+                value={transferFromId ?? null}
+                onChange={(id) => onSetTransferFrom?.(id)}
+                placeholder="Select source..."
+              />
+            </div>
+            <div>
+              <p className="text-[10px] mb-1.5" style={{ color: "var(--text-tertiary)" }}>To</p>
+              <SubcategoryCombobox
+                subcategories={(transferCategories ?? []).filter(c => {
+                  const transferOutParent = (transferCategories ?? []).find(cat => cat.slug === "transfer_out" && !cat.parentId);
+                  return transferOutParent && c.parentId === transferOutParent.id;
+                })}
+                value={transferToId ?? null}
+                onChange={(id) => onSetTransferTo?.(id)}
+                placeholder="Select destination..."
+              />
+            </div>
+          </div>
+        ) : (
+          // Regular subcategory selection with combobox
+          <SubcategoryCombobox
+            subcategories={selectedCategoryId ? filteredSubcategories : allSubcategories}
+            value={subcategoryId ?? null}
+            onChange={(id) => {
+              const selected = allSubcategories.find(c => c.id === id);
+              onSetSubcategory(id, selected?.parentId);
+            }}
+            placeholder={selectedCategoryId ? "Select subcategory..." : "Select subcategory (will auto-set category)..."}
+            helperText={!selectedCategoryId ? "Selecting a subcategory will auto-fill the category" : undefined}
+          />
+        )}
       </ExpandableSection>
 
       {/* Recurring Expansion */}

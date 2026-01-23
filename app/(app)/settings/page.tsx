@@ -20,6 +20,7 @@ import Lock from "lucide-react/dist/esm/icons/lock.js";
 import BookOpen from "lucide-react/dist/esm/icons/book-open.js";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.js";
 import FilterX from "lucide-react/dist/esm/icons/filter-x.js";
+import Link2 from "lucide-react/dist/esm/icons/link-2.js";
 import Sun from "lucide-react/dist/esm/icons/sun.js";
 import Bell from "lucide-react/dist/esm/icons/bell.js";
 import Check from "lucide-react/dist/esm/icons/check.js";
@@ -35,7 +36,9 @@ import TrendingUp from "lucide-react/dist/esm/icons/trending-up.js";
 import Plus from "lucide-react/dist/esm/icons/plus.js";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.js";
 import Archive from "lucide-react/dist/esm/icons/archive.js";
+import Layers from "lucide-react/dist/esm/icons/layers.js";
 import Link from "next/link";
+import SubcategoryDialog from "@/components/shared/SubcategoryDialog";
 import { useRouter } from "next/navigation";
 import { useTheme, APPEARANCE_OPTIONS, NAV_ITEM_CONFIG } from "@/components/ThemeProvider";
 import { centsToDollars, EXPENSE_SPACES, INCOME_SPACES, CONTEXT_TAGS } from "@/components/utils";
@@ -83,6 +86,17 @@ export default function SettingsPage() {
   const createCategory = useMutation(api.categories.createCategory);
   const deleteCategory = useMutation(api.categories.deleteCategory);
   const ensureSystemCategories = useMutation(api.categories.ensureSystemCategories);
+  const cleanupDuplicateCategories = useMutation(api.categories.cleanupDuplicateCategories);
+  const resetCategoriesToDefaults = useMutation(api.categories.resetCategoriesToDefaults);
+  const fixParentRelationships = useMutation(api.categories.fixParentRelationships);
+
+  // Cleanup state
+  const [cleaningUp, setCleaningUp] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  // Subcategory dialog state
+  const [subcategoryDialogOpen, setSubcategoryDialogOpen] = useState(false);
+  const [selectedParentCategory, setSelectedParentCategory] = useState<{ id: string; name: string; type: "expense" | "income" } | null>(null);
 
   // Category/tag management state - synced with Convex or localStorage fallback
   const [pinnedExpense, setPinnedExpense] = useState<ExpenseSpace[]>([]);
@@ -261,15 +275,38 @@ export default function SettingsPage() {
     }
   }, [newIncomeCategory, createCategory, toast]);
 
-  // Get custom categories by type (as name arrays)
+  // Get custom categories by type (as name arrays) - only parent categories, not subcategories
   const customExpenseCategories = useMemo(() => 
-    (customExpenseCategoriesData ?? []).map(c => c.name),
+    (customExpenseCategoriesData ?? []).filter(c => !c.parentId).map(c => c.name),
     [customExpenseCategoriesData]
   );
   const customIncomeCategories = useMemo(() => 
-    (customIncomeCategoriesData ?? []).map(c => c.name),
+    (customIncomeCategoriesData ?? []).filter(c => !c.parentId).map(c => c.name),
     [customIncomeCategoriesData]
   );
+
+  // Helper to get subcategories for a given parent category name
+  const getSubcategoriesForParent = useCallback((parentName: string, categoryType: "expense" | "income") => {
+    const allCategories = categoryType === "expense" ? customExpenseCategoriesData : customIncomeCategoriesData;
+    if (!allCategories) return [];
+    
+    // Find the parent category by name
+    const parent = allCategories.find(c => c.name === parentName && !c.parentId);
+    if (!parent) return [];
+    
+    // Find all subcategories with this parentId
+    return allCategories.filter(c => c.parentId === parent._id);
+  }, [customExpenseCategoriesData, customIncomeCategoriesData]);
+
+  // Open subcategory dialog
+  const openSubcategoryDialog = useCallback((categoryName: string, categoryType: "expense" | "income") => {
+    const allCategories = categoryType === "expense" ? customExpenseCategoriesData : customIncomeCategoriesData;
+    const parent = allCategories?.find(c => c.name === categoryName && !c.parentId);
+    if (parent) {
+      setSelectedParentCategory({ id: parent._id, name: parent.name, type: categoryType });
+      setSubcategoryDialogOpen(true);
+    }
+  }, [customExpenseCategoriesData, customIncomeCategoriesData]);
 
   // Combined lists: defaults + custom
   const allExpenseCategories = useMemo(() => [
@@ -290,13 +327,14 @@ export default function SettingsPage() {
   // Initialize order from prefs or use default order
   useEffect(() => {
     if (userPrefs?.expenseCategoryOrder?.length) {
-      // Merge saved order with any new categories
+      // Merge saved order with any new categories, and deduplicate
       const saved = userPrefs.expenseCategoryOrder;
       const all = allExpenseCategories;
       const ordered = [...saved.filter(c => all.includes(c)), ...all.filter(c => !saved.includes(c))];
-      setExpenseOrder(ordered);
+      // Deduplicate
+      setExpenseOrder([...new Set(ordered)]);
     } else {
-      setExpenseOrder([...allExpenseCategories]);
+      setExpenseOrder([...new Set(allExpenseCategories)]);
     }
   }, [userPrefs?.expenseCategoryOrder, allExpenseCategories]);
 
@@ -305,9 +343,10 @@ export default function SettingsPage() {
       const saved = userPrefs.incomeCategoryOrder;
       const all = allIncomeCategories;
       const ordered = [...saved.filter(c => all.includes(c)), ...all.filter(c => !saved.includes(c))];
-      setIncomeOrder(ordered);
+      // Deduplicate
+      setIncomeOrder([...new Set(ordered)]);
     } else {
-      setIncomeOrder([...allIncomeCategories]);
+      setIncomeOrder([...new Set(allIncomeCategories)]);
     }
   }, [userPrefs?.incomeCategoryOrder, allIncomeCategories]);
 
@@ -488,9 +527,117 @@ export default function SettingsPage() {
               style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
             >
               <h2 className="text-lg font-semibold mb-1" style={{ color: "var(--text)" }}>Categories & Tags</h2>
-              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+              <p className="text-sm mb-3" style={{ color: "var(--text-secondary)" }}>
                 Customize categories, add your own, or hide ones you don&apos;t use
               </p>
+              
+              {/* Category Management Buttons */}
+              <div className="flex flex-wrap gap-2">
+                {/* Fix Parent Relationships Button */}
+                <button
+                  onClick={async () => {
+                    setCleaningUp(true);
+                    try {
+                      const result = await fixParentRelationships({});
+                      // Log debug info to console
+                      console.log("[Fix subcategories] Debug info:", result.debug);
+                      toast.success("Parent relationships fixed", { 
+                        description: `Fixed ${result.fixed} parent links, added ${result.slugsAdded} slugs (${result.total} total). Check console for debug info.` 
+                      });
+                    } catch (error) {
+                      toast.error("Fix failed", { 
+                        description: error instanceof Error ? error.message : "Unknown error" 
+                      });
+                    } finally {
+                      setCleaningUp(false);
+                    }
+                  }}
+                  disabled={cleaningUp || resetting}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: "var(--primary-subtle)",
+                    color: "var(--primary)",
+                    border: "1px solid var(--primary)",
+                  }}
+                >
+                  {cleaningUp ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Link2 className="h-4 w-4" />
+                  )}
+                  {cleaningUp ? "Fixing..." : "Fix subcategories"}
+                </button>
+
+                {/* Cleanup Duplicates Button */}
+                <button
+                  onClick={async () => {
+                    setCleaningUp(true);
+                    try {
+                      const result = await cleanupDuplicateCategories({});
+                      toast.success("Categories cleaned up", { 
+                        description: `Removed ${result.deleted} duplicates, fixed ${result.fixed} categories` 
+                      });
+                    } catch (error) {
+                      toast.error("Cleanup failed", { 
+                        description: error instanceof Error ? error.message : "Unknown error" 
+                      });
+                    } finally {
+                      setCleaningUp(false);
+                    }
+                  }}
+                  disabled={cleaningUp || resetting}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: "var(--surface-subtle)",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {cleaningUp ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FilterX className="h-4 w-4" />
+                  )}
+                  {cleaningUp ? "Cleaning up..." : "Fix duplicates"}
+                </button>
+
+                {/* Reset to Defaults Button */}
+                <button
+                  onClick={async () => {
+                    if (!window.confirm("This will DELETE all your categories and recreate them from defaults. Any custom categories will be lost. Continue?")) {
+                      return;
+                    }
+                    setResetting(true);
+                    try {
+                      const result = await resetCategoriesToDefaults({ confirm: true });
+                      console.log("[Reset categories] Result:", result);
+                      toast.success("Categories reset", { 
+                        description: `Deleted ${result.deleted}, created ${result.created} (${result.parentsCreated} parents, ${result.childrenCreated} children). System has ${result.totalSystemCategories} total.` 
+                      });
+                    } catch (error) {
+                      toast.error("Reset failed", { 
+                        description: error instanceof Error ? error.message : "Unknown error" 
+                      });
+                    } finally {
+                      setResetting(false);
+                    }
+                  }}
+                  disabled={cleaningUp || resetting}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                  style={{
+                    backgroundColor: "var(--danger-subtle)",
+                    color: "var(--danger)",
+                    border: "1px solid var(--danger)",
+                  }}
+                >
+                  {resetting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  {resetting ? "Resetting..." : "Reset to defaults"}
+                </button>
+              </div>
             </div>
 
             {/* Expense Categories */}
@@ -575,6 +722,13 @@ export default function SettingsPage() {
                           ) : (
                             <Eye className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                           )}
+                        </button>
+                        <button
+                          onClick={() => openSubcategoryDialog(cat, "expense")}
+                          className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
+                          title="View subcategories"
+                        >
+                          <Layers className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                         </button>
                         {isCustom && customCat && (
                           <button
@@ -730,6 +884,13 @@ export default function SettingsPage() {
                           ) : (
                             <Eye className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                           )}
+                        </button>
+                        <button
+                          onClick={() => openSubcategoryDialog(cat, "income")}
+                          className="p-1.5 rounded hover:bg-[var(--surface)] transition-colors"
+                          title="View subcategories"
+                        >
+                          <Layers className="h-4 w-4" style={{ color: "var(--text-tertiary)" }} />
                         </button>
                         {isCustom && customCat && (
                           <button
@@ -1259,6 +1420,21 @@ export default function SettingsPage() {
         {activeSection === "notifications" && (
           <NotificationsSection toast={toast} />
         )}
+
+        {/* Subcategory Dialog */}
+        <SubcategoryDialog
+          open={subcategoryDialogOpen}
+          onClose={() => {
+            setSubcategoryDialogOpen(false);
+            setSelectedParentCategory(null);
+          }}
+          parentCategory={selectedParentCategory}
+          subcategories={
+            selectedParentCategory
+              ? getSubcategoriesForParent(selectedParentCategory.name, selectedParentCategory.type)
+              : []
+          }
+        />
       </div>
     );
   }

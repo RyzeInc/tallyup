@@ -4,62 +4,65 @@ export const DEFAULT_BUCKETS = ["Personal", "Work", "Household", "Side/Hustle", 
 export const DEFAULT_TAGS = ["Deductible", "Reimbursable", "Subscription", "Shared", "Medical"] as const;
 
 // Dynamic space options based on entry type
+// These match the top-level categories from categoryCatalog.ts
 export const INCOME_SPACES = [
-  "Wages & Salary",
-  "Contract / Freelance",
-  "Business Revenue",
-  "Investment Income",
-  "Transfers",
+  "Dividends",
+  "Interest Earned",
+  "Retirement Pension",
+  "Tax Refund",
+  "Unemployment",
+  "Wages",
+  "Other Income",
 ] as const;
 
 export const EXPENSE_SPACES = [
-  "Housing",
-  "Utilities",
-  "Groceries",
-  "Food & Dining",
-  "Transportation",
-  "Health",
-  "Supplements",
-  "Insurance",
-  "Debt",
-  "Subscriptions",
-  "Work / Business",
-  "Personal Care",
+  "Bank Fees",
   "Entertainment",
-  "Education",
-  "Gifts & Giving",
-  "Savings & Investing",
-  "Miscellaneous",
+  "Food & Drink",
+  "General Merchandise",
+  "General Services",
+  "Government & Non-Profit",
+  "Home Improvement",
+  "Loan Payments",
+  "Medical",
+  "Personal Care",
+  "Rent & Utilities",
+  "Transportation",
+  "Travel",
 ] as const;
 
-// Category ID to display name mapping (for built-in categories)
-// IDs are lowercase/snake_case, names are Title Case
-export const CATEGORY_ID_TO_NAME: Record<string, string> = {
-  // Expense categories
-  housing: "Housing",
-  utilities: "Utilities",
-  groceries: "Groceries",
-  food: "Food & Dining",
-  transportation: "Transportation",
-  health: "Health",
-  supplements: "Supplements",
-  insurance: "Insurance",
-  debt: "Debt",
-  subscriptions: "Subscriptions",
-  work: "Work / Business",
-  personal_care: "Personal Care",
+// Category slug to display name mapping (for built-in categories)
+// Slugs are lowercase with underscores, names are Title Case
+export const CATEGORY_SLUG_TO_NAME: Record<string, string> = {
+  // Expense categories (top-level)
+  bank_fees: "Bank Fees",
   entertainment: "Entertainment",
-  education: "Education",
-  gifts_giving: "Gifts & Giving",
-  savings_investing: "Savings & Investing",
-  miscellaneous: "Miscellaneous",
+  food_and_drink: "Food & Drink",
+  general_merchandise: "General Merchandise",
+  general_services: "General Services",
+  government_nonprofit: "Government & Non-Profit",
+  home_improvement: "Home Improvement",
+  loan_payments: "Loan Payments",
+  medical: "Medical",
+  personal_care: "Personal Care",
+  rent_utilities: "Rent & Utilities",
+  transportation: "Transportation",
+  travel: "Travel",
   // Income categories
-  wages_salary: "Wages & Salary",
-  contract_freelance: "Contract / Freelance",
-  business_revenue: "Business Revenue",
-  investment_income: "Investment Income",
-  transfers: "Transfers",
+  income_dividends: "Dividends",
+  income_interest: "Interest Earned",
+  income_retirement: "Retirement Pension",
+  income_tax_refund: "Tax Refund",
+  income_unemployment: "Unemployment",
+  income_wages: "Wages",
+  income_other: "Other Income",
+  // Transfer categories
+  transfer_in: "Transfer In",
+  transfer_out: "Transfer Out",
 };
+
+// Legacy mapping for backward compatibility
+export const CATEGORY_ID_TO_NAME = CATEGORY_SLUG_TO_NAME;
 
 /**
  * Get display name for a category ID

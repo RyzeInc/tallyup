@@ -59,6 +59,9 @@ export type Event =
   | { type: "SET_TITLE"; title: string }
   | { type: "SET_NOTE"; note: string }
   | { type: "SET_CATEGORY"; categoryId?: string }
+  | { type: "SET_SUBCATEGORY"; subcategoryId?: string }
+  | { type: "SET_TRANSFER_FROM"; categoryId?: string }
+  | { type: "SET_TRANSFER_TO"; categoryId?: string }
   | { type: "SET_CONTEXT_SCOPE"; scope?: ContextScope }
   | { type: "TOGGLE_CONTEXT_FLAG"; flag: ContextFlag }
   | { type: "SET_INTENT"; patch: Partial<Intent> }
@@ -86,6 +89,9 @@ export function createInitialState(args: InitArgs): QuickLogState {
     title: args.existing?.title ?? "",
     note: args.existing?.note ?? "",
     categoryId: args.existing?.categoryId,
+    subcategoryId: args.existing?.subcategoryId,
+    transferFromCategoryId: args.existing?.transferFromCategoryId,
+    transferToCategoryId: args.existing?.transferToCategoryId,
     contextScope: args.existing?.contextScope,
     contextFlags: args.existing?.contextFlags ?? [],
     intent: args.existing?.intent ?? {},
@@ -220,9 +226,31 @@ export function reducer(state: QuickLogState, event: Event): QuickLogState {
       return {
         ...state,
         dirty: true,
-        draft: { ...state.draft, categoryId: event.categoryId },
+        // Clear subcategory when parent category changes
+        draft: { ...state.draft, categoryId: event.categoryId, subcategoryId: undefined },
         // after selecting category, return focus to none
         focusTarget: undefined,
+      };
+
+    case "SET_SUBCATEGORY":
+      return {
+        ...state,
+        dirty: true,
+        draft: { ...state.draft, subcategoryId: event.subcategoryId },
+      };
+
+    case "SET_TRANSFER_FROM":
+      return {
+        ...state,
+        dirty: true,
+        draft: { ...state.draft, transferFromCategoryId: event.categoryId },
+      };
+
+    case "SET_TRANSFER_TO":
+      return {
+        ...state,
+        dirty: true,
+        draft: { ...state.draft, transferToCategoryId: event.categoryId },
       };
 
     case "SET_CONTEXT_SCOPE":

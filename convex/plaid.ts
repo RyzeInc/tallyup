@@ -25,92 +25,143 @@ type PlaidCategoryInput = {
 };
 
 const PLAID_CATEGORY_TO_SLUG: Record<string, string> = {
-  INCOME_DIVIDENDS: "investment_income",
-  INCOME_INTEREST_EARNED: "investment_income",
-  INCOME_RETIREMENT_PENSION: "wages_salary",
-  INCOME_TAX_REFUND: "wages_salary",
-  INCOME_UNEMPLOYMENT: "wages_salary",
-  INCOME_WAGES: "wages_salary",
-  INCOME_OTHER_INCOME: "business_revenue",
-  FOOD_AND_DRINK_GROCERIES: "groceries",
-  FOOD_AND_DRINK_RESTAURANT: "food",
-  FOOD_AND_DRINK_FAST_FOOD: "food",
-  FOOD_AND_DRINK_COFFEE: "food",
-  FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR: "food",
-  FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK: "food",
-  TRANSPORTATION_GAS: "transportation",
-  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "transportation",
-  TRANSPORTATION_PUBLIC_TRANSIT: "transportation",
-  TRANSPORTATION_PARKING: "transportation",
-  TRANSPORTATION_TOLLS: "transportation",
-  TRANSPORTATION_BIKES_AND_SCOOTERS: "transportation",
-  TRANSPORTATION_OTHER_TRANSPORTATION: "transportation",
-  TRAVEL_FLIGHTS: "transportation",
-  TRAVEL_LODGING: "transportation",
-  TRAVEL_RENTAL_CARS: "transportation",
-  TRAVEL_OTHER_TRAVEL: "transportation",
-  RENT_AND_UTILITIES_RENT: "housing",
-  RENT_AND_UTILITIES_GAS_AND_ELECTRICITY: "utilities",
-  RENT_AND_UTILITIES_WATER: "utilities",
-  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities",
-  RENT_AND_UTILITIES_TELEPHONE: "utilities",
-  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "utilities",
-  RENT_AND_UTILITIES_OTHER_UTILITIES: "utilities",
-  HOME_IMPROVEMENT_FURNITURE: "housing",
-  HOME_IMPROVEMENT_HARDWARE: "housing",
-  HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE: "housing",
-  HOME_IMPROVEMENT_SECURITY: "housing",
-  HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT: "housing",
-  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "personal_care",
-  PERSONAL_CARE_HAIR_AND_BEAUTY: "personal_care",
-  PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING: "personal_care",
-  PERSONAL_CARE_OTHER_PERSONAL_CARE: "personal_care",
-  ENTERTAINMENT_MUSIC_AND_AUDIO: "entertainment",
-  ENTERTAINMENT_TV_AND_MOVIES: "entertainment",
-  ENTERTAINMENT_MOVIES_AND_DVS: "entertainment",
-  ENTERTAINMENT_VIDEO_GAMES: "entertainment",
-  ENTERTAINMENT_GAMES: "entertainment",
-  ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS: "entertainment",
-  ENTERTAINMENT_CASINOS_AND_GAMBLING: "entertainment",
-  ENTERTAINMENT_OTHER_ENTERTAINMENT: "entertainment",
-  GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES: "miscellaneous",
-  GENERAL_MERCHANDISE_DEPARTMENT_STORES: "miscellaneous",
-  GENERAL_MERCHANDISE_DISCOUNT_STORES: "miscellaneous",
-  GENERAL_MERCHANDISE_SUPERSTORES: "miscellaneous",
-  GENERAL_MERCHANDISE_ONLINE_MARKETPLACES: "miscellaneous",
-  GENERAL_MERCHANDISE_ELECTRONICS: "miscellaneous",
-  GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS: "miscellaneous",
-  GENERAL_MERCHANDISE_CONVENIENCE_STORES: "miscellaneous",
-  GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE: "miscellaneous",
-  GENERAL_MERCHANDISE_PET_SUPPLIES: "miscellaneous",
-  GENERAL_MERCHANDISE_SPORTING_GOODS: "miscellaneous",
-  GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES: "gifts_giving",
-  GENERAL_MERCHANDISE_OFFICE_SUPPLIES: "work",
-  GENERAL_MERCHANDISE_TOBACCO_AND_VAPE: "miscellaneous",
-  MEDICAL_DENTAL_CARE: "health",
-  MEDICAL_EYE_CARE: "health",
-  MEDICAL_HOSPITALS_AND_CLINICS: "health",
-  MEDICAL_PHARMACIES_AND_SUPPLEMENTS: "health",
-  MEDICAL_PRIMARY_CARE: "health",
-  MEDICAL_VETERINARY_SERVICES: "health",
-  MEDICAL_OTHER_MEDICAL: "health",
-  GENERAL_SERVICES_EDUCATION: "education",
-  BANK_FEES_ATM_FEES: "miscellaneous",
-  BANK_FEES_FOREIGN_TRANSACTION_FEES: "miscellaneous",
-  BANK_FEES_INSUFFICIENT_FUNDS: "miscellaneous",
-  BANK_FEES_OVERDRAFT_FEES: "miscellaneous",
-  BANK_FEES_OTHER_BANK_FEES: "miscellaneous",
-  BANK_FEES_INTEREST_CHARGE: "debt",
-  LOAN_PAYMENTS_CAR_PAYMENT: "debt",
-  LOAN_PAYMENTS_CREDIT_CARD_PAYMENT: "debt",
-  LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT: "debt",
-  LOAN_PAYMENTS_MORTGAGE_PAYMENT: "debt",
-  LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT: "debt",
-  LOAN_PAYMENTS_OTHER_PAYMENT: "debt",
-  GOVERNMENT_AND_NON_PROFIT_DONATIONS: "gifts_giving",
-  GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "miscellaneous",
-  GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT: "miscellaneous",
-  GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES: "miscellaneous",
+  // Income
+  INCOME_DIVIDENDS: "income_dividends",
+  INCOME_INTEREST_EARNED: "income_interest",
+  INCOME_RETIREMENT_PENSION: "income_retirement",
+  INCOME_TAX_REFUND: "income_tax_refund",
+  INCOME_UNEMPLOYMENT: "income_unemployment",
+  INCOME_WAGES: "income_wages",
+  INCOME_OTHER_INCOME: "income_other",
+  
+  // Food & Drink
+  FOOD_AND_DRINK_GROCERIES: "food_groceries",
+  FOOD_AND_DRINK_RESTAURANT: "food_restaurant",
+  FOOD_AND_DRINK_FAST_FOOD: "food_fast_food",
+  FOOD_AND_DRINK_COFFEE: "food_coffee",
+  FOOD_AND_DRINK_BEER_WINE_AND_LIQUOR: "food_beer_wine_liquor",
+  FOOD_AND_DRINK_VENDING_MACHINES: "food_vending_machines",
+  FOOD_AND_DRINK_OTHER_FOOD_AND_DRINK: "food_other",
+  
+  // Transportation
+  TRANSPORTATION_GAS: "transport_gas",
+  TRANSPORTATION_TAXIS_AND_RIDE_SHARES: "transport_rideshare",
+  TRANSPORTATION_PUBLIC_TRANSIT: "transport_public_transit",
+  TRANSPORTATION_PARKING: "transport_parking",
+  TRANSPORTATION_TOLLS: "transport_tolls",
+  TRANSPORTATION_BIKES_AND_SCOOTERS: "transport_bikes_scooters",
+  TRANSPORTATION_OTHER_TRANSPORTATION: "transport_other",
+  
+  // Travel
+  TRAVEL_FLIGHTS: "travel_flights",
+  TRAVEL_LODGING: "travel_lodging",
+  TRAVEL_RENTAL_CARS: "travel_rental_cars",
+  TRAVEL_OTHER_TRAVEL: "travel_other",
+  
+  // Rent & Utilities
+  RENT_AND_UTILITIES_RENT: "utilities_rent",
+  RENT_AND_UTILITIES_GAS_AND_ELECTRICITY: "utilities_gas_electric",
+  RENT_AND_UTILITIES_WATER: "utilities_water",
+  RENT_AND_UTILITIES_INTERNET_AND_CABLE: "utilities_internet_cable",
+  RENT_AND_UTILITIES_TELEPHONE: "utilities_telephone",
+  RENT_AND_UTILITIES_SEWAGE_AND_WASTE_MANAGEMENT: "utilities_sewage",
+  RENT_AND_UTILITIES_OTHER_UTILITIES: "utilities_other",
+  
+  // Home Improvement
+  HOME_IMPROVEMENT_FURNITURE: "home_furniture",
+  HOME_IMPROVEMENT_HARDWARE: "home_hardware",
+  HOME_IMPROVEMENT_REPAIR_AND_MAINTENANCE: "home_repair",
+  HOME_IMPROVEMENT_SECURITY: "home_security",
+  HOME_IMPROVEMENT_OTHER_HOME_IMPROVEMENT: "home_other",
+  
+  // Personal Care
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: "personal_gyms",
+  PERSONAL_CARE_HAIR_AND_BEAUTY: "personal_hair_beauty",
+  PERSONAL_CARE_LAUNDRY_AND_DRY_CLEANING: "personal_laundry",
+  PERSONAL_CARE_OTHER_PERSONAL_CARE: "personal_other",
+  
+  // Entertainment
+  ENTERTAINMENT_MUSIC_AND_AUDIO: "entertainment_music_audio",
+  ENTERTAINMENT_TV_AND_MOVIES: "entertainment_tv_movies",
+  ENTERTAINMENT_MOVIES_AND_DVS: "entertainment_tv_movies",
+  ENTERTAINMENT_VIDEO_GAMES: "entertainment_video_games",
+  ENTERTAINMENT_GAMES: "entertainment_video_games",
+  ENTERTAINMENT_SPORTING_EVENTS_AMUSEMENT_PARKS_AND_MUSEUMS: "entertainment_sporting_events",
+  ENTERTAINMENT_CASINOS_AND_GAMBLING: "entertainment_casinos_gambling",
+  ENTERTAINMENT_OTHER_ENTERTAINMENT: "entertainment_other",
+  
+  // General Merchandise
+  GENERAL_MERCHANDISE_CLOTHING_AND_ACCESSORIES: "merchandise_clothing",
+  GENERAL_MERCHANDISE_DEPARTMENT_STORES: "merchandise_department",
+  GENERAL_MERCHANDISE_DISCOUNT_STORES: "merchandise_discount",
+  GENERAL_MERCHANDISE_SUPERSTORES: "merchandise_superstores",
+  GENERAL_MERCHANDISE_ONLINE_MARKETPLACES: "merchandise_online",
+  GENERAL_MERCHANDISE_ELECTRONICS: "merchandise_electronics",
+  GENERAL_MERCHANDISE_BOOKSTORES_AND_NEWSSTANDS: "merchandise_bookstores",
+  GENERAL_MERCHANDISE_CONVENIENCE_STORES: "merchandise_convenience",
+  GENERAL_MERCHANDISE_OTHER_GENERAL_MERCHANDISE: "merchandise_other",
+  GENERAL_MERCHANDISE_PET_SUPPLIES: "merchandise_pets",
+  GENERAL_MERCHANDISE_SPORTING_GOODS: "merchandise_sporting_goods",
+  GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES: "merchandise_gifts",
+  GENERAL_MERCHANDISE_OFFICE_SUPPLIES: "merchandise_office",
+  GENERAL_MERCHANDISE_TOBACCO_AND_VAPE: "merchandise_tobacco",
+  
+  // Medical
+  MEDICAL_DENTAL_CARE: "medical_dental",
+  MEDICAL_EYE_CARE: "medical_eye",
+  MEDICAL_HOSPITALS_AND_CLINICS: "medical_hospitals",
+  MEDICAL_PHARMACIES_AND_SUPPLEMENTS: "medical_pharmacy",
+  MEDICAL_PRIMARY_CARE: "medical_primary_care",
+  MEDICAL_VETERINARY_SERVICES: "medical_veterinary",
+  MEDICAL_OTHER_MEDICAL: "medical_other",
+  
+  // General Services
+  GENERAL_SERVICES_EDUCATION: "services_education",
+  GENERAL_SERVICES_ACCOUNTING_AND_FINANCIAL_PLANNING: "services_accounting_tax",
+  GENERAL_SERVICES_AUTOMOTIVE: "services_automotive",
+  GENERAL_SERVICES_CHILDCARE: "services_childcare",
+  GENERAL_SERVICES_CONSULTING_AND_LEGAL: "services_consulting",
+  GENERAL_SERVICES_INSURANCE: "services_insurance",
+  GENERAL_SERVICES_POSTAGE_AND_SHIPPING: "services_postage_shipping",
+  GENERAL_SERVICES_STORAGE: "services_storage",
+  GENERAL_SERVICES_VETERINARY_SERVICES: "services_veterinary",
+  GENERAL_SERVICES_OTHER_GENERAL_SERVICES: "services_other",
+  
+  // Bank Fees
+  BANK_FEES_ATM_FEES: "bank_fees_atm",
+  BANK_FEES_FOREIGN_TRANSACTION_FEES: "bank_fees_foreign_transaction",
+  BANK_FEES_INSUFFICIENT_FUNDS: "bank_fees_insufficient_funds",
+  BANK_FEES_OVERDRAFT_FEES: "bank_fees_overdraft",
+  BANK_FEES_OTHER_BANK_FEES: "bank_fees_other",
+  BANK_FEES_INTEREST_CHARGE: "bank_fees_interest_charge",
+  
+  // Loan Payments
+  LOAN_PAYMENTS_CAR_PAYMENT: "loan_car_payment",
+  LOAN_PAYMENTS_CREDIT_CARD_PAYMENT: "loan_credit_card",
+  LOAN_PAYMENTS_PERSONAL_LOAN_PAYMENT: "loan_personal",
+  LOAN_PAYMENTS_MORTGAGE_PAYMENT: "loan_mortgage",
+  LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT: "loan_student",
+  LOAN_PAYMENTS_OTHER_PAYMENT: "loan_other",
+  
+  // Government & Non-Profit
+  GOVERNMENT_AND_NON_PROFIT_DONATIONS: "government_donations",
+  GOVERNMENT_AND_NON_PROFIT_TAX_PAYMENT: "government_tax_payment",
+  GOVERNMENT_AND_NON_PROFIT_OTHER_GOVERNMENT_AND_NON_PROFIT: "government_other",
+  GOVERNMENT_AND_NON_PROFIT_GOVERNMENT_DEPARTMENTS_AND_AGENCIES: "government_departments",
+  
+  // Transfers
+  TRANSFER_IN_ACCOUNT_TRANSFER: "transfer_in_account",
+  TRANSFER_IN_CASH_ADVANCES_AND_LOANS: "transfer_in_cash_advance",
+  TRANSFER_IN_DEPOSIT: "transfer_in_deposit",
+  TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS: "transfer_in_investment",
+  TRANSFER_IN_SAVINGS: "transfer_in_savings",
+  TRANSFER_IN_OTHER_TRANSFER: "transfer_in_other",
+  TRANSFER_OUT_ACCOUNT_TRANSFER: "transfer_out_account",
+  TRANSFER_OUT_CASH_ADVANCES_AND_LOANS: "transfer_out_cash_advance",
+  TRANSFER_OUT_INVESTMENT_AND_RETIREMENT_FUNDS: "transfer_out_investment",
+  TRANSFER_OUT_SAVINGS: "transfer_out_savings",
+  TRANSFER_OUT_WITHDRAWAL: "transfer_out_withdrawal",
+  TRANSFER_OUT_OTHER_TRANSFER: "transfer_out_other",
 };
 
 function isTransferCategory(category: PlaidCategoryInput): boolean {
@@ -122,24 +173,26 @@ function isTransferCategory(category: PlaidCategoryInput): boolean {
 }
 
 function mapPlaidCategoryToSlug(category: PlaidCategoryInput): string | undefined {
-  if (isTransferCategory(category)) return "transfers";
+  if (isTransferCategory(category)) return "transfer_in"; // Default to transfer_in, will be refined later
   const detailed = category.detailed?.toUpperCase() ?? "";
   if (detailed && PLAID_CATEGORY_TO_SLUG[detailed]) return PLAID_CATEGORY_TO_SLUG[detailed];
   const primary = category.primary?.toUpperCase() ?? "";
 
-  if (primary.startsWith("FOOD_AND_DRINK")) return "food";
+  // Fallback to parent category slugs when detailed mapping not found
+  if (primary.startsWith("FOOD_AND_DRINK")) return "food_and_drink";
   if (primary.startsWith("TRANSPORTATION")) return "transportation";
-  if (primary.startsWith("TRAVEL")) return "transportation";
-  if (primary.startsWith("RENT_AND_UTILITIES")) return "utilities";
-  if (primary.startsWith("HOME_IMPROVEMENT")) return "housing";
+  if (primary.startsWith("TRAVEL")) return "travel";
+  if (primary.startsWith("RENT_AND_UTILITIES")) return "rent_utilities";
+  if (primary.startsWith("HOME_IMPROVEMENT")) return "home_improvement";
   if (primary.startsWith("PERSONAL_CARE")) return "personal_care";
   if (primary.startsWith("ENTERTAINMENT")) return "entertainment";
-  if (primary.startsWith("GENERAL_MERCHANDISE")) return "miscellaneous";
-  if (primary.startsWith("MEDICAL")) return "health";
-  if (primary.startsWith("EDUCATION")) return "education";
-  if (primary.startsWith("BANK_FEES")) return "miscellaneous";
-  if (primary.startsWith("LOAN_PAYMENTS")) return "debt";
-  if (primary.startsWith("INCOME")) return "wages_salary";
+  if (primary.startsWith("GENERAL_MERCHANDISE")) return "general_merchandise";
+  if (primary.startsWith("GENERAL_SERVICES")) return "general_services";
+  if (primary.startsWith("MEDICAL")) return "medical";
+  if (primary.startsWith("BANK_FEES")) return "bank_fees";
+  if (primary.startsWith("LOAN_PAYMENTS")) return "loan_payments";
+  if (primary.startsWith("GOVERNMENT_AND_NON_PROFIT")) return "government_nonprofit";
+  if (primary.startsWith("INCOME")) return "income_wages";
 
   return undefined;
 }
