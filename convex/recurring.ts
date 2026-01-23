@@ -383,6 +383,68 @@ export const updateRecurringRule = mutation({
     if (args.budgetBehavior !== undefined) patch.budgetBehavior = args.budgetBehavior;
 
     await ctx.db.patch(args.id, patch);
+
+    // Check if cadence or amount changed - if so, regenerate expected charges
+    const cadenceChanged = 
+      args.cadence !== undefined ||
+      args.cadenceType !== undefined ||
+      args.intervalType !== undefined ||
+      args.intervalDays !== undefined;
+    
+    const amountChanged = args.amountCents !== undefined;
+
+    if (cadenceChanged || amountChanged) {
+      const now = Date.now();
+      const updatedRule = await ctx.db.get(args.id);
+      if (updatedRule && (updatedRule.status === "active" || updatedRule.active)) {
+        // Get existing expected charges
+        const existingCharges = await ctx.db
+          .query("expectedCharges")
+          .withIndex("by_user_rule", (q) => q.eq("userId", userId).eq("ruleId", args.id))
+          .collect();
+
+        // Delete future unmatched charges (keep historical/matched ones)
+        for (const charge of existingCharges) {
+          if ((charge.state === "upcoming" || charge.state === "due") && charge.expectedDate >= now) {
+            await ctx.db.delete(charge._id);
+          } else if (amountChanged && charge.state === "upcoming") {
+            // Update amount on upcoming charges if amount changed
+            await ctx.db.patch(charge._id, {
+              expectedAmountCents: updatedRule.amountCents,
+            });
+          }
+        }
+
+        // Regenerate future expected charges
+        const futureMonths = 6;
+        const cadence = resolveCadence(updatedRule);
+        
+        // Find the last matched/historical charge to start from
+        const historicalCharges = existingCharges
+          .filter((c) => c.state === "matched" || c.expectedDate < now)
+          .sort((a, b) => b.expectedDate - a.expectedDate);
+        
+        let startDate = historicalCharges.length > 0 
+          ? nextExpectedDate(historicalCharges[0].expectedDate, cadence)
+          : now;
+
+        const endDate = now + futureMonths * 30 * 24 * 60 * 60 * 1000;
+
+        while (startDate <= endDate) {
+          await ctx.db.insert("expectedCharges", {
+            userId,
+            ruleId: args.id,
+            expectedDate: startDate,
+            expectedAmountCents: updatedRule.amountCents,
+            state: startDate <= now ? "due" : "upcoming",
+            generatedAt: now,
+            generatedWindow: `regenerated_after_update`,
+          });
+          startDate = nextExpectedDate(startDate, cadence);
+        }
+      }
+    }
+
     return { ok: true };
   },
 });

@@ -9,7 +9,7 @@ import type { TxDraft, AccountOption, GoalOption, ContextFlag, CategoryOption } 
 import { amountToCents, todayISO } from "@/components/logging/machine";
 import { yyyymmddToLocalMidnightTs, centsToDollars } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
-import DeletionWarningDialog, { buildEntryDeletionImpact } from "@/components/shared/DeletionWarningDialog";
+import DeletionWarningDialog, { buildEntryDeletionImpact, RecurringEntryDeleteDialog, type DeleteScope } from "@/components/shared/DeletionWarningDialog";
 
 interface Entry {
   _id: string;
@@ -121,7 +121,7 @@ export default function EditEntryModal({
 
   async function handleDelete() {
     console.log("[EditEntryModal] Delete button clicked");
-    // Show warning dialog if entry has relationships
+    // Always show warning dialog for entries with relationships or recurring entries
     if (entryDeletionImpact && (
       entryDeletionImpact.hasRecurringRule ||
       entryDeletionImpact.hasGoal ||
@@ -131,17 +131,22 @@ export default function EditEntryModal({
       setShowDeleteWarning(true);
       return;
     }
-    await confirmDelete();
+    await confirmDelete("this_only");
   }
 
-  async function confirmDelete() {
-    console.log("[EditEntryModal] Confirming delete for entry:", entry._id);
+  async function confirmDelete(scope: DeleteScope) {
+    console.log("[EditEntryModal] Confirming delete for entry:", entry._id, "scope:", scope);
     setShowDeleteWarning(false);
     setDeleting(true);
     try {
-      await deleteEntry({ id: entry._id as Id<"entries"> });
+      await deleteEntry({ id: entry._id as Id<"entries">, deleteScope: scope });
       console.log("[EditEntryModal] Delete successful");
-      toast.success("Entry deleted");
+      const message = scope === "entire_series" 
+        ? "Series deleted" 
+        : scope === "this_and_future" 
+        ? "Future transactions deleted" 
+        : "Entry deleted";
+      toast.success(message);
       onDeleted?.();
       onClose();
     } catch (e: unknown) {
@@ -338,15 +343,26 @@ export default function EditEntryModal({
         </div>
       </div>
 
-      {/* Entry Delete Warning Dialog */}
-      <DeletionWarningDialog
-        open={showDeleteWarning}
-        onClose={() => setShowDeleteWarning(false)}
-        onConfirm={confirmDelete}
-        impact={buildEntryDeletionImpact(entryDeletionImpact ?? null, entryTitle)}
-        loading={deleting}
-        confirmLabel="Delete"
-      />
+      {/* Entry Delete Warning Dialog - uses RecurringEntryDeleteDialog for recurring entries */}
+      {entryDeletionImpact?.hasRecurringRule ? (
+        <RecurringEntryDeleteDialog
+          open={showDeleteWarning}
+          onClose={() => setShowDeleteWarning(false)}
+          onConfirm={confirmDelete}
+          impact={entryDeletionImpact}
+          loading={deleting}
+          entryTitle={entryTitle}
+        />
+      ) : (
+        <DeletionWarningDialog
+          open={showDeleteWarning}
+          onClose={() => setShowDeleteWarning(false)}
+          onConfirm={() => confirmDelete("this_only")}
+          impact={buildEntryDeletionImpact(entryDeletionImpact ?? null, entryTitle)}
+          loading={deleting}
+          confirmLabel="Delete"
+        />
+      )}
     </div>
   );
 }

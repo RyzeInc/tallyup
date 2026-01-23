@@ -334,6 +334,54 @@ export const addEntry = mutation({
       });
     }
 
+    // Auto-allocate income to matching goals (if no explicit goal was provided)
+    if (args.type === "income" && !args.goalId && category) {
+      // Find goals that should receive auto-allocation from this income category
+      const goals = await ctx.db
+        .query("goals")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+
+      const normalizedCategory = category.toLowerCase().trim();
+      const matchingGoals = goals.filter((g) => {
+        if (g.status !== "active") return false;
+        if (!g.autoAllocateEnabled) return false;
+        if (!g.fundingIncomeCategories?.length) return false;
+        if (g.currentAmountCents >= g.targetAmountCents) return false; // Goal already met
+        if (g.archived) return false;
+        
+        // Check if any funding category matches
+        return g.fundingIncomeCategories.some(
+          (cat) => cat.toLowerCase().trim() === normalizedCategory
+        );
+      });
+
+      // Auto-allocate to each matching goal
+      for (const goal of matchingGoals) {
+        const allocatePercent = goal.autoAllocatePercent ?? 10;
+        const allocationAmount = Math.round((amountCents * allocatePercent) / 100);
+        
+        if (allocationAmount > 0) {
+          // Don't exceed the goal's remaining target
+          const remainingToTarget = goal.targetAmountCents - goal.currentAmountCents;
+          const finalAmount = Math.min(allocationAmount, remainingToTarget);
+          
+          if (finalAmount > 0) {
+            await applyGoalDelta(ctx, userId, goal._id, finalAmount);
+            await ctx.db.insert("goalContributions", {
+              userId,
+              goalId: goal._id,
+              amountCents: finalAmount,
+              date: args.date,
+              entryId: insertedId,
+              createdAt: now,
+              note: `Auto-allocated ${allocatePercent}% from ${category}`,
+            });
+          }
+        }
+      }
+    }
+
     if (shouldAffectBudgets({ type: args.type, excludeFromBudgets: false, excludeFromTotals: excludeFromTotals, status: args.status ?? "posted", entryType: args.entryType })) {
       await enqueueBudgetDirty(ctx, userId, args.date, budgetCategoryId, "entry_created");
     }
@@ -697,11 +745,15 @@ export const updateEntry = mutation({
       const prevAmount = contribution?.amountCents ?? existing.amountCents;
       const nextAmount = nextEntry.amountCents;
 
-      if (prevGoalId && (!nextGoalId || nextGoalId !== prevGoalId || prevAmount !== nextAmount)) {
+      // If entry type changed from income to expense, remove goal contribution
+      const typeChangedToNonIncome = existing.type === "income" && nextEntry.type !== "income";
+
+      if (prevGoalId && (typeChangedToNonIncome || !nextGoalId || nextGoalId !== prevGoalId || prevAmount !== nextAmount)) {
         await applyGoalDelta(ctx, userId, prevGoalId, -prevAmount);
       }
 
-      if (nextGoalId) {
+      // Only maintain goal contributions for income entries
+      if (nextGoalId && !typeChangedToNonIncome && nextEntry.type === "income") {
         const delta =
           prevGoalId && nextGoalId === prevGoalId ? nextAmount - prevAmount : nextAmount;
         if (delta !== 0) {
@@ -725,6 +777,7 @@ export const updateEntry = mutation({
           });
         }
       } else if (contribution) {
+        // Delete contribution if goal removed or type changed to non-income
         await ctx.db.delete(contribution._id);
       }
     }
@@ -780,6 +833,9 @@ export const getEntryDeletionImpact = query({
       recurringRuleName: null as string | null,
       recurringRuleId: null as Id<"recurringRules"> | null,
       linkedEntriesInRule: 0,
+      futureEntriesInRule: 0, // New: count of entries with date >= this entry's date
+      totalSeriesAmountCents: 0, // New: total amount of all entries in series
+      futureSeriesAmountCents: 0, // New: total amount of future entries
       hasGoal: false,
       goalName: null as string | null,
       hasBudgetCategory: false,
@@ -806,6 +862,12 @@ export const getEntryDeletionImpact = query({
           )
           .collect();
         impact.linkedEntriesInRule = linkedEntries.length;
+        impact.totalSeriesAmountCents = linkedEntries.reduce((sum, e) => sum + e.amountCents, 0);
+        
+        // Count future entries (date >= this entry's date)
+        const futureEntries = linkedEntries.filter((e) => e.date >= entry.date);
+        impact.futureEntriesInRule = futureEntries.length;
+        impact.futureSeriesAmountCents = futureEntries.reduce((sum, e) => sum + e.amountCents, 0);
       }
     }
 
@@ -842,37 +904,131 @@ export const deleteEntry = mutation({
     // New options for handling recurring rule link
     unlinkFromRecurringRule: v.optional(v.boolean()), // Default true - just unlink
     // If false and entry is linked, throw error (force user to decide)
+    // Delete scope for recurring entries
+    deleteScope: v.optional(v.union(
+      v.literal("this_only"),        // Delete just this entry
+      v.literal("this_and_future"),  // Delete this and all future entries in the series
+      v.literal("entire_series")     // Delete all entries in the series
+    )),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) throw new Error("Not found");
 
-    // Handle recurring rule link
+    const deleteScope = args.deleteScope ?? "this_only";
+
+    // Handle recurring rule link with delete scope
     if (existing.recurringRuleId) {
       const unlinkFromRule = args.unlinkFromRecurringRule ?? true;
-      if (!unlinkFromRule) {
+      if (!unlinkFromRule && deleteScope === "this_only") {
         throw new Error("Entry is linked to a recurring rule. Set unlinkFromRecurringRule: true to proceed.");
       }
-      // Entry will be deleted, no need to explicitly unlink since the entry is going away
-      
-      // Clear matchedEntryId on any expected charges that reference this entry
-      const matchedCharges = await ctx.db
-        .query("expectedCharges")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("userId"), userId),
-            q.eq(q.field("matchedEntryId"), args.id)
+
+      // Handle different delete scopes for recurring entries
+      if (deleteScope === "this_and_future" || deleteScope === "entire_series") {
+        // Get all entries linked to this recurring rule
+        const allLinkedEntries = await ctx.db
+          .query("entries")
+          .withIndex("by_user_recurring", (q) => q.eq("userId", userId).eq("recurringRuleId", existing.recurringRuleId!))
+          .collect();
+
+        // Filter entries based on scope
+        const entriesToDelete = deleteScope === "entire_series"
+          ? allLinkedEntries
+          : allLinkedEntries.filter((e) => e.date >= existing.date);
+
+        // Delete each entry (except the current one, which we'll delete at the end)
+        for (const entry of entriesToDelete) {
+          if (entry._id === args.id) continue; // Skip current entry, delete it normally below
+
+          // Reverse balance effect
+          if (entry.accountId) {
+            const delta = getEntryBalanceDelta(entry.type, entry.amountCents, entry.excludeFromTotals);
+            await adjustManualAccountBalance(ctx, userId, entry.accountId, -delta);
+          }
+
+          // Reverse goal contribution
+          if (entry.goalId) {
+            const contribution = await getGoalContributionByEntry(ctx, entry._id);
+            const amount = contribution?.amountCents ?? entry.amountCents;
+            await applyGoalDelta(ctx, userId, entry.goalId, -amount);
+            if (contribution) {
+              await ctx.db.delete(contribution._id);
+            }
+          }
+
+          // Clean up budget impacts
+          const budgetImpacts = await ctx.db
+            .query("budgetEntryImpacts")
+            .filter((q) => q.and(
+              q.eq(q.field("userId"), userId),
+              q.eq(q.field("entryId"), entry._id)
+            ))
+            .collect();
+          for (const impact of budgetImpacts) {
+            await ctx.db.delete(impact._id);
+          }
+
+          // Delete the entry
+          await ctx.db.delete(entry._id);
+        }
+
+        // Handle expected charges
+        const expectedCharges = await ctx.db
+          .query("expectedCharges")
+          .withIndex("by_user_rule", (q) => q.eq("userId", userId).eq("ruleId", existing.recurringRuleId!))
+          .collect();
+
+        for (const charge of expectedCharges) {
+          const shouldDelete = deleteScope === "entire_series" || charge.expectedDate >= existing.date;
+          if (shouldDelete) {
+            if (charge.state === "upcoming" || charge.state === "due") {
+              await ctx.db.delete(charge._id);
+            } else if (charge.matchedEntryId) {
+              // Clear the match for historical charges
+              await ctx.db.patch(charge._id, {
+                matchedEntryId: undefined,
+                state: "missed",
+                resolutionNote: `Entry deleted (${deleteScope})`,
+              });
+            }
+          }
+        }
+
+        // If deleting entire series, also delete the recurring rule
+        if (deleteScope === "entire_series") {
+          // Delete recurring inbox items
+          const inboxItems = await ctx.db
+            .query("recurringInbox")
+            .withIndex("by_user_status", (q) => q.eq("userId", userId))
+            .filter((q) => q.eq(q.field("ruleId"), existing.recurringRuleId))
+            .collect();
+          for (const item of inboxItems) {
+            await ctx.db.delete(item._id);
+          }
+
+          await ctx.db.delete(existing.recurringRuleId!);
+        }
+      } else {
+        // this_only: Just clear the match on expected charges
+        const matchedCharges = await ctx.db
+          .query("expectedCharges")
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("userId"), userId),
+              q.eq(q.field("matchedEntryId"), args.id)
+            )
           )
-        )
-        .collect();
-      
-      for (const charge of matchedCharges) {
-        await ctx.db.patch(charge._id, {
-          matchedEntryId: undefined,
-          state: "missed", // Mark as missed since matched entry is being deleted
-          resolutionNote: "Matched entry was deleted",
-        });
+          .collect();
+        
+        for (const charge of matchedCharges) {
+          await ctx.db.patch(charge._id, {
+            matchedEntryId: undefined,
+            state: "missed", // Mark as missed since matched entry is being deleted
+            resolutionNote: "Matched entry was deleted",
+          });
+        }
       }
     }
     

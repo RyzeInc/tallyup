@@ -15,7 +15,7 @@ import {
 } from "@/components/utils";
 import { CONTEXT_TAGS, INTENT_TAGS, getReviewReason } from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
-import DeletionWarningDialog, { buildEntryDeletionImpact } from "@/components/shared/DeletionWarningDialog";
+import DeletionWarningDialog, { buildEntryDeletionImpact, RecurringEntryDeleteDialog, type DeleteScope } from "@/components/shared/DeletionWarningDialog";
 
 type TransactionMode = "new" | "edit";
 type TransactionType = "expense" | "income" | "transfer";
@@ -370,18 +370,23 @@ export default function TransactionSheet({
       setShowDeleteWarning(true);
       return;
     }
-    await confirmDelete();
+    await confirmDelete("this_only");
   }
 
-  async function confirmDelete() {
+  async function confirmDelete(scope: DeleteScope) {
     if (!entry) return;
-    console.log("[TransactionSheet] Confirming delete for entry:", entry._id);
+    console.log("[TransactionSheet] Confirming delete for entry:", entry._id, "scope:", scope);
     setShowDeleteWarning(false);
     setSaving(true);
     try {
-      await deleteEntry({ id: entry._id });
+      await deleteEntry({ id: entry._id, deleteScope: scope });
       console.log("[TransactionSheet] Delete successful");
-      toast.success("Transaction deleted");
+      const message = scope === "entire_series" 
+        ? "Series deleted" 
+        : scope === "this_and_future" 
+        ? "Future transactions deleted" 
+        : "Transaction deleted";
+      toast.success(message);
       onDeleted?.();
       onClose();
     } catch (e: unknown) {
@@ -685,15 +690,26 @@ export default function TransactionSheet({
         </div>
       </div>
 
-      {/* Entry Delete Warning Dialog */}
-      <DeletionWarningDialog
-        open={showDeleteWarning}
-        onClose={() => setShowDeleteWarning(false)}
-        onConfirm={confirmDelete}
-        impact={buildEntryDeletionImpact(entryDeletionImpact ?? null, entryTitle)}
-        loading={saving}
-        confirmLabel="Delete"
-      />
+      {/* Entry Delete Warning Dialog - uses RecurringEntryDeleteDialog for recurring entries */}
+      {entryDeletionImpact?.hasRecurringRule ? (
+        <RecurringEntryDeleteDialog
+          open={showDeleteWarning}
+          onClose={() => setShowDeleteWarning(false)}
+          onConfirm={confirmDelete}
+          impact={entryDeletionImpact}
+          loading={saving}
+          entryTitle={entryTitle}
+        />
+      ) : (
+        <DeletionWarningDialog
+          open={showDeleteWarning}
+          onClose={() => setShowDeleteWarning(false)}
+          onConfirm={() => confirmDelete("this_only")}
+          impact={buildEntryDeletionImpact(entryDeletionImpact ?? null, entryTitle)}
+          loading={saving}
+          confirmLabel="Delete"
+        />
+      )}
     </div>
   );
 }
