@@ -70,12 +70,12 @@ export type TxDraft = {
 
   categoryId?: string;
   /** Subcategory within the selected category */
-  subcategoryId?: string;
+  subcategoryId?: string | null;
   
   /** For transfers: Transfer In category (from where) */
-  transferFromCategoryId?: string;
+  transferFromCategoryId?: string | null;
   /** For transfers: Transfer Out category (to where) */
-  transferToCategoryId?: string;
+  transferToCategoryId?: string | null;
 
   // richer metadata
   contextScope?: ContextScope;

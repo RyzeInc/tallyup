@@ -6,7 +6,7 @@ import * as Lucide from "lucide-react";
 interface Category {
   _id: string;
   name: string;
-  slug: string;
+  slug?: string;
   parentId?: string | null;
   categoryType: "expense" | "income" | "transfer";
 }

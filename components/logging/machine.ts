@@ -59,9 +59,9 @@ export type Event =
   | { type: "SET_TITLE"; title: string }
   | { type: "SET_NOTE"; note: string }
   | { type: "SET_CATEGORY"; categoryId?: string }
-  | { type: "SET_SUBCATEGORY"; subcategoryId?: string }
-  | { type: "SET_TRANSFER_FROM"; categoryId?: string }
-  | { type: "SET_TRANSFER_TO"; categoryId?: string }
+  | { type: "SET_SUBCATEGORY"; subcategoryId?: string | null }
+  | { type: "SET_TRANSFER_FROM"; categoryId?: string | null }
+  | { type: "SET_TRANSFER_TO"; categoryId?: string | null }
   | { type: "SET_CONTEXT_SCOPE"; scope?: ContextScope }
   | { type: "TOGGLE_CONTEXT_FLAG"; flag: ContextFlag }
   | { type: "SET_INTENT"; patch: Partial<Intent> }

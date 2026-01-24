@@ -96,7 +96,7 @@ export default function RulesTabRedesigned({
       const statusArg = showBulkDeleteDialog === "all" ? "all" : showBulkDeleteDialog;
       
       const result = await bulkDeleteRules({ status: statusArg });
-      toast.success(`Deleted ${result.deletedCount} rules`);
+      toast.success(`Deleted ${result.deletedRules} rules`);
       setShowBulkDeleteDialog(null);
     } catch (e) {
       console.error("Bulk delete failed:", e);
