@@ -217,6 +217,7 @@ export default function QuickLogModal({
       const res = await addEntry({
         type: entryType,
         categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
+        subcategoryId: (draft.subcategoryId || undefined) as Id<"categories"> | undefined,
         note: draft.note?.trim() || undefined,
         merchant: draft.merchant?.trim() || undefined,
         methodOrAccount: draft.account.method?.trim() || undefined,
@@ -230,6 +231,11 @@ export default function QuickLogModal({
         goalId: draft.goalId ?? undefined,
         accountId: draft.account.accountId ?? undefined,
         needsReview: draft.needsReview,
+        // Pass recurring if set (will auto-create recurring rule)
+        recurring: draft.recurring?.cadence ? {
+          cadence: draft.recurring.cadence,
+          anchorDate: draft.recurring.anchorDate,
+        } : undefined,
       });
 
       // Show toast

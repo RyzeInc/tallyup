@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc, Id } from "convex/_generated/dataModel";
 import { centsToDollars, dollarsToCents } from "./utils";
@@ -28,6 +28,9 @@ export default function RecurringModal({
   const [applyToExisting, setApplyToExisting] = useState(false);
   const [amount, setAmount] = useState(centsToDollars(entry.amountCents));
   const [cadence, setCadence] = useState<CadenceKind>("monthly");
+  const [merchant, setMerchant] = useState(entry.merchant ?? "");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(entry.categoryId as string | undefined);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(entry.accountId as string | undefined);
   // Initialize anchorDate from entry date
   const [anchorDate, setAnchorDate] = useState(() => {
     const d = new Date(entry.date);
@@ -39,6 +42,26 @@ export default function RecurringModal({
   const [err, setErr] = useState<string | null>(null);
   const toast = useToast();
   const { add } = useOptimisticLinks();
+
+  // Fetch categories and accounts
+  const categoriesData = useQuery(api.categories.listCategories, { 
+    categoryType: entry.type === "income" ? "income" : "expense",
+    topLevelOnly: true 
+  });
+  const accountsData = useQuery(api.accounts.listAccounts, {});
+
+  const categories = useMemo(() => {
+    return (categoriesData ?? []).map(c => ({ id: c._id, name: c.name, slug: c.slug }));
+  }, [categoriesData]);
+
+  const accounts = useMemo(() => {
+    return (accountsData ?? []).map(a => ({ id: a._id, name: a.name, type: a.type }));
+  }, [accountsData]);
+
+  // Get selected category name
+  const selectedCategory = useMemo(() => {
+    return categories.find(c => c.id === selectedCategoryId);
+  }, [categories, selectedCategoryId]);
 
   // Compute cadence label based on anchor date
   const cadenceLabel = useMemo(() => {
@@ -78,13 +101,14 @@ export default function RecurringModal({
     try {
       const cents = dollarsToCents(amount) ?? entry.amountCents;
       const anchorTs = new Date(anchorDate + "T00:00:00").getTime();
+      const merchantNormalized = merchant.trim().toLowerCase().replace(/\s+/g, "_");
       
       const res = await create({
         type: entry.type,
         displayName: displayName.trim() || undefined,
         name: displayName.trim() || undefined,
-        bucket: entry.bucket,
-        category: entry.category,
+        bucket: selectedCategory?.slug ?? entry.bucket,
+        category: selectedCategory?.name ?? entry.category,
         amountCents: cents,
         amountTolerancePercent: 5,
         autolinkEnabled: autolink,
@@ -92,6 +116,15 @@ export default function RecurringModal({
         cadence: { kind: cadence, anchorDate: anchorTs },
         status: "active" as const,
         active: true,
+        merchantKeys: merchant.trim() ? [merchantNormalized] : undefined,
+        accountScope: selectedAccountId ? { 
+          kind: "only" as const, 
+          accountIds: [selectedAccountId as Id<"accounts">] 
+        } : undefined,
+        defaultAccountId: selectedAccountId as Id<"accounts"> | undefined,
+        // Generate future expected charges
+        generateFutureEntries: true,
+        futureMonths: 6,
       });
 
       const id = res?.id as Id<"recurringRules"> | undefined;
@@ -146,7 +179,7 @@ export default function RecurringModal({
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
           <div>
             <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Name</div>
             <input 
@@ -193,6 +226,65 @@ export default function RecurringModal({
                 <option value="quarterly">Quarterly</option>
                 <option value="yearly">Yearly</option>
               </select>
+            </div>
+          </div>
+
+          {/* Merchant Field */}
+          <div>
+            <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Merchant (optional)</div>
+            <input 
+              value={merchant} 
+              onChange={(e) => setMerchant(e.target.value)} 
+              placeholder="e.g., Netflix, Spotify, Landlord"
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+              style={{ 
+                backgroundColor: "var(--surface-subtle)", 
+                border: "1px solid var(--border)",
+                color: "var(--text)"
+              }}
+            />
+          </div>
+
+          {/* Category Field */}
+          <div>
+            <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Category</div>
+            <select 
+              value={selectedCategoryId ?? ""}
+              onChange={(e) => setSelectedCategoryId(e.target.value || undefined)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+              style={{ 
+                backgroundColor: "var(--surface-subtle)", 
+                border: "1px solid var(--border)",
+                color: "var(--text)"
+              }}
+            >
+              <option value="">Select category...</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Account Field */}
+          <div>
+            <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-tertiary)" }}>Account (optional)</div>
+            <select 
+              value={selectedAccountId ?? ""}
+              onChange={(e) => setSelectedAccountId(e.target.value || undefined)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none transition-colors"
+              style={{ 
+                backgroundColor: "var(--surface-subtle)", 
+                border: "1px solid var(--border)",
+                color: "var(--text)"
+              }}
+            >
+              <option value="">Any account</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>{acc.name}</option>
+              ))}
+            </select>
+            <div className="text-[11px] mt-1" style={{ color: "var(--text-tertiary)" }}>
+              Limit matching to a specific account
             </div>
           </div>
 

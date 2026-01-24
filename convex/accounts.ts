@@ -938,3 +938,82 @@ export const permanentDeleteAccount = mutation({
     return { ok: true };
   },
 });
+
+/**
+ * Bulk delete all archived accounts
+ */
+export const bulkDeleteArchivedAccounts = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+    
+    const archivedAccounts = await ctx.db
+      .query("accounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("isArchived"), true))
+      .collect();
+
+    let deletedCount = 0;
+    const now = Date.now();
+
+    for (const account of archivedAccounts) {
+      // Delete all linked entries
+      const linkedEntries = await ctx.db
+        .query("entries")
+        .withIndex("by_user_account", (q) => q.eq("userId", userId).eq("accountId", account._id))
+        .collect();
+      
+      for (const entry of linkedEntries) {
+        if (entry.transferId) {
+          const transfer = await ctx.db.get(entry.transferId);
+          if (transfer) {
+            if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
+              await ctx.db.delete(transfer.fromEntryId);
+            }
+            if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
+              await ctx.db.delete(transfer.toEntryId);
+            }
+            await ctx.db.delete(transfer._id);
+          }
+        }
+        await ctx.db.delete(entry._id);
+      }
+      
+      // Delete snapshots
+      const snapshots = await ctx.db
+        .query("accountSnapshots")
+        .withIndex("by_account_asOf", (q) => q.eq("accountId", account._id))
+        .collect();
+      for (const s of snapshots) {
+        await ctx.db.delete(s._id);
+      }
+      
+      // Delete any linked plaidAccounts
+      const pAccounts = await ctx.db
+        .query("plaidAccounts")
+        .withIndex("by_account", (q) => q.eq("accountId", account._id))
+        .collect();
+      for (const p of pAccounts) {
+        await ctx.db.delete(p._id);
+      }
+
+      // Clear fundingAccountId on goals
+      const goalsWithAccount = await ctx.db
+        .query("goals")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .collect();
+      
+      for (const goal of goalsWithAccount) {
+        if (goal.fundingAccountId === account._id) {
+          await ctx.db.patch(goal._id, { fundingAccountId: undefined, updatedAt: now });
+        }
+      }
+
+      // Delete the account
+      await ctx.db.delete(account._id);
+      deletedCount++;
+    }
+    
+    return { ok: true, deletedCount };
+  },
+});

@@ -54,11 +54,24 @@ export default function EditEntryModal({
 
   // Fetch goals for linking
   const goals = useQuery(api.goals.listGoals, {}) as { _id: string; name: string }[] | undefined;
-  const expenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
-    | { _id: string; name: string }[]
+  
+  // Top-level categories only (for the Category dropdown)
+  const expenseParentCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense", topLevelOnly: true }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
     | undefined;
-  const incomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
-    | { _id: string; name: string }[]
+  const incomeParentCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income", topLevelOnly: true }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
+    | undefined;
+  
+  // All categories including subcategories (for SubcategoryField)
+  const allExpenseCategoriesData = useQuery(api.categories.listCategories, { categoryType: "expense" }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
+    | undefined;
+  const allIncomeCategoriesData = useQuery(api.categories.listCategories, { categoryType: "income" }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
+    | undefined;
+  const transferCategoriesData = useQuery(api.categories.listCategories, { categoryType: "transfer" }) as
+    | { _id: string; name: string; slug?: string; parentId?: string }[]
     | undefined;
   const entryDeletionImpact = useQuery(api.entries.getEntryDeletionImpact, { id: entry._id as Id<"entries"> });
 
@@ -85,15 +98,57 @@ export default function EditEntryModal({
     return (goals || []).map((g) => ({ id: g._id as Id<"goals">, name: g.name }));
   }, [goals]);
 
+  // Parent categories only (for the Category dropdown)
   const expenseCategories: CategoryOption[] = useMemo(() => {
-    if (!expenseCategoriesData) return [];
-    return expenseCategoriesData.map((c) => ({ id: c._id, name: c.name }));
-  }, [expenseCategoriesData]);
+    if (!expenseParentCategoriesData) return [];
+    return expenseParentCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [expenseParentCategoriesData]);
 
   const incomeCategories: CategoryOption[] = useMemo(() => {
-    if (!incomeCategoriesData) return [];
-    return incomeCategoriesData.map((c) => ({ id: c._id, name: c.name }));
-  }, [incomeCategoriesData]);
+    if (!incomeParentCategoriesData) return [];
+    return incomeParentCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [incomeParentCategoriesData]);
+
+  // All categories including subcategories (for SubcategoryField)
+  const allExpenseCategories: CategoryOption[] = useMemo(() => {
+    if (!allExpenseCategoriesData) return [];
+    return allExpenseCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [allExpenseCategoriesData]);
+
+  const allIncomeCategories: CategoryOption[] = useMemo(() => {
+    if (!allIncomeCategoriesData) return [];
+    return allIncomeCategoriesData.map((c) => ({ 
+      id: c._id, 
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [allIncomeCategoriesData]);
+
+  const transferCategories: CategoryOption[] = useMemo(() => {
+    if (!transferCategoriesData) return [];
+    return transferCategoriesData.map((c) => ({
+      id: c._id,
+      name: c.name,
+      slug: c.slug,
+      parentId: c.parentId,
+    }));
+  }, [transferCategoriesData]);
 
   // Tags catalog (kept small and consistent with QuickLogModal)
   const tagsCatalog = useMemo(() => {
@@ -334,6 +389,9 @@ export default function EditEntryModal({
             goals={goalsList}
             expenseCategories={expenseCategories}
             incomeCategories={incomeCategories}
+            allExpenseCategories={allExpenseCategories}
+            allIncomeCategories={allIncomeCategories}
+            transferCategories={transferCategories}
             onSubmit={handleResolveSubmit}
             onClose={onClose}
             hiddenExpenseCategories={userPrefs?.hiddenExpenseCategories ?? []}

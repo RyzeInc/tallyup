@@ -226,6 +226,7 @@ export default function LogPage() {
       const res = await addEntry({
         type: entryType,
         categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
+        subcategoryId: (draft.subcategoryId || undefined) as Id<"categories"> | undefined,
         note: draft.note?.trim() || undefined,
         title: draft.title?.trim() || undefined,
         merchant: draft.merchant?.trim() || undefined,
@@ -236,6 +237,11 @@ export default function LogPage() {
         goalId: draft.goalId ?? undefined,
         accountId: draft.account.accountId ?? undefined,
         needsReview: draft.needsReview,
+        // Pass recurring if set (will auto-create recurring rule)
+        recurring: draft.recurring?.cadence ? {
+          cadence: draft.recurring.cadence,
+          anchorDate: draft.recurring.anchorDate,
+        } : undefined,
       });
 
       // Show toast

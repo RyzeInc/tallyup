@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import * as Lucide from "lucide-react";
-import type { Doc } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { formatMoney } from "@/components/utils";
@@ -26,8 +26,14 @@ export default function RulesTabRedesigned({
   onEdit,
   onCreate,
 }: RulesTabRedesignedProps) {
+  const toast = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "suggested">("all");
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState<"all" | "active" | "suggested" | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showDeleteDropdown, setShowDeleteDropdown] = useState(false);
+  
+  const bulkDeleteRules = useMutation(api.recurring.bulkDeleteRecurringRules);
 
   if (!rules) {
     return (
@@ -81,6 +87,33 @@ export default function RulesTabRedesigned({
   const paused = filtered.filter((r) => r.status === "paused");
   const suggested = filtered.filter((r) => r.status === "suggested");
 
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (!showBulkDeleteDialog || !rules) return;
+    setBulkDeleting(true);
+    try {
+      // Map dialog option to API status argument
+      const statusArg = showBulkDeleteDialog === "all" ? "all" : showBulkDeleteDialog;
+      
+      const result = await bulkDeleteRules({ status: statusArg });
+      toast.success(`Deleted ${result.deletedCount} rules`);
+      setShowBulkDeleteDialog(null);
+    } catch (e) {
+      console.error("Bulk delete failed:", e);
+      toast.error("Failed to delete rules");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const getBulkDeleteCount = () => {
+    if (!rules) return 0;
+    if (showBulkDeleteDialog === "all") return rules.length;
+    if (showBulkDeleteDialog === "active") return rules.filter(r => (r.status ?? "active") === "active").length;
+    if (showBulkDeleteDialog === "suggested") return rules.filter(r => r.status === "suggested").length;
+    return 0;
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -131,6 +164,62 @@ export default function RulesTabRedesigned({
           <Lucide.Plus className="h-4 w-4" />
           New rule
         </button>
+
+        {/* Bulk delete dropdown */}
+        {rules && rules.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setShowDeleteDropdown(!showDeleteDropdown)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
+            >
+              <Lucide.Trash2 className="h-4 w-4" />
+              Delete...
+              <Lucide.ChevronDown className="h-3 w-3" />
+            </button>
+            {showDeleteDropdown && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowDeleteDropdown(false)} 
+                />
+                <div 
+                  className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-xl shadow-lg border py-1"
+                  style={{ backgroundColor: "var(--surface)", borderColor: "var(--border)" }}
+                >
+                  <button
+                    onClick={() => { setShowBulkDeleteDialog("all"); setShowDeleteDropdown(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--surface-2)]"
+                    style={{ color: "var(--danger)" }}
+                  >
+                    <Lucide.Trash2 className="h-4 w-4" />
+                    Delete All Rules ({rules.length})
+                  </button>
+                  {active.length > 0 && (
+                    <button
+                      onClick={() => { setShowBulkDeleteDialog("active"); setShowDeleteDropdown(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--surface-2)]"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      <Lucide.CircleDot className="h-4 w-4" />
+                      Delete Active ({active.length})
+                    </button>
+                  )}
+                  {suggested.length > 0 && (
+                    <button
+                      onClick={() => { setShowBulkDeleteDialog("suggested"); setShowDeleteDropdown(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--surface-2)]"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      <Lucide.Lightbulb className="h-4 w-4" />
+                      Delete Suggested ({suggested.length})
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Rules list */}
@@ -165,6 +254,41 @@ export default function RulesTabRedesigned({
           </div>
         )}
       </div>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      {showBulkDeleteDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowBulkDeleteDialog(null)} />
+          <div 
+            className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--text)" }}>
+              Delete {showBulkDeleteDialog === "all" ? "All" : showBulkDeleteDialog === "active" ? "Active" : "Suggested"} Rules?
+            </h3>
+            <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+              This will permanently delete {getBulkDeleteCount()} recurring {getBulkDeleteCount() === 1 ? "rule" : "rules"} and their expected charges. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBulkDeleteDialog(null)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--danger)", color: "white" }}
+              >
+                {bulkDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

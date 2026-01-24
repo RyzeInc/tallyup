@@ -315,6 +315,103 @@ export const deleteBudgetCategory = mutation({
   },
 });
 
+/**
+ * Restore an archived budget category
+ */
+export const restoreBudgetCategory = mutation({
+  args: { id: v.id("budgetCategories") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const category = await ctx.db.get(args.id);
+    if (!category || category.userId !== userId) {
+      throw new Error("Budget category not found");
+    }
+
+    if (!category.archived) {
+      return { ok: true, restored: false };
+    }
+
+    await ctx.db.patch(args.id, {
+      archived: false,
+      updatedAt: Date.now(),
+    });
+
+    return { ok: true, restored: true };
+  },
+});
+
+/**
+ * Bulk delete archived budget categories
+ */
+export const bulkDeleteArchivedBudgetCategories = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const archivedCategories = await ctx.db
+      .query("budgetCategories")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("archived"), true))
+      .collect();
+
+    const now = Date.now();
+    let deletedCount = 0;
+
+    for (const category of archivedCategories) {
+      // Clear budgetCategoryId on linked entries
+      const linkedEntries = await ctx.db
+        .query("entries")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("budgetCategoryId"), category._id)
+          )
+        )
+        .collect();
+
+      for (const entry of linkedEntries) {
+        await ctx.db.patch(entry._id, { budgetCategoryId: undefined, updatedAt: now });
+      }
+
+      // Remove from any budget groups
+      const groupMemberships = await ctx.db
+        .query("budgetGroupMembers")
+        .filter((q) => q.eq(q.field("budgetCategoryId"), category._id))
+        .collect();
+
+      for (const membership of groupMemberships) {
+        await ctx.db.delete(membership._id);
+      }
+
+      // Delete budget entry impacts
+      const entryImpacts = await ctx.db
+        .query("budgetEntryImpacts")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("budgetCategoryId"), category._id)
+          )
+        )
+        .collect();
+
+      for (const impact of entryImpacts) {
+        await ctx.db.delete(impact._id);
+      }
+
+      // Delete the category
+      await ctx.db.delete(category._id);
+      deletedCount++;
+    }
+
+    return { ok: true, deletedCount };
+  },
+});
+
 // ============================================
 // BUDGET GROUPS QUERIES & MUTATIONS
 // ============================================

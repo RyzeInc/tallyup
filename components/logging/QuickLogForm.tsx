@@ -287,49 +287,151 @@ export function QuickLogForm(props: QuickLogFormProps) {
             showError={showValidationErrors && missing.includes("date")}
           />
 
-          <CategoryField
-            value={state.draft.categoryId}
-            categories={categories} // Already filtered to top-level only
-            onChange={(id) => dispatch({ type: "SET_CATEGORY", categoryId: id })}
-            onCreateCategory={props.onCreateCategory ? (name) => props.onCreateCategory!(name, state.draft.type === "received" ? "income" : "expense") : undefined}
-            required={props.mode === "resolve"}
-            showError={showValidationErrors && missing.includes("category")}
-          />
+          {state.draft.type === "transfer" ? (
+            // Transfer: Show static "Transfer" label - not editable
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div
+                  className="text-[11px] font-medium uppercase tracking-wider"
+                  style={{ color: "var(--text-tertiary)" }}
+                >
+                  Category
+                </div>
+              </div>
+              <div
+                className="h-11 px-3 rounded-xl flex items-center text-sm font-medium"
+                style={{
+                  backgroundColor: "var(--surface)",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                <Lucide.ArrowLeftRight className="h-4 w-4 mr-2" style={{ color: "var(--text-tertiary)" }} />
+                Transfer
+              </div>
+            </div>
+          ) : (
+            <CategoryField
+              value={state.draft.categoryId}
+              categories={categories} // Already filtered to top-level only
+              onChange={(id) => dispatch({ type: "SET_CATEGORY", categoryId: id })}
+              onCreateCategory={props.onCreateCategory ? (name) => props.onCreateCategory!(name, state.draft.type === "received" ? "income" : "expense") : undefined}
+              required={props.mode === "resolve"}
+              showError={showValidationErrors && missing.includes("category")}
+            />
+          )}
         </div>
 
         {/* Account Selection - Prominent placement for easy card/account selection */}
         {props.accounts.length > 0 && (
           <div>
-            <div
-              className="text-[10px] font-medium uppercase tracking-wider mb-2"
-              style={{ color: "var(--text-tertiary)" }}
-            >
-              Account / Card
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
-              {props.accounts.map((acc) => {
-                const isSelected = state.draft.account.accountId === acc.id;
-                return (
-                  <button
-                    key={acc.id}
-                    type="button"
-                    onClick={() => dispatch({ type: "SET_ACCOUNT", patch: { accountId: isSelected ? undefined : acc.id } })}
-                    className="h-9 px-3 rounded-lg text-xs font-medium transition-all shrink-0 flex items-center gap-2"
-                    style={{
-                      backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
-                      color: isSelected ? "var(--primary-foreground)" : "var(--text)",
-                      border: isSelected ? "none" : "1px solid var(--border)",
-                    }}
+            {state.draft.type === "transfer" ? (
+              // Transfer: Show From/To account selection
+              <div className="space-y-3">
+                <div>
+                  <div
+                    className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                    style={{ color: "var(--text-tertiary)" }}
                   >
-                    {acc.kind === "credit" && <Lucide.CreditCard className="h-3.5 w-3.5" />}
-                    {acc.kind === "checking" && <Lucide.Landmark className="h-3.5 w-3.5" />}
-                    {acc.kind === "savings" && <Lucide.PiggyBank className="h-3.5 w-3.5" />}
-                    {!["credit", "checking", "savings"].includes(acc.kind ?? "") && <Lucide.Wallet className="h-3.5 w-3.5" />}
-                    {acc.name}
-                  </button>
-                );
-              })}
-            </div>
+                    From Account
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+                    {props.accounts
+                      .filter((acc) => acc.id !== state.draft.account.toAccountId)
+                      .map((acc) => {
+                        const isSelected = state.draft.account.fromAccountId === acc.id;
+                        return (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={() => dispatch({ type: "SET_ACCOUNT", patch: { fromAccountId: isSelected ? undefined : acc.id } })}
+                            className="h-9 px-3 rounded-lg text-xs font-medium transition-all shrink-0 flex items-center gap-2"
+                            style={{
+                              backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                              color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                              border: isSelected ? "none" : "1px solid var(--border)",
+                            }}
+                          >
+                            {acc.kind === "credit" && <Lucide.CreditCard className="h-3.5 w-3.5" />}
+                            {acc.kind === "checking" && <Lucide.Landmark className="h-3.5 w-3.5" />}
+                            {acc.kind === "savings" && <Lucide.PiggyBank className="h-3.5 w-3.5" />}
+                            {!["credit", "checking", "savings"].includes(acc.kind ?? "") && <Lucide.Wallet className="h-3.5 w-3.5" />}
+                            {acc.name}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+                <div>
+                  <div
+                    className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                    style={{ color: "var(--text-tertiary)" }}
+                  >
+                    To Account
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+                    {props.accounts
+                      .filter((acc) => acc.id !== state.draft.account.fromAccountId)
+                      .map((acc) => {
+                        const isSelected = state.draft.account.toAccountId === acc.id;
+                        return (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={() => dispatch({ type: "SET_ACCOUNT", patch: { toAccountId: isSelected ? undefined : acc.id } })}
+                            className="h-9 px-3 rounded-lg text-xs font-medium transition-all shrink-0 flex items-center gap-2"
+                            style={{
+                              backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                              color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                              border: isSelected ? "none" : "1px solid var(--border)",
+                            }}
+                          >
+                            {acc.kind === "credit" && <Lucide.CreditCard className="h-3.5 w-3.5" />}
+                            {acc.kind === "checking" && <Lucide.Landmark className="h-3.5 w-3.5" />}
+                            {acc.kind === "savings" && <Lucide.PiggyBank className="h-3.5 w-3.5" />}
+                            {!["credit", "checking", "savings"].includes(acc.kind ?? "") && <Lucide.Wallet className="h-3.5 w-3.5" />}
+                            {acc.name}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // Regular: Single account selection
+              <>
+                <div
+                  className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                  style={{ color: "var(--text-tertiary)" }}
+                >
+                  Account / Card
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
+                  {props.accounts.map((acc) => {
+                    const isSelected = state.draft.account.accountId === acc.id;
+                    return (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => dispatch({ type: "SET_ACCOUNT", patch: { accountId: isSelected ? undefined : acc.id } })}
+                        className="h-9 px-3 rounded-lg text-xs font-medium transition-all shrink-0 flex items-center gap-2"
+                        style={{
+                          backgroundColor: isSelected ? "var(--primary)" : "var(--surface)",
+                          color: isSelected ? "var(--primary-foreground)" : "var(--text)",
+                          border: isSelected ? "none" : "1px solid var(--border)",
+                        }}
+                      >
+                        {acc.kind === "credit" && <Lucide.CreditCard className="h-3.5 w-3.5" />}
+                        {acc.kind === "checking" && <Lucide.Landmark className="h-3.5 w-3.5" />}
+                        {acc.kind === "savings" && <Lucide.PiggyBank className="h-3.5 w-3.5" />}
+                        {!["credit", "checking", "savings"].includes(acc.kind ?? "") && <Lucide.Wallet className="h-3.5 w-3.5" />}
+                        {acc.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         )}
 

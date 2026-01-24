@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import { useToast } from "@/components/ToastProvider";
+import * as Lucide from "lucide-react";
 import SummaryStrip from "./SummaryStrip";
 import ViewSwitcher, { type ViewMode } from "./ViewSwitcher";
 import StatusFilterBar, { type StatusFilter, type RangePreset } from "./StatusFilterBar";
@@ -55,6 +56,26 @@ export default function ObligationsTab({ onOpenRuleEditor, onOpenQuickLog }: Obl
 
   // Mutations
   const skipExpectedCharge = useMutation(api.recurring.skipExpectedCharge);
+  const bulkDeleteExpectedCharges = useMutation(api.recurring.bulkDeleteExpectedCharges);
+
+  // Bulk delete state
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const result = await bulkDeleteExpectedCharges({ state: "all" });
+      toast.success(`Deleted ${result.deletedCount} expected charges`);
+      setShowBulkDeleteDialog(false);
+    } catch (e) {
+      console.error("Bulk delete failed:", e);
+      toast.error("Failed to delete expected charges");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   // Filter charges
   const filteredCharges = useMemo(() => {
@@ -168,6 +189,16 @@ export default function ObligationsTab({ onOpenRuleEditor, onOpenQuickLog }: Obl
           counts={counts}
         />
         <div className="flex items-center gap-2 md:ml-auto">
+          {enrichedCharges && enrichedCharges.length > 0 && (
+            <button
+              onClick={() => setShowBulkDeleteDialog(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+              style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
+            >
+              <Lucide.Trash2 className="h-4 w-4" />
+              Delete All ({enrichedCharges.length})
+            </button>
+          )}
           <ViewSwitcher mode={viewMode} onChange={setViewMode} />
         </div>
       </div>
@@ -205,6 +236,54 @@ export default function ObligationsTab({ onOpenRuleEditor, onOpenQuickLog }: Obl
           onMoveDate={handleMoveDate}
           onViewRule={handleViewRule}
         />
+      )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      {showBulkDeleteDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/60" 
+            onClick={() => !bulkDeleting && setShowBulkDeleteDialog(false)} 
+          />
+          <div 
+            className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div 
+                className="h-12 w-12 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: "var(--danger-subtle)" }}
+              >
+                <Lucide.AlertTriangle className="h-6 w-6" style={{ color: "var(--danger)" }} />
+              </div>
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                Delete All Expected Charges?
+              </h3>
+            </div>
+            <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+              This will permanently delete <strong>{enrichedCharges?.length ?? 0}</strong> expected charges. 
+              This action cannot be undone. Your recurring rules will remain intact.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBulkDeleteDialog(false)}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--danger)", color: "white" }}
+              >
+                {bulkDeleting ? "Deleting..." : `Delete ${enrichedCharges?.length ?? 0}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

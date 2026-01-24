@@ -179,11 +179,46 @@ function resolveBounds(args: { startDate?: number; endDate?: number }): { start:
   };
 }
 
+/**
+ * Calculate the next date based on cadence type
+ */
+function nextCadenceDate(ts: number, cadence: "weekly" | "biweekly" | "monthly" | "quarterly" | "yearly"): number {
+  const d = new Date(ts);
+  switch (cadence) {
+    case "weekly":
+      d.setDate(d.getDate() + 7);
+      break;
+    case "biweekly":
+      d.setDate(d.getDate() + 14);
+      break;
+    case "monthly": {
+      const day = d.getDate();
+      d.setMonth(d.getMonth() + 1);
+      if (d.getDate() < day) d.setDate(0); // Handle month overflow
+      break;
+    }
+    case "quarterly": {
+      const day = d.getDate();
+      d.setMonth(d.getMonth() + 3);
+      if (d.getDate() < day) d.setDate(0);
+      break;
+    }
+    case "yearly": {
+      const day = d.getDate();
+      d.setFullYear(d.getFullYear() + 1);
+      if (d.getDate() < day) d.setDate(0);
+      break;
+    }
+  }
+  return d.getTime();
+}
+
 export const addEntry = mutation({
   args: {
     type: v.union(v.literal("expense"), v.literal("income")),
     category: v.optional(v.string()),
     categoryId: v.optional(v.id("categories")),
+    subcategoryId: v.optional(v.id("categories")),
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
@@ -220,6 +255,17 @@ export const addEntry = mutation({
     // Linking fields
     goalId: v.optional(v.id("goals")),
     budgetCategoryId: v.optional(v.id("budgetCategories")),
+    // Recurring field - when set, auto-create a recurring rule
+    recurring: v.optional(v.object({
+      cadence: v.union(
+        v.literal("weekly"),
+        v.literal("biweekly"),
+        v.literal("monthly"),
+        v.literal("quarterly"),
+        v.literal("yearly")
+      ),
+      anchorDate: v.optional(v.string()),
+    })),
   },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
@@ -259,10 +305,21 @@ export const addEntry = mutation({
     const tags = cleanTags(args.tags);
     const contextTags = cleanTags(args.contextTags);
     const intentTags = cleanTags(args.intentTags);
+    
+    // Resolve subcategory for budget matching
+    let subcategorySlug: string | undefined;
+    if (args.subcategoryId) {
+      const subcategory = await ctx.db.get(args.subcategoryId);
+      if (subcategory && subcategory.userId === userId) {
+        subcategorySlug = subcategory.slug ?? subcategory.name?.toLowerCase().replace(/\s+/g, "_");
+      }
+    }
+    
     const budgetCategoryId =
       args.budgetCategoryId ??
       (await resolveBudgetCategoryId(ctx, userId, {
         category,
+        subcategory: subcategorySlug,
         merchant,
         tags,
       }));
@@ -289,6 +346,7 @@ export const addEntry = mutation({
       bucket,
       category,
       categoryId: categoryIdInput ?? categoryId,
+      subcategoryId: args.subcategoryId,
       tags,
       note,
       title,
@@ -398,7 +456,72 @@ export const addEntry = mutation({
       console.error("Autolink error:", e);
     }
 
-    return { ok: true, id: insertedId };
+    // Auto-create recurring rule if recurring field is set
+    let recurringRuleId: Id<"recurringRules"> | undefined;
+    if (args.recurring?.cadence) {
+      const anchorTs = args.recurring.anchorDate 
+        ? new Date(args.recurring.anchorDate + "T00:00:00").getTime()
+        : args.date;
+      
+      // Create the recurring rule
+      recurringRuleId = await ctx.db.insert("recurringRules", {
+        userId,
+        type: args.type,
+        displayName: merchant ?? category ?? title ?? "Recurring",
+        name: merchant ?? category ?? title ?? "Recurring",
+        bucket,
+        category,
+        tags,
+        amountCents,
+        amountMode: "fixed",
+        amountTolerancePercent: 5,
+        cadenceType: args.recurring.cadence,
+        cadence: { kind: args.recurring.cadence, anchorDate: anchorTs },
+        status: "active",
+        active: true,
+        autolinkEnabled: true,
+        merchantKeys: merchantNormalized ? [merchantNormalized] : undefined,
+        accountScope: args.accountId ? { kind: "only" as const, accountIds: [args.accountId] } : undefined,
+        confidence: 100, // User-created rule has full confidence
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      // Link this entry to the rule
+      await ctx.db.patch(insertedId, {
+        recurringRuleId,
+        recurringMatch: {
+          ruleId: recurringRuleId,
+          matchType: "user" as const,
+          score: 100,
+          explain: { source: "created_with_recurring" },
+        },
+      });
+
+      // Generate future expected charges
+      const futureMonths = 6;
+      let currentDate = anchorTs;
+      const endDate = now + futureMonths * 30 * 24 * 60 * 60 * 1000;
+      
+      while (currentDate <= endDate) {
+        // Skip if this date is before or equal to the entry date (don't duplicate)
+        if (currentDate > args.date) {
+          await ctx.db.insert("expectedCharges", {
+            userId,
+            ruleId: recurringRuleId,
+            expectedDate: currentDate,
+            expectedAmountCents: amountCents,
+            state: currentDate <= now ? "due" : "upcoming",
+            generatedAt: now,
+          });
+        }
+        
+        // Advance to next occurrence based on cadence
+        currentDate = nextCadenceDate(currentDate, args.recurring.cadence);
+      }
+    }
+
+    return { ok: true, id: insertedId, recurringRuleId };
   },
 });
 
@@ -1615,6 +1738,133 @@ export const permanentDeleteEntry = mutation({
     await ctx.db.delete(args.id);
     
     return { ok: true };
+  },
+});
+
+/**
+ * Bulk delete all archived entries for the current user
+ */
+export const bulkDeleteArchivedEntries = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireUserId(ctx);
+    
+    // Get all archived entries
+    const archivedEntries = await ctx.db
+      .query("entries")
+      .withIndex("by_user_date", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("isArchived"), true))
+      .collect();
+    
+    let deletedCount = 0;
+    // Track deleted entries to avoid double-deletion (e.g., transfer pairs)
+    const deletedIds = new Set<string>();
+    
+    for (const entry of archivedEntries) {
+      // Skip if already deleted (e.g., as part of a transfer pair)
+      if (deletedIds.has(entry._id)) continue;
+      
+      // Verify entry still exists (may have been deleted as transfer partner)
+      const stillExists = await ctx.db.get(entry._id);
+      if (!stillExists) continue;
+      // Handle recurring rule link - clear matchedEntryId on any expected charges
+      if (entry.recurringRuleId) {
+        const matchedCharges = await ctx.db
+          .query("expectedCharges")
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("userId"), userId),
+              q.eq(q.field("matchedEntryId"), entry._id)
+            )
+          )
+          .collect();
+        
+        for (const charge of matchedCharges) {
+          await ctx.db.patch(charge._id, {
+            matchedEntryId: undefined,
+            state: "missed",
+            resolutionNote: "Matched entry was permanently deleted",
+          });
+        }
+      }
+      
+      // If entry is linked to a transfer, also delete the paired entry and the transfer
+      if (entry.transferId) {
+        const transfer = await ctx.db.get(entry.transferId);
+        if (transfer) {
+          if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
+            await ctx.db.delete(transfer.fromEntryId);
+            deletedIds.add(transfer.fromEntryId);
+          }
+          if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
+            await ctx.db.delete(transfer.toEntryId);
+            deletedIds.add(transfer.toEntryId);
+          }
+          await ctx.db.delete(transfer._id);
+        }
+      }
+
+      // Clean up budget entry impacts
+      const budgetImpacts = await ctx.db
+        .query("budgetEntryImpacts")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("entryId"), entry._id)
+          )
+        )
+        .collect();
+      
+      for (const impact of budgetImpacts) {
+        await ctx.db.delete(impact._id);
+      }
+
+      // Clear originalEntryId on refund entries
+      const refundEntries = await ctx.db
+        .query("entries")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("userId"), userId),
+            q.eq(q.field("originalEntryId"), entry._id)
+          )
+        )
+        .collect();
+      
+      for (const refund of refundEntries) {
+        await ctx.db.patch(refund._id, { originalEntryId: undefined, updatedAt: Date.now() });
+      }
+
+      // Dismiss recurring inbox items
+      const recurringInboxItems = await ctx.db
+        .query("recurringInbox")
+        .withIndex("by_user_status", (q) => q.eq("userId", userId))
+        .filter((q) => q.eq(q.field("entryId"), entry._id))
+        .collect();
+      
+      for (const item of recurringInboxItems) {
+        await ctx.db.patch(item._id, { 
+          status: "dismissed", 
+          resolvedAt: Date.now() 
+        });
+      }
+
+      // Handle goal contributions
+      if (entry.goalId) {
+        const contribution = await getGoalContributionByEntry(ctx, entry._id);
+        const amount = contribution?.amountCents ?? entry.amountCents;
+        await applyGoalDelta(ctx, userId, entry.goalId, -amount);
+        if (contribution) {
+          await ctx.db.delete(contribution._id);
+        }
+      }
+      
+      // Delete the entry
+      await ctx.db.delete(entry._id);
+      deletedIds.add(entry._id);
+      deletedCount++;
+    }
+    
+    return { ok: true, deletedCount };
   },
 });
 

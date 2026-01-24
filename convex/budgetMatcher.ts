@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 
 type MatchInput = {
   category?: string;
+  subcategory?: string;
   merchant?: string;
   tags?: string[];
 };
@@ -24,9 +25,21 @@ export async function resolveBudgetCategoryId(
     .collect();
 
   const categoryKey = normalize(input.category);
+  const subcategoryKey = normalize(input.subcategory);
   const merchantKey = normalize(input.merchant);
   const tagKeys = new Set((input.tags ?? []).map(normalize).filter(Boolean) as string[]);
 
+  // Priority 1: Try to match subcategory first (more specific)
+  if (subcategoryKey) {
+    for (const budget of categories) {
+      if (budget.archived) continue;
+      if (budget.matchCategories?.some((c) => normalize(c) === subcategoryKey)) {
+        return budget._id;
+      }
+    }
+  }
+
+  // Priority 2: Match on category
   for (const budget of categories) {
     if (budget.archived) continue;
 
@@ -35,6 +48,7 @@ export async function resolveBudgetCategoryId(
     }
   }
 
+  // Priority 3: Match on merchant
   for (const budget of categories) {
     if (budget.archived) continue;
 
@@ -43,6 +57,7 @@ export async function resolveBudgetCategoryId(
     }
   }
 
+  // Priority 4: Match on tags
   for (const budget of categories) {
     if (budget.archived) continue;
 

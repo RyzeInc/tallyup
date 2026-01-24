@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc, Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
@@ -141,6 +141,8 @@ export default function PlaidStreamsTab() {
   const toast = useToast();
   const [importingId, setImportingId] = useState<Id<"plaidRecurringStreams"> | null>(null);
   const [isImportingAll, setIsImportingAll] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   
   // Fetch unlinked Plaid streams
   const streams = useQuery(api.recurring.listPlaidRecurringStreams, {
@@ -149,6 +151,22 @@ export default function PlaidStreamsTab() {
   });
   
   const importPlaidStreams = useAction(api.recurring.importPlaidRecurringStreams);
+  const bulkDeletePlaidStreams = useMutation(api.recurring.bulkDeletePlaidStreams);
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const result = await bulkDeletePlaidStreams({ onlyUnlinked: true });
+      toast.success(`Deleted ${result.deletedCount} detected patterns`);
+      setShowBulkDeleteDialog(false);
+    } catch (e) {
+      console.error("Bulk delete failed:", e);
+      toast.error("Failed to delete patterns");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
   
   const handleImport = async (streamId: Id<"plaidRecurringStreams">) => {
     setImportingId(streamId);
@@ -223,7 +241,7 @@ export default function PlaidStreamsTab() {
   
   return (
     <div className="space-y-4">
-      {/* Header with Import All button */}
+      {/* Header with Import All and Delete All buttons */}
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
@@ -233,23 +251,33 @@ export default function PlaidStreamsTab() {
             Import to create recurring rules
           </div>
         </div>
-        <button
-          onClick={handleImportAll}
-          disabled={isImportingAll}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
-          style={{
-            backgroundColor: "var(--primary)",
-            color: "var(--on-primary)",
-            opacity: isImportingAll ? 0.7 : 1,
-          }}
-        >
-          {isImportingAll ? (
-            <Lucide.Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Lucide.Sparkles className="h-4 w-4" />
-          )}
-          Import All
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowBulkDeleteDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+            style={{ backgroundColor: "var(--danger-subtle)", color: "var(--danger)" }}
+          >
+            <Lucide.Trash2 className="h-4 w-4" />
+            Delete All
+          </button>
+          <button
+            onClick={handleImportAll}
+            disabled={isImportingAll}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium"
+            style={{
+              backgroundColor: "var(--primary)",
+              color: "var(--on-primary)",
+              opacity: isImportingAll ? 0.7 : 1,
+            }}
+          >
+            {isImportingAll ? (
+              <Lucide.Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Lucide.Sparkles className="h-4 w-4" />
+            )}
+            Import All
+          </button>
+        </div>
       </div>
 
       {/* Inflows Section */}
@@ -294,6 +322,54 @@ export default function PlaidStreamsTab() {
                 importing={importingId === stream._id}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Dialog */}
+      {showBulkDeleteDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/60" 
+            onClick={() => !bulkDeleting && setShowBulkDeleteDialog(false)} 
+          />
+          <div 
+            className="relative w-full max-w-sm rounded-xl p-6 shadow-xl"
+            style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div 
+                className="h-12 w-12 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: "var(--danger-subtle)" }}
+              >
+                <Lucide.AlertTriangle className="h-6 w-6" style={{ color: "var(--danger)" }} />
+              </div>
+              <h3 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
+                Delete All Detected Patterns?
+              </h3>
+            </div>
+            <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>
+              This will permanently delete <strong>{streams?.length ?? 0}</strong> detected recurring patterns. 
+              This action cannot be undone. Your existing recurring rules will remain intact.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBulkDeleteDialog(false)}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--surface-subtle)", color: "var(--text)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--danger)", color: "white" }}
+              >
+                {bulkDeleting ? "Deleting..." : `Delete ${streams?.length ?? 0}`}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -763,50 +763,19 @@ export function DetailsExpander(props: DetailsExpanderProps) {
         </p>
       </ExpandableSection>
 
-      {/* Subcategory Expansion - Combo Box */}
+      {/* Subcategory Expansion */}
       <ExpandableSection isExpanded={expandedSection === "subcategory"}>
         <SectionLabel>Subcategory</SectionLabel>
-        {parentSlug === "transfer_in" || parentSlug === "transfer_out" ? (
-          // Transfer: From / To selection
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-[10px] mb-1.5" style={{ color: "var(--text-tertiary)" }}>From</p>
-              <SubcategoryCombobox
-                subcategories={(transferCategories ?? []).filter(c => {
-                  const transferInParent = (transferCategories ?? []).find(cat => cat.slug === "transfer_in" && !cat.parentId);
-                  return transferInParent && c.parentId === transferInParent.id;
-                })}
-                value={transferFromId ?? null}
-                onChange={(id) => onSetTransferFrom?.(id)}
-                placeholder="Select source..."
-              />
-            </div>
-            <div>
-              <p className="text-[10px] mb-1.5" style={{ color: "var(--text-tertiary)" }}>To</p>
-              <SubcategoryCombobox
-                subcategories={(transferCategories ?? []).filter(c => {
-                  const transferOutParent = (transferCategories ?? []).find(cat => cat.slug === "transfer_out" && !cat.parentId);
-                  return transferOutParent && c.parentId === transferOutParent.id;
-                })}
-                value={transferToId ?? null}
-                onChange={(id) => onSetTransferTo?.(id)}
-                placeholder="Select destination..."
-              />
-            </div>
-          </div>
-        ) : (
-          // Regular subcategory selection with combobox
-          <SubcategoryCombobox
-            subcategories={selectedCategoryId ? filteredSubcategories : allSubcategories}
-            value={subcategoryId ?? null}
-            onChange={(id) => {
-              const selected = allSubcategories.find(c => c.id === id);
-              onSetSubcategory(id, selected?.parentId);
-            }}
-            placeholder={selectedCategoryId ? "Select subcategory..." : "Select subcategory (will auto-set category)..."}
-            helperText={!selectedCategoryId ? "Selecting a subcategory will auto-fill the category" : undefined}
-          />
-        )}
+        <SubcategoryCombobox
+          subcategories={selectedCategoryId ? filteredSubcategories : allSubcategories}
+          value={subcategoryId ?? null}
+          onChange={(id) => {
+            const selected = allSubcategories.find(c => c.id === id);
+            onSetSubcategory(id, selected?.parentId);
+          }}
+          placeholder={selectedCategoryId ? "Select subcategory..." : "Select subcategory (will auto-set category)..."}
+          helperText={!selectedCategoryId ? "Selecting a subcategory will auto-fill the category" : undefined}
+        />
       </ExpandableSection>
 
       {/* Recurring Expansion */}

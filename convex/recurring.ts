@@ -619,16 +619,129 @@ export const getRecurringRuleDeletionImpact = query({
 });
 
 export const listRecurringRules = query({
-  args: { limit: v.optional(v.number()) },
+  args: { limit: v.optional(v.number()), includeInactive: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     const limit = Math.min(Math.max(args.limit ?? 200, 10), 1000);
+
+    if (args.includeInactive) {
+      return await ctx.db
+        .query("recurringRules")
+        .withIndex("by_user_active", q => q.eq("userId", userId))
+        .order("desc")
+        .take(limit);
+    }
 
     return await ctx.db
       .query("recurringRules")
       .withIndex("by_user_active", q => q.eq("userId", userId).eq("active", true))
       .order("desc")
       .take(limit);
+  },
+});
+
+/**
+ * Bulk delete recurring rules by status
+ * Allows deleting all rules of a specific status or all rules
+ */
+export const bulkDeleteRecurringRules = mutation({
+  args: {
+    status: v.optional(v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("suggested"),
+      v.literal("all")
+    )),
+    unlinkEntries: v.optional(v.boolean()), // Default true: unlink entries rather than delete
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const status = args.status ?? "all";
+    const unlinkEntries = args.unlinkEntries !== false;
+    const now = Date.now();
+
+    // Get all rules for user
+    let rules = await ctx.db
+      .query("recurringRules")
+      .withIndex("by_user_active", (q) => q.eq("userId", userId))
+      .collect();
+
+    // Filter by status if specified
+    if (status !== "all") {
+      rules = rules.filter((r) => (r.status ?? "active") === status);
+    }
+
+    let deletedCount = 0;
+    let unlinkedEntriesCount = 0;
+    let deletedChargesCount = 0;
+
+    for (const rule of rules) {
+      // Get linked entries
+      const linkedEntries = await ctx.db
+        .query("entries")
+        .withIndex("by_user_recurring", (q) => q.eq("userId", userId).eq("recurringRuleId", rule._id))
+        .collect();
+
+      // Unlink entries
+      if (unlinkEntries) {
+        for (const entry of linkedEntries) {
+          await ctx.db.patch(entry._id, {
+            recurringRuleId: undefined,
+            recurringMatch: undefined,
+            updatedAt: now,
+          });
+          unlinkedEntriesCount++;
+        }
+      }
+
+      // Delete expected charges
+      const expectedCharges = await ctx.db
+        .query("expectedCharges")
+        .withIndex("by_user_rule", (q) => q.eq("userId", userId).eq("ruleId", rule._id))
+        .collect();
+
+      for (const charge of expectedCharges) {
+        if (charge.state === "upcoming" || charge.state === "due") {
+          await ctx.db.delete(charge._id);
+          deletedChargesCount++;
+        }
+      }
+
+      // Delete inbox items
+      const inboxItems = await ctx.db
+        .query("recurringInbox")
+        .withIndex("by_user_status", (q) => q.eq("userId", userId))
+        .filter((q) => q.eq(q.field("ruleId"), rule._id))
+        .collect();
+
+      for (const item of inboxItems) {
+        await ctx.db.delete(item._id);
+      }
+
+      // Unlink plaid streams
+      const plaidStreams = await ctx.db
+        .query("plaidRecurringStreams")
+        .withIndex("by_recurringRule", (q) => q.eq("recurringRuleId", rule._id))
+        .collect();
+
+      for (const stream of plaidStreams) {
+        await ctx.db.patch(stream._id, {
+          recurringRuleId: undefined,
+          updatedAt: now,
+        });
+      }
+
+      // Delete the rule
+      await ctx.db.delete(rule._id);
+      deletedCount++;
+    }
+
+    return {
+      ok: true,
+      deletedRules: deletedCount,
+      unlinkedEntries: unlinkedEntriesCount,
+      deletedCharges: deletedChargesCount,
+    };
   },
 });
 
@@ -775,6 +888,80 @@ function cadenceWindowDays(kind: CadenceKind): number {
       return 5;
   }
 }
+
+/**
+ * Bulk delete all expected charges for a user
+ * Optionally filter by state (due, upcoming, missed, matched, skipped)
+ */
+export const bulkDeleteExpectedCharges = mutation({
+  args: {
+    state: v.optional(v.union(
+      v.literal("due"),
+      v.literal("upcoming"),
+      v.literal("missed"),
+      v.literal("matched"),
+      v.literal("skipped"),
+      v.literal("all")
+    )),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const stateFilter = args.state ?? "all";
+
+    // Get all expected charges for user
+    const charges = await ctx.db
+      .query("expectedCharges")
+      .withIndex("by_user_date", (q) => q.eq("userId", userId))
+      .collect();
+
+    // Filter by state if specified
+    const chargesToDelete = stateFilter === "all" 
+      ? charges 
+      : charges.filter((c) => c.state === stateFilter);
+
+    let deletedCount = 0;
+
+    for (const charge of chargesToDelete) {
+      await ctx.db.delete(charge._id);
+      deletedCount++;
+    }
+
+    return { ok: true, deletedCount };
+  },
+});
+
+/**
+ * Bulk delete all detected Plaid recurring streams (unlinked streams)
+ */
+export const bulkDeletePlaidStreams = mutation({
+  args: {
+    onlyUnlinked: v.optional(v.boolean()), // Default true - only delete unlinked streams
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const onlyUnlinked = args.onlyUnlinked !== false;
+
+    // Get all Plaid streams for user
+    const streams = await ctx.db
+      .query("plaidRecurringStreams")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect();
+
+    // Filter to unlinked streams if specified
+    const streamsToDelete = onlyUnlinked
+      ? streams.filter((s) => !s.recurringRuleId)
+      : streams;
+
+    let deletedCount = 0;
+
+    for (const stream of streamsToDelete) {
+      await ctx.db.delete(stream._id);
+      deletedCount++;
+    }
+
+    return { ok: true, deletedCount };
+  },
+});
 
 export const listExpectedCharges = query({
   args: {

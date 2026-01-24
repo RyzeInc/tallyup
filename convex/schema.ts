@@ -16,6 +16,8 @@ export default defineSchema({
     category: v.optional(v.string()),
     // Canonical category reference (resolves to categories table)
     categoryId: v.optional(v.id("categories")),
+    // Subcategory - more specific classification within category
+    subcategoryId: v.optional(v.id("categories")),
     // Legacy field: will be migrated to category
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
