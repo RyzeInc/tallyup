@@ -115,8 +115,11 @@ export default function TopNav() {
     <nav
       className="sticky top-0 z-50 safe-area-inset-top"
       style={{
-        backgroundColor: "var(--surface)",
-        borderBottom: "1px solid var(--border)",
+        backgroundColor: "var(--foam-white, var(--surface))",
+        borderBottom: "1px solid var(--border-foam, var(--border))",
+        /* Subtle foam blur for coastal feel */
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
       }}
     >
       {/* App Title Bar */}
@@ -133,15 +136,17 @@ export default function TopNav() {
           TallyUp
         </button>
         
-        {/* Quick Log Button */}
+        {/* Quick Log Button - Burnt Orange (the hero color!) */}
         <button
           onClick={openQuickLog}
-          className="flex items-center justify-center rounded-full transition-colors"
+          className="flex items-center justify-center rounded-full"
           style={{
             width: 40,
             height: 40,
-            backgroundColor: "var(--primary)",
+            background: "var(--btn-primary-gradient, var(--primary))",
             color: "var(--primary-foreground)",
+            boxShadow: "0 2px 10px -2px rgba(196, 114, 74, 0.40)",
+            transition: "all var(--motion-medium, 150ms) var(--ease-wave, ease-out)",
           }}
           aria-label="Log transaction"
         >
@@ -156,7 +161,7 @@ export default function TopNav() {
           <div
             className="absolute left-0 top-0 bottom-0 w-8 z-10 pointer-events-none"
             style={{
-              background: "linear-gradient(to right, var(--surface), transparent)",
+              background: "linear-gradient(to right, var(--foam-white, var(--surface)), transparent)",
             }}
           />
         )}
@@ -166,7 +171,7 @@ export default function TopNav() {
           <div
             className="absolute right-0 top-0 bottom-0 w-8 z-10 pointer-events-none"
             style={{
-              background: "linear-gradient(to left, var(--surface), transparent)",
+              background: "linear-gradient(to left, var(--foam-white, var(--surface)), transparent)",
             }}
           />
         )}
@@ -191,13 +196,15 @@ export default function TopNav() {
                   key={tab.id}
                   data-tab-id={tab.tabId}
                   onClick={() => setActiveTab(tab.tabId)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap"
                   style={{
                     scrollSnapAlign: "center",
                     minHeight: 44,
-                    backgroundColor: isActive ? "var(--accent-subtle)" : "transparent",
-                    color: isActive ? "var(--primary)" : "var(--text-secondary)",
+                    /* Sea-glass tint fill for selected, transparent for unselected */
+                    backgroundColor: isActive ? "var(--tab-selected-bg, var(--accent-subtle))" : "transparent",
+                    color: isActive ? "var(--tab-selected-text, var(--primary))" : "var(--tab-unselected-text, var(--text-secondary))",
                     fontWeight: isActive ? 600 : 500,
+                    transition: "all var(--motion-medium, 150ms) var(--ease-wave, ease-out)",
                   }}
                   aria-current={isActive ? "page" : undefined}
                 >
@@ -206,7 +213,7 @@ export default function TopNav() {
                     {tab.badge && (
                       <span
                         className="absolute -top-1.5 -right-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold"
-                        style={{ backgroundColor: "var(--danger)", color: "#fff" }}
+                        style={{ backgroundColor: "var(--sun-coral, var(--danger))", color: "#fff" }}
                       >
                         {tab.badge > 99 ? "99+" : tab.badge}
                       </span>

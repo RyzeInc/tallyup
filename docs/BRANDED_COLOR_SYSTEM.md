@@ -1,203 +1,303 @@
 # TallyUp Branded Color System
 
 ## Design Principle
-**"Cards carry truth. Background carries emotion. Accents carry meaning."**
+**"Standing at the shoreline: sky haze → ocean depth → foam → wet sand → dry sand"**
 
-This color system is inspired by the coastal painting: sand, water, and clay tones that create a grounded, calm, human environment for financial tracking.
+This color system transforms the "Warm Sand" theme into an unmistakably coastal experience. Every screen should communicate at least two beach elements (sand + ocean, foam + sun-coral, sea-glass + slate).
 
-## What Changed vs What Stayed
+## Visual Thesis: Warm Sand = Coastal Daylight
 
-### ✅ Unchanged (UI System Preserved)
-- Card color: White (#FFFFFF)
-- Card radius, elevation, spacing
-- Input styling and typography
-- **Green = Income/Positive** (#10B981)
-- **Red = Expense/Negative** (contextual)
-
-### 🎨 Changed (Environment Layer)
-- App background: Sand gradient with subtle water tones
-- Primary accent: Purple → Deep Blue-Teal (light) / Seafoam (dark)
-- Atmospheric depth from painting zones
+| Element | Description |
+|---------|-------------|
+| **Base** | Clean warm sand + paper-white foam |
+| **Identity** | Coastal teal (not neon), sea-glass mint, slate-ocean depth |
+| **Highlight** | Sun-coral / terracotta used sparingly |
+| **Texture** | Subtle grain + soft gradient drift (like light on sand/water) |
+| **Motion** | Slow, fluid, damped (like waves), not bouncy |
 
 ---
 
-## Color Zones from Painting
+## Beach Material System
 
-### 🏖️ Sand Zone (Primary Background)
-**Emotion**: Grounded, safe, human, non-clinical
+### 🏖️ Sand System (Core Neutrals)
 
-```css
---bg-sand-light: #F1E6D6
---bg-sand-mid:   #E4D2BA
---bg-sand-dark:  #D6C1A4
-```
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `--sand-dry` | #F7F3ED | Background (bg) - warm off-white with hint of tan |
+| `--sand-wet` | #EDE6DC | Elevated background - slightly deeper, cooler (damp) |
+| `--foam-white` | #FDFCFA | Card surfaces - clean white, tiniest warmth |
+| `--shell-cream` | #F9F6F1 | Inputs, chips - off-white |
 
-**Usage**: 
-- Default screen background behind cards
-- **Three-layer geological system** (not a single gradient):
-  1. **Base sand** (linear, 168°) - warm beige ground
-  2. **Clay undercurrent** (radial, lower third, ~8% opacity) - wet sand density
-  3. **Mineral light** (radial, top-left bias, ~14% opacity) - air, not spotlight
-- Light enters the screen, doesn't emanate from content
-- No texture, no noise - just layered color
+### 💧 Ocean System (Brand Identity)
 
-### 💧 Water Zone (Clarity Layer)
-**Emotion**: Clarity, perspective, calm
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `--ocean-slate` | #3D4F5F | Primary text - deep blue-gray |
+| `--ocean-slate-light` | #5A6D7A | Secondary text - cooler gray |
+| `--coastal-teal` | #2A7C8C | Primary accent - teal that's not tropical neon |
+| `--coastal-teal-deep` | #1E6170 | Hover/active states |
+| `--sea-glass` | #B8DCD9 | Badges, soft fills - minty tint |
+| `--sea-glass-subtle` | rgba(184, 220, 217, 0.25) | Very light tint |
 
-```css
---bg-water-soft: #8FB6BE
---bg-water-deep: #6F9EA8
-```
+### ☀️ Sun-Coral System (Rare Highlight)
 
-**Usage**:
-- Subtle gradient fade near top of screens (8% opacity)
-- Header background bleed
-- NOT a solid block
-- Creates atmospheric depth
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `--sun-coral` | #D68A6C | Secondary accent - muted coral/terracotta |
+| `--sun-coral-deep` | #C47258 | Hover state |
+| `--amber-warmth` | #C9A052 | Warnings - sand-amber (not traffic cone) |
 
-### 🏺 Clay/Rust Zone (Emotional Memory)
-**Emotion**: Atmospheric, emotional, rare
-
-```css
---bg-clay-soft:  #C87A5A
---bg-clay-muted: #B56A52
-```
-
-**Usage** (5-12% opacity max):
-- Empty states only
-- Large section transitions
-- Onboarding screens
-- Home screen atmosphere
-
-**Never use for**:
-- Cards
-- Text
-- Inputs
-- Buttons
+**Rule**: Coral is like the sun—felt, not everywhere. One "hero" highlight per screen max.
 
 ---
 
-## Accent Color System
+## The Shoreline Field (Primary Atmospheric Feature)
 
-### Light Mode
-**Background**: Sand gradient  
-**Cards**: White  
-**Primary Accent**: Deep Blue-Teal
+The #1 change that makes Warm Sand read "beach" is the Shoreline Field - a gradient overlay at the top of every primary screen.
 
-```css
---accent:       #2F6F85  /* Save buttons, FAB, focus states */
---accent-hover: #255C6F  /* Hover state */
+### Gradient Structure
+```
+sky haze → ocean → foam fade → sand
 ```
 
-**Why**: Provides contrast, anchors seriousness, feels trustworthy on light backgrounds.
-
-### Dark Mode
-**Background**: Dark mineral/clay blend  
-**Cards**: Charcoal (#18181B)  
-**Primary Accent**: Seafoam
+### Implementation
+- Height: ~160-240px (enough to be felt)
+- Applied behind header + top tabs
+- Fades out before content cards start
 
 ```css
---accent:       #7FD1C2  /* Save buttons, FAB, focus states */
---accent-hover: #6BBFAF  /* Hover state */
-```
-
-**Why**: Seafoam glows without aggression, preserves calm, deep blue-teal would feel heavy.
-
----
-
-## Semantic Colors (Unchanged)
-
-These are truth indicators, not aesthetic choices:
-
-```css
-/* Income / Positive */
---success: #10B981
---income:  #10B981
-
-/* Expense / Negative */
---danger:  #DC2626
---expense: #6B7280 (in neutral contexts)
-```
-
-**Do NOT soften** these colors or you lose clarity.
-
----
-
-## Implementation Guide
-
-### Where Accent Color Appears
-- ✅ **Save Entry** button
-- ✅ **Log FAB** (floating action button)
-- ✅ **Selected states** in navigation
-- ✅ **Primary CTAs** (call-to-action buttons)
-- ✅ **Focus rings** on inputs
-
-### Where It Doesn't Appear
-- ❌ Card backgrounds (always white/charcoal)
-- ❌ Text (except links)
-- ❌ Borders (stay neutral gray)
-- ❌ Income/expense indicators (use semantic colors)
-
-### Chart Colors
-Ordered by priority:
-
-```css
---chart-1: #2F6F85  /* Primary - Deep Blue-Teal */
---chart-2: #10B981  /* Income Green */
---chart-3: #F59E0B  /* Warning Orange */
---chart-4: #6F9EA8  /* Secondary - Water Deep */
---chart-5: #EC4899  /* Accent Pink */
---chart-6: #C87A5A  /* Clay Soft */
+--shoreline-field: 
+  linear-gradient(180deg,
+    var(--sky-haze) 0%,      /* Cool slate at top */
+    var(--ocean-mid) 20%,     /* Ocean band */
+    var(--coastal-teal) 35%,  /* Teal depth */
+    var(--foam-band) 55%,     /* Foam transition */
+    var(--sand-dry) 75%,      /* Fade to sand */
+    var(--sand-dry) 100%
+  );
 ```
 
 ---
 
-## CSS Variables Reference
+## Surface Layers (4-Level System)
+
+Beach is layered. Single-color backgrounds read "template," not "shoreline."
+
+| Layer | Token | Material | Usage |
+|-------|-------|----------|-------|
+| 1 | `--bg` | Dry Sand | Default screen background |
+| 2 | `--bg-elevated` | Wet Sand | Behind content sections |
+| 3 | `--surface` | Foam White | Cards |
+| 4 | `--surface-2` | Shell Cream | Chips, inputs |
+
+---
+
+## Foam Card Treatment
+
+Cards should feel like foam surfaces, not white rectangles.
+
+### Spec
+- **Border**: Hairline, warm-gray at ~8% opacity (`--border-foam`)
+- **Shadow**: Soft + wide, very low contrast (`--shadow-foam`)
+- **Optional**: Subtle inner highlight at top edge (light catching foam)
 
 ```css
-/* Light Mode */
-:root {
-  /* Layered background - geology, not lighting */
-  --bg: 
-    /* Mineral light: top-left bias, cool blue-teal (air) */
-    radial-gradient(ellipse 120% 60% at 15% -10%, rgba(143, 182, 190, 0.14) 0%, transparent 50%),
-    /* Clay undercurrent: lower third warmth (wet sand density) */
-    radial-gradient(ellipse 140% 50% at 80% 110%, rgba(200, 122, 90, 0.08) 0%, transparent 45%),
-    /* Ochre mid-warmth */
-    radial-gradient(ellipse 100% 40% at 20% 95%, rgba(212, 165, 116, 0.06) 0%, transparent 40%),
-    /* Base sand: uneven, warm */
-    linear-gradient(168deg, #F4EAE0 0%, #E8D5BF 35%, #E4D2BA 65%, #DCC9AD 100%);
-  --canvas: #F1E6D6;
+.card-foam {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, var(--surface) 8%);
+  border: 1px solid var(--border-foam);
+  box-shadow: var(--shadow-foam), var(--shadow-inner-highlight);
+}
+```
+
+---
+
+## Accent Usage Rules
+
+### Coastal Teal (Primary Accent)
+Teal should indicate water-like clarity:
+- ✅ Selected state (tabs, chips)
+- ✅ Primary actions
+- ✅ Focus rings / active input
+- ✅ Key "positive clarity" moments (safe-to-spend, confirmations)
+- ✅ Line charts by default
+- ❌ Don't outline everything in teal
+
+### Sun Coral (Secondary, Rare)
+Coral should indicate warmth/attention:
+- ✅ Attention / "look here"
+- ✅ Spending heat / spikes / alerts
+- ✅ Highlight states (selected category)
+- ✅ One "hero" highlight per screen max
+- ❌ Not for general UI elements
+
+---
+
+## Typography (Ocean Slate)
+
+Warm backgrounds reduce perceived contrast, so text must be crisp.
+
+| Level | Token | Color | Usage |
+|-------|-------|-------|-------|
+| Primary | `--text` | Ocean Slate | Headlines, amounts |
+| Secondary | `--muted` | Ocean Slate Light | Labels, meta |
+| Tertiary | `--text-tertiary` | Cool gray | Metadata only |
+
+---
+
+## Semantic Money Colors
+
+Must remain distinct while harmonizing with beach palette.
+
+| Semantic | Hex | Description |
+|----------|-----|-------------|
+| Income | #3D8B72 | Green that harmonizes with teal (not bright lime) |
+| Expense | #5A6D7A | Muted (uses `--muted`) |
+| Danger | #C46B5C | Warm red harmonizing with coral (not harsh crimson) |
+| Warning | #C9A052 | Sand-amber (not traffic cone orange) |
+
+---
+
+## Chart Colors (Coastal Palette)
+
+Categories should feel like "found objects on the beach," not candy.
+
+| Var | Color | Description |
+|-----|-------|-------------|
+| `--chart-1` | Coastal Teal | Primary |
+| `--chart-2` | Sea Glass | Soft fills |
+| `--chart-3` | Ocean Slate Light | Baseline |
+| `--chart-4` | Amber Warmth | Sand-amber |
+| `--chart-5` | Sun Coral | Highlight |
+| `--chart-6` | #7A9A8A | Sea moss (muted green) |
+| `--chart-7` | #9A8AA0 | Sea urchin (muted violet) |
+| `--chart-8` | #A8A8A0 | Pebble (soft gray) |
+
+### Chart-Specific
+- **Line chart**: Teal line, sea-glass area fill (very low opacity)
+- **Selected datapoint**: Coral dot (rare highlight)
+
+---
+
+## Component Styling
+
+### Top Tabs
+Modern iOS segmented control sitting on "foam"
+- Container: Translucent foam chip, blur backdrop
+- Selected: Sea-glass tint fill + teal text
+- Unselected: Slate text at reduced opacity
+
+### Buttons
+Sea-glass / polished stones feel
+- **Primary**: Teal gradient (subtle), with lifted shadow
+- **Secondary**: Foam fill with border
+- **Destructive**: Warm coral/red, restrained saturation
+
+### Badges
+Sea-glass tokens
+- Background: `--sea-glass-subtle`
+- Border: Hairline
+- Text: Coastal teal deep
+
+### Lists
+Shoreline calm
+- Alternating rows: Barely visible sand shift
+- Selection: Sea-glass tint + teal left indicator
+
+### Dividers (Tide Lines)
+- Gradient line: Sand → transparent
+- Or: Dotted micro-texture
+
+---
+
+## Texture
+
+### Sand Grain
+Very subtle noise/grain across bg (consistent, not per screen)
+
+```css
+.sand-grain::before {
+  background-image: url("data:image/svg+xml,...");
+  opacity: 0.03;
+  mix-blend-mode: multiply;
+}
+```
+
+### Wet Sand Sheen
+On `--bg-elevated` sections, faint sheen gradient (damp sand reflecting sky)
+
+---
+
+## Motion (Coastal: Slow, Fluid, Damped)
+
+If you animate anything in Warm Sand:
+- Slower, damped easing (`--ease-wave`)
+- Soft fades
+- Gentle slide
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--motion-fast` | 120ms | Micro-interactions |
+| `--motion-medium` | 200ms | Standard transitions |
+| `--motion-slow` | 350ms | Significant changes |
+| `--motion-wave` | 600ms | Coastal micro-animations |
+| `--ease-wave` | cubic-bezier(0.25, 0.1, 0.25, 1) | Damped wave motion |
+
+**Avoid** bouncy "playful" motion—beach is calm and premium.
+
+---
+
+## Acceptance Tests
+
+A Warm Sand theme is successful if:
+
+1. ✅ Screenshots read "coastal" even without a logo
+2. ✅ Top of every primary screen shows shoreline field (cool → foam → sand)
+3. ✅ Cards feel like foam surfaces, not white rectangles
+4. ✅ Teal feels like water, coral feels like sun, sand feels like place
+5. ✅ Charts feel like coastal palette, not default colors
+6. ✅ Empty areas look intentional (grain + gradient), not blank
+
+---
+
+## CSS Variables Quick Reference
+
+```css
+:root, .light {
+  /* Sand System */
+  --sand-dry: #F7F3ED;
+  --sand-wet: #EDE6DC;
+  --foam-white: #FDFCFA;
+  --shell-cream: #F9F6F1;
   
-  /* Surfaces */
-  --surface: #FFFFFF;
+  /* Ocean System */
+  --ocean-slate: #3D4F5F;
+  --coastal-teal: #2A7C8C;
+  --sea-glass: #B8DCD9;
   
-  /* Accent */
-  --accent: #2F6F85;
-  --accent-hover: #255C6F;
+  /* Sun-Coral System */
+  --sun-coral: #D68A6C;
+  --amber-warmth: #C9A052;
   
   /* Semantic */
-  --success: #10B981;
-  --danger: #DC2626;
+  --primary: var(--coastal-teal);
+  --success: #3D8B72;
+  --danger: #C46B5C;
 }
+```
 
-/* Dark Mode */
-.dark {
-  /* Layered background - warm undertones prevent dead blacks */
-  --bg: 
-    /* Cool mineral light: top-left atmospheric */
-    radial-gradient(ellipse 100% 50% at 10% -5%, rgba(111, 158, 168, 0.12) 0%, transparent 45%),
-    /* Warm clay undertone: depth */
-    radial-gradient(ellipse 120% 45% at 85% 105%, rgba(139, 90, 60, 0.08) 0%, transparent 40%),
-    /* Ochre glow */
-    radial-gradient(ellipse 80% 35% at 25% 90%, rgba(180, 130, 80, 0.05) 0%, transparent 35%),
-    /* Base dark with warm undertone */
-    linear-gradient(165deg, #1A1612 0%, #15120F 40%, #12100D 70%, #0F0D0B 100%);
-  --canvas: #0F0D0B;
-  
-  /* Surfaces */
-  --surface: #18181B;
-  
+---
+
+## Emotional Impact
+
+### Before (Generic Warm)
+- Screen says: "Here's a beige app"
+- Feels like: A template
+
+### After (Coastal Daylight)
+- Screen says: "You're at the shoreline. Take a breath."
+- Feels like: A calm, intentional place for financial truth
+
+**This matters deeply** given TallyUp's focus on awareness and psychological honesty over optimization.
   /* Accent */
   --accent: #7FD1C2;
   --accent-hover: #6BBFAF;

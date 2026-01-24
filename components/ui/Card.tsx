@@ -1,13 +1,14 @@
 import { ReactNode } from "react";
 
 /**
- * Card - Design system enforced card component
+ * Card - Foam Card Component (Warm Sand / Coastal Theme)
  * 
- * Design rules:
- * - Always white background (--surface)
+ * Design rules (Coastal):
+ * - Foam white background with subtle inner highlight
+ * - Hairline border at low opacity (foam edge)
+ * - Soft, wide shadow (foam softness)
  * - 20px border radius (--card-radius)
- * - Consistent shadow (--shadow-card)
- * - 20px padding by default (--card-padding)
+ * - Optional foam variant with top highlight (light catching foam)
  */
 
 interface CardProps {
@@ -15,6 +16,8 @@ interface CardProps {
   className?: string;
   padding?: "none" | "sm" | "md" | "lg";
   hover?: boolean;
+  /** Use foam variant for premium card treatment with inner highlight */
+  foam?: boolean;
 }
 
 export default function Card({
@@ -22,6 +25,7 @@ export default function Card({
   className = "",
   padding = "md",
   hover = false,
+  foam = false,
 }: CardProps) {
   const paddingStyles = {
     none: "0",
@@ -30,21 +34,32 @@ export default function Card({
     lg: "var(--space-6)",
   };
 
+  // Foam card: subtle gradient top (light catching foam)
+  const foamBackground = foam
+    ? "linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, var(--surface) 12%)"
+    : "var(--surface)";
+
+  // Foam shadow includes inner highlight
+  const foamShadow = foam
+    ? "var(--shadow-foam), inset 0 1px 0 rgba(255, 255, 255, 0.8)"
+    : "var(--shadow-card)";
+
   return (
     <div
       className={[
-        hover ? "transition-shadow hover:shadow-md" : "",
+        hover ? "transition-all hover:shadow-md" : "",
         className,
       ]
         .filter(Boolean)
         .join(" ")}
       style={{
-        backgroundColor: "var(--surface)",
+        background: foamBackground,
         color: "var(--text)",
-        border: "1px solid var(--border)",
+        border: "1px solid var(--border-foam, var(--border))",
         borderRadius: "var(--card-radius)",
-        boxShadow: "var(--shadow-card)",
+        boxShadow: foamShadow,
         padding: paddingStyles[padding],
+        transition: "box-shadow var(--motion-medium) var(--ease-wave, ease-out), transform var(--motion-medium) var(--ease-wave, ease-out)",
       }}
     >
       {children}

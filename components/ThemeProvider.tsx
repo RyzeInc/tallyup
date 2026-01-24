@@ -136,7 +136,7 @@ export function useTheme() {
 
 // Appearance options for Settings page
 export const APPEARANCE_OPTIONS: { value: ThemeMode; label: string; description: string }[] = [
-  { value: "light", label: "Light", description: "Default warm sand theme" },
+  { value: "light", label: "Warm Sand", description: "Coastal daylight — sand, foam, sea" },
   { value: "dim", label: "Dim", description: "Reduced brightness for low-light" },
   { value: "estate", label: "Estate", description: "Black & green fintech style" },
   { value: "clarity", label: "Clarity", description: "White & blue fintech style" },

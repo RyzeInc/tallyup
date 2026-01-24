@@ -1,0 +1,6 @@
+{
+  "build": {
+    "installCommand": "npm ci --workspaces=false",
+    "buildCommand": "npm run build"
+  }
+}

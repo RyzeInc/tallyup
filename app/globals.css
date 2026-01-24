@@ -2,35 +2,93 @@
 @import "tw-animate-css";
 
 /* ============================================
-   TALLYUP DESIGN SYSTEM
-   Light-first, trust-focused fintech tokens
+   TALLYUP DESIGN SYSTEM — WARM SAND (COASTAL DAYLIGHT)
+   
+   Visual Thesis:
+   "Standing at the shoreline: sky haze → ocean depth → foam → wet sand → dry sand"
    
    Principles:
    - Light-first: default = light, no auto-dark
-   - 8pt spacing grid throughout
-   - Cards always white for finance trust
-   - One accent color for primary actions
-   - Muted income/expense colors (not neon)
+   - Beach material system: atmosphere + surfaces + semantic color + data viz
+   - Temperature contrast: warm sand + cool ocean
+   - Value contrast: light foam + deep slate
+   - Two personality accents: coastal teal + sun coral
+   - Texture: subtle grain + soft gradient drift (like light on sand/water)
+   - Motion: slow, fluid, damped (like waves), not bouncy
    ============================================ */
 
 :root, .light {
-  /* -------- Core Palette (spec tokens) -------- */
-  --bg: #F5EDE3;                           /* warm sand base */
-  --bg-gradient-a: #F5EDE3;                /* wet sand gradient stop A */
-  --bg-gradient-b: #E8D9C8;                /* wet sand gradient stop B */
-  --surface: #FFFFFF;                      /* pure white (cards) */
-  --surface-2: #FAF8F6;                    /* subtle off-white (inputs, pills) */
-  --text: #1A1A1B;                         /* near-black */
-  --muted: #71717A;                        /* neutral gray */
-  --border: #E8E8EA;                       /* low-contrast border */
-  --primary: #2F6F85;                      /* deep blue-teal */
-  --primary-hover: #255C6F;
+  /* ========================================
+     CORE BEACH PALETTE (from the coastal painting)
+     
+     The painting shows:
+     - Deep slate/blue-gray ocean at top
+     - Bright white foam band
+     - VIVID burnt orange/terracotta wet sand ridge (KEY!)
+     - Warm beige dry sand with pebbles at bottom
+     ======================================== */
+  
+  /* -------- Sand System (Bottom of painting - warm beiges) -------- */
+  --sand-dry: #F2E4D1;                     /* Warm beige - the dry sand with pebbles */
+  --sand-warm: #E6D5BC;                    /* Mid-tone warm sand */
+  --sand-wet: #D9C7A8;                     /* Slightly darker sand */
+  --foam-white: #FAFAF8;                   /* The bright foam band */
+  --shell-cream: #F5EDE0;                  /* Cream for inputs/chips */
+  
+  /* -------- Burnt Orange Wet Sand Ridge (THE HERO COLOR!) -------- */
+  --terracotta: #C4724A;                   /* The vivid burnt orange wet sand */
+  --terracotta-deep: #A85D3B;              /* Deeper terracotta for hover */
+  --terracotta-light: #D68B62;             /* Lighter burnt orange */
+  --coral-pink: #C98A7A;                   /* The pinkish-coral tones */
+  --rust-accent: #B86B4A;                  /* Rust accent from the ridge */
+  
+  /* -------- Ocean System (Top of painting - slate blues) -------- */
+  --ocean-deep: #4A5968;                   /* Deep slate-blue ocean */
+  --ocean-slate: #5A6A78;                  /* Ocean slate for text */
+  --ocean-mid: #6A7F8E;                    /* Mid-tone ocean */
+  --ocean-foam: #8BA0AC;                   /* Where ocean meets foam */
+  --ocean-light: #A8BAC5;                  /* Light ocean tint */
+  
+  /* -------- Sea Glass (from foam reflections) -------- */
+  --sea-glass: #C5D8DC;                    /* Pale blue-gray from foam */
+  --sea-glass-subtle: rgba(197, 216, 220, 0.30);
+  
+  /* -------- Background Layer System -------- */
+  --bg: var(--sand-dry);                   /* bg = Dry Sand (warm beige) */
+  --bg-elevated: var(--sand-warm);         /* bgElevated = Warmer sand tone */
+  --surface: var(--foam-white);            /* surface = Foam White cards */
+  --surface-2: var(--shell-cream);         /* surface2 = Shell Cream */
+  
+  /* Legacy gradient stops */
+  --bg-gradient-a: var(--sand-dry);
+  --bg-gradient-b: var(--sand-warm);
+  
+  /* -------- Typography (Ocean Slate) -------- */
+  --text: var(--ocean-deep);               /* Primary: Deep ocean slate */
+  --muted: var(--ocean-slate);             /* Secondary: lighter slate */
+  
+  /* -------- Borders -------- */
+  --border: rgba(74, 89, 104, 0.14);       /* Ocean-tinted border */
+  --border-foam: rgba(74, 89, 104, 0.08);  /* Hairline for foam cards */
+  
+  /* -------- Primary Accent (BURNT ORANGE - the painting's hero!) -------- */
+  --primary: var(--terracotta);            /* The burnt orange from wet sand ridge */
+  --primary-hover: var(--terracotta-deep);
   --primary-foreground: #FFFFFF;
-  --success: #3D8B6E;                      /* muted green (income) */
-  --success-subtle: #EDF7F3;
-  --danger: #C45C5C;                       /* muted red (expense negative) */
-  --danger-subtle: #FCF4F4;
-  --shadow: 0px 1px 3px rgba(0, 0, 0, 0.04), 0px 4px 12px rgba(0, 0, 0, 0.05);
+  
+  /* -------- Semantic Money Colors -------- */
+  --success: #5A9474;                      /* Green that works with warm palette */
+  --success-subtle: rgba(90, 148, 116, 0.12);
+  --danger: #C45858;                       /* Warm red, distinct from terracotta */
+  --danger-subtle: rgba(196, 88, 88, 0.10);
+  
+  /* -------- Shadows (Foam Card treatment) -------- */
+  --shadow: 0px 1px 2px rgba(61, 79, 95, 0.03), 
+            0px 4px 16px rgba(61, 79, 95, 0.06),
+            0px 8px 32px rgba(61, 79, 95, 0.04);
+  --shadow-foam: 0px 1px 3px rgba(61, 79, 95, 0.04), 
+                 0px 6px 20px rgba(61, 79, 95, 0.06);
+  --shadow-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   
   /* -------- Typography Scale -------- */
   --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
@@ -92,63 +150,107 @@
   --content-max-width-wide: 1400px;
   
   /* -------- Shadows -------- */
-  --shadow-card: var(--shadow);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-  --shadow-md: 0 2px 8px -2px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 24px -4px rgba(0, 0, 0, 0.1);
-  --shadow-fab: 0 4px 16px -2px rgba(47, 111, 133, 0.3);
+  --shadow-card: var(--shadow-foam);
+  --shadow-sm: 0 1px 2px 0 rgba(74, 89, 104, 0.04);
+  --shadow-md: 0 2px 8px -2px rgba(74, 89, 104, 0.08);
+  --shadow-lg: 0 8px 24px -4px rgba(74, 89, 104, 0.10);
+  --shadow-fab: 0 4px 16px -2px rgba(196, 114, 74, 0.40);  /* Terracotta glow! */
   
   /* -------- Motion -------- */
-  --motion-fast: 100ms;
-  --motion-medium: 150ms;
-  --motion-slow: 250ms;
+  --motion-fast: 120ms;
+  --motion-medium: 200ms;
+  --motion-slow: 350ms;
+  --motion-wave: 600ms;
   --ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-wave: cubic-bezier(0.25, 0.1, 0.25, 1); /* Damped wave motion */
   
-  /* -------- Background gradient (layered warm sand) -------- */
-  --bg-full: linear-gradient(168deg, var(--bg-gradient-a) 0%, var(--bg-gradient-b) 100%);
+  /* -------- THE BEACH GRADIENT (matching the painting!) -------- */
+  /* This is the signature look: ocean → foam → burnt orange → sand */
+  --shoreline-field: 
+    linear-gradient(180deg,
+      var(--ocean-deep) 0%,              /* Deep slate ocean at top */
+      var(--ocean-mid) 15%,               /* Ocean mid-tone */
+      var(--ocean-foam) 28%,              /* Lighter where foam starts */
+      var(--foam-white) 38%,              /* Bright white foam band */
+      var(--coral-pink) 48%,              /* Pink-coral transition */
+      var(--terracotta) 55%,              /* THE burnt orange ridge! */
+      var(--terracotta-light) 62%,        /* Lighter terracotta */
+      var(--sand-warm) 75%,               /* Warm sand transition */
+      var(--sand-dry) 100%                /* Dry beige sand */
+    );
+  
+  /* -------- Background (Beachy gradient you can feel!) -------- */
+  --bg-full: 
+    /* Ocean atmosphere at top - visible! */
+    linear-gradient(180deg, 
+      rgba(74, 89, 104, 0.08) 0%,
+      rgba(106, 127, 142, 0.05) 8%,
+      transparent 20%
+    ),
+    /* Burnt orange warmth in upper-mid section */
+    radial-gradient(ellipse 140% 35% at 50% 25%, rgba(196, 114, 74, 0.12) 0%, transparent 70%),
+    /* Warm sand base with natural variation */
+    linear-gradient(175deg, 
+      #F4E8D6 0%,                          /* Lighter warm sand */
+      var(--sand-dry) 30%,                 /* Main sand color */
+      var(--sand-warm) 60%,                /* Warmer mid-section */
+      var(--sand-dry) 100%                 /* Back to lighter */
+    );
   
   /* -------- Semantic mappings -------- */
   --canvas: var(--bg);
-  --surface-elevated: var(--surface);
+  --surface-elevated: var(--foam-white);
   --surface-subtle: var(--surface-2);
-  --border-subtle: #F0F0F2;
+  --border-subtle: rgba(74, 89, 104, 0.06);
   --text-secondary: var(--muted);
-  --text-tertiary: #A1A1AA;
-  --text-placeholder: #D4D4D8;
+  --text-tertiary: #8A99A6;                /* Slate gray */
+  --text-placeholder: #B0BCC6;
   
-  /* Accent = primary */
+  /* Accent = primary (TERRACOTTA - the burnt orange!) */
   --accent: var(--primary);
   --accent-hover: var(--primary-hover);
   --accent-foreground: var(--primary-foreground);
-  --accent-subtle: rgba(47, 111, 133, 0.08);
+  --accent-subtle: rgba(196, 114, 74, 0.15);  /* Terracotta tint */
+  --accent-soft: var(--coral-pink);           /* Coral for soft fills */
   
   /* Semantic colors */
-  --success-foreground: #1D5C47;
-  --warning: #C28023;
-  --warning-subtle: #FDF8F0;
-  --warning-foreground: #92400E;
-  --danger-foreground: #8B2E2E;
+  --success-foreground: #3D6B52;
+  --warning: #C4944A;                      /* Warm amber/gold */
+  --warning-subtle: rgba(196, 148, 74, 0.12);
+  --warning-foreground: #8B6820;
+  --danger-foreground: #8B3838;
   
-  /* Income/expense (muted, not neon) */
+  /* Secondary accent (Ocean for contrast with terracotta) */
+  --secondary: var(--ocean-mid);
+  --secondary-hover: var(--ocean-deep);
+  --secondary-subtle: rgba(106, 127, 142, 0.12);
+  
+  /* Income/expense */
   --income: var(--success);
   --expense: var(--muted);
   
-  /* Net (positive) - distinct from income */
-  --net: var(--primary);
-  --net-subtle: var(--accent-subtle);
+  /* Net (positive) - ocean blue to contrast with orange */
+  --net: var(--ocean-mid);
+  --net-subtle: var(--secondary-subtle);
   
-  /* -------- Chart Colors -------- */
-  --chart-1: #2F6F85;
-  --chart-2: #3D8B6E;
-  --chart-3: #C28023;
-  --chart-4: #6F9EA8;
-  --chart-5: #B87E9A;
-  --chart-6: #C87A5A;
+  /* -------- Chart Colors (Beach Palette from painting) -------- */
+  --chart-1: var(--terracotta);            /* Burnt orange - primary! */
+  --chart-2: var(--ocean-mid);             /* Ocean blue */
+  --chart-3: var(--coral-pink);            /* Coral pink */
+  --chart-4: var(--ocean-foam);            /* Light ocean */
+  --chart-5: var(--rust-accent);           /* Rust */
+  --chart-6: #6A9A84;                      /* Sea green */
+  --chart-7: var(--sand-warm);             /* Sand */
+  --chart-8: var(--ocean-deep);            /* Deep slate */
+  
+  /* Chart-specific */
+  --chart-highlight: var(--terracotta);    /* Burnt orange highlight */
+  --chart-area-fill: rgba(196, 114, 74, 0.15); /* Terracotta tint */
   
   /* -------- Tri-State Chip Colors (Filter System) -------- */
-  --chip-bg: var(--surface);
-  --chip-border: var(--border);
+  --chip-bg: var(--shell-cream);           /* Shell cream for chips */
+  --chip-border: var(--border-foam);
   --chip-text: var(--text);
   
   /* Neutral state - default appearance */
@@ -156,15 +258,15 @@
   --chip-neutral-border: var(--chip-border);
   --chip-neutral-text: var(--chip-text);
   
-  /* Include state - accent tinted */
-  --chip-include-bg: rgba(47, 111, 133, 0.12);
-  --chip-include-border: rgba(47, 111, 133, 0.45);
-  --chip-include-text: var(--text);
+  /* Include state - terracotta tinted (selected = burnt orange) */
+  --chip-include-bg: rgba(196, 114, 74, 0.12);
+  --chip-include-border: rgba(196, 114, 74, 0.45);
+  --chip-include-text: var(--terracotta-deep);
   
-  /* Exclude state - danger tinted */
-  --chip-exclude-bg: rgba(196, 92, 92, 0.10);
-  --chip-exclude-border: rgba(196, 92, 92, 0.50);
-  --chip-exclude-text: var(--text);
+  /* Exclude state - ocean tinted */
+  --chip-exclude-bg: rgba(74, 89, 104, 0.10);
+  --chip-exclude-border: rgba(74, 89, 104, 0.40);
+  --chip-exclude-text: var(--ocean-deep);
   
   /* -------- shadcn/ui Compatibility -------- */
   --background: var(--canvas);
@@ -173,21 +275,51 @@
   --card-foreground: var(--text);
   --popover: var(--surface);
   --popover-foreground: var(--text);
-  --secondary: var(--surface-subtle);
+  --secondary: var(--shell-cream);
   --secondary-foreground: var(--text);
-  --input: var(--surface);
+  --input: var(--shell-cream);
   --ring: var(--accent);
   --destructive: var(--danger);
   --destructive-foreground: #FFFFFF;
   
   /* Sidebar */
   --sidebar-width: 260px;
-  --sidebar-bg: var(--surface);
-  --sidebar-border: var(--border);
+  --sidebar-bg: var(--foam-white);
+  --sidebar-border: var(--border-foam);
   --sidebar-text: var(--text);
   --sidebar-text-muted: var(--text-secondary);
-  --sidebar-active: var(--accent-subtle);
-  --sidebar-active-text: var(--accent);
+  --sidebar-active: rgba(196, 114, 74, 0.12);  /* Terracotta tint */
+  --sidebar-active-text: var(--terracotta);
+  
+  /* -------- Beach Component Tokens -------- */
+  /* Tab bar */
+  --tab-container-bg: rgba(250, 250, 248, 0.90);  /* Translucent foam */
+  --tab-selected-bg: rgba(196, 114, 74, 0.12);    /* Terracotta tint */
+  --tab-selected-text: var(--terracotta);
+  --tab-unselected-text: var(--ocean-slate);
+  
+  /* Buttons (terracotta gradient - the hero!) */
+  --btn-primary-gradient: linear-gradient(180deg, var(--terracotta) 0%, var(--terracotta-deep) 100%);
+  --btn-secondary-bg: var(--foam-white);
+  --btn-secondary-border: var(--border);
+  --btn-destructive-bg: var(--danger);
+  
+  /* Badges */
+  --badge-bg: rgba(196, 114, 74, 0.10);
+  --badge-border: rgba(196, 114, 74, 0.20);
+  --badge-text: var(--terracotta-deep);
+  
+  /* List rows */
+  --row-alt-bg: rgba(230, 213, 188, 0.25);  /* Sand shift */
+  --row-selected-bg: rgba(196, 114, 74, 0.10);  /* Terracotta tint */
+  --row-selected-indicator: var(--terracotta);
+  
+  /* Dividers */
+  --divider-gradient: linear-gradient(90deg, var(--sand-warm) 0%, transparent 100%);
+  
+  /* Empty states */
+  --empty-grain-opacity: 0.025;
+  --empty-gradient: radial-gradient(ellipse 80% 40% at 50% 30%, rgba(196, 114, 74, 0.06) 0%, transparent 70%);
 }
 
 /* -------- Dim Theme (Beta) -------- */
@@ -415,40 +547,108 @@ body {
   min-height: 100vh;
 }
 
+/* ============================================
+   COASTAL BACKGROUND UTILITIES
+   ============================================ */
+
 /* Background utility class */
 .bg-app {
   background: var(--bg-full);
 }
 
-/* Card utility - enforces design system */
+/* Shoreline field - apply to top sections (160-240px height) */
+.shoreline-field {
+  background: var(--shoreline-field);
+  position: relative;
+}
+
+/* Shoreline field overlay (use behind header + tabs) */
+.shoreline-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: 
+    linear-gradient(180deg,
+      rgba(143, 168, 184, 0.15) 0%,
+      rgba(90, 138, 154, 0.12) 25%,
+      rgba(42, 124, 140, 0.08) 40%,
+      rgba(232, 240, 236, 0.4) 55%,
+      transparent 80%
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Wet sand elevated zone */
+.bg-elevated {
+  background-color: var(--bg-elevated);
+}
+
+/* Sand grain texture (very subtle noise) */
+.sand-grain {
+  position: relative;
+}
+.sand-grain::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: var(--empty-grain-opacity, 0.03);
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/* ============================================
+   FOAM CARD SYSTEM
+   ============================================ */
+
+/* Card utility - Foam Card treatment */
 .card {
   background-color: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-foam);
   border-radius: var(--card-radius);
   box-shadow: var(--shadow-card);
   padding: var(--card-padding);
+  position: relative;
 }
 
-/* Input utility - enforces design system */
+/* Foam card with inner highlight (light catching foam) */
+.card-foam {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, var(--surface) 8%);
+  border: 1px solid var(--border-foam);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-foam), var(--shadow-inner-highlight);
+  padding: var(--card-padding);
+}
+
+/* Input utility - Shell Cream styling */
 .input-field {
-  background-color: var(--surface-2);
-  border: 1px solid var(--border);
+  background-color: var(--shell-cream);
+  border: 1px solid var(--border-foam);
   border-radius: var(--input-radius);
   color: var(--text);
   font-size: var(--text-body);
   padding: 12px 16px;
   min-height: var(--button-height);
   outline: none;
-  transition: border-color var(--motion-fast) var(--ease-out);
+  transition: border-color var(--motion-medium) var(--ease-wave), 
+              box-shadow var(--motion-medium) var(--ease-wave);
 }
 
 .input-field:focus {
-  border-color: var(--primary);
+  border-color: var(--coastal-teal);
+  box-shadow: 0 0 0 3px var(--sea-glass-subtle);
 }
 
-/* Primary button - enforces design system */
+/* ============================================
+   COASTAL BUTTON SYSTEM
+   ============================================ */
+
+/* Primary button - Sea-glass / polished stone feel */
 .btn-primary {
-  background-color: var(--primary);
+  background: var(--btn-primary-gradient, var(--primary));
   color: var(--primary-foreground);
   border-radius: var(--input-radius);
   font-weight: 600;
@@ -457,21 +657,30 @@ body {
   padding: 12px 24px;
   border: none;
   cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease-out);
+  transition: all var(--motion-medium) var(--ease-wave);
+  box-shadow: 0 2px 8px -2px rgba(42, 124, 140, 0.25);
 }
 
 .btn-primary:hover {
-  background-color: var(--primary-hover);
+  background: var(--primary-hover);
+  box-shadow: 0 4px 12px -2px rgba(42, 124, 140, 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px -1px rgba(42, 124, 140, 0.2);
 }
 
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
-/* Secondary button */
+/* Secondary button - Foam fill with border */
 .btn-secondary {
-  background-color: var(--surface);
+  background-color: var(--foam-white);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--input-radius);
@@ -480,11 +689,30 @@ body {
   min-height: var(--button-height);
   padding: 12px 24px;
   cursor: pointer;
-  transition: background-color var(--motion-fast) var(--ease-out);
+  transition: all var(--motion-medium) var(--ease-wave);
 }
 
 .btn-secondary:hover {
-  background-color: var(--surface-2);
+  background-color: var(--shell-cream);
+  border-color: var(--coastal-teal);
+}
+
+/* Destructive button - Warm coral/red with restrained saturation */
+.btn-destructive {
+  background-color: var(--sun-coral);
+  color: #FFFFFF;
+  border-radius: var(--input-radius);
+  font-weight: 600;
+  font-size: var(--text-body);
+  min-height: var(--button-height);
+  padding: 12px 24px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--motion-medium) var(--ease-wave);
+}
+
+.btn-destructive:hover {
+  background-color: var(--sun-coral-deep);
 }
 
 .tabular-nums,
@@ -494,7 +722,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--coastal-teal);
   outline-offset: 2px;
 }
 
@@ -591,7 +819,7 @@ main,
 }
 
 /* ============================================
-   ANIMATIONS
+   ANIMATIONS (Coastal: slow, fluid, damped like waves)
    ============================================ */
 
 @keyframes fadeIn {
@@ -614,6 +842,21 @@ main,
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Wave shimmer - like light passing over water */
+@keyframes waveShimmer {
+  0% { 
+    background-position: -200% 0;
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% { 
+    background-position: 200% 0;
+    opacity: 0.4;
+  }
+}
+
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
@@ -624,30 +867,176 @@ main,
   50% { opacity: 0.5; }
 }
 
+/* Wave drift - very subtle, like light on water */
+@keyframes waveDrift {
+  0%, 100% { 
+    transform: translateX(0) translateY(0);
+    opacity: 0.08;
+  }
+  25% {
+    transform: translateX(2px) translateY(-1px);
+    opacity: 0.10;
+  }
+  50% { 
+    transform: translateX(0) translateY(1px);
+    opacity: 0.12;
+  }
+  75% {
+    transform: translateX(-2px) translateY(0);
+    opacity: 0.09;
+  }
+}
+
+/* Gentle foam pulse */
+@keyframes foamPulse {
+  0%, 100% { 
+    box-shadow: var(--shadow-foam);
+  }
+  50% { 
+    box-shadow: var(--shadow-foam), 0 0 20px -8px rgba(184, 220, 217, 0.3);
+  }
+}
+
 .animate-fade-in {
-  animation: fadeIn var(--motion-medium) var(--ease-out);
+  animation: fadeIn var(--motion-medium) var(--ease-wave);
 }
 
 .animate-slide-up {
-  animation: slideUp var(--motion-medium) var(--ease-out);
+  animation: slideUp var(--motion-slow) var(--ease-wave);
 }
 
 .animate-slide-down {
-  animation: slideDown var(--motion-medium) var(--ease-out);
+  animation: slideDown var(--motion-slow) var(--ease-wave);
 }
 
 .animate-slide-in-from-bottom {
-  animation: slideInFromBottom 0.25s var(--ease-out);
+  animation: slideInFromBottom var(--motion-slow) var(--ease-wave);
 }
 
-.animate-shimmer {
-  animation: shimmer 1.5s ease-in-out infinite;
-  background: linear-gradient(90deg, var(--surface-subtle) 25%, var(--border) 50%, var(--surface-subtle) 75%);
+/* Wave shimmer - for loading states */
+.animate-shimmer,
+.animate-wave-shimmer {
+  animation: waveShimmer 2.5s var(--ease-wave) infinite;
+  background: linear-gradient(90deg, 
+    var(--shell-cream) 0%, 
+    var(--sea-glass-subtle) 25%, 
+    var(--foam-white) 50%, 
+    var(--sea-glass-subtle) 75%, 
+    var(--shell-cream) 100%
+  );
   background-size: 200% 100%;
 }
 
 .animate-pulse {
-  animation: pulse 2s ease-in-out infinite;
+  animation: pulse 3s var(--ease-wave) infinite;
+}
+
+/* Wave drift overlay - for atmospheric sections */
+.animate-wave-drift {
+  position: relative;
+}
+.animate-wave-drift::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 40% at 30% 20%, var(--sea-glass-subtle) 0%, transparent 70%);
+  animation: waveDrift 12s var(--ease-wave) infinite;
+  pointer-events: none;
+}
+
+/* Foam pulse - subtle glow on important cards */
+.animate-foam-pulse {
+  animation: foamPulse 4s var(--ease-wave) infinite;
+}
+
+/* ============================================
+   COASTAL COMPONENT UTILITIES
+   ============================================ */
+
+/* Sea-glass badge */
+.badge-sea-glass {
+  background: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  color: var(--badge-text);
+  border-radius: var(--radius-full);
+  padding: 2px 10px;
+  font-size: var(--text-micro);
+  font-weight: 500;
+}
+
+/* Tide line divider */
+.divider-tide {
+  height: 1px;
+  background: var(--divider-gradient);
+  border: none;
+  margin: var(--space-4) 0;
+}
+
+/* Dotted tide line (micro-texture) */
+.divider-tide-dotted {
+  height: 1px;
+  border: none;
+  background-image: radial-gradient(circle, var(--ocean-slate-light) 1px, transparent 1px);
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+  opacity: 0.3;
+  margin: var(--space-4) 0;
+}
+
+/* Row alternating (barely visible sand shift) */
+.row-alternate:nth-child(even) {
+  background-color: var(--row-alt-bg);
+}
+
+/* Row selected state */
+.row-selected {
+  background-color: var(--row-selected-bg);
+  border-left: 3px solid var(--row-selected-indicator);
+}
+
+/* Tab container (translucent foam) */
+.tab-container-coastal {
+  background: var(--tab-container-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-full);
+  padding: 4px;
+}
+
+/* Tab selected (sea-glass tint) */
+.tab-selected {
+  background: var(--tab-selected-bg);
+  color: var(--tab-selected-text);
+  border-radius: var(--radius-full);
+}
+
+/* Tab unselected */
+.tab-unselected {
+  color: var(--tab-unselected-text);
+  opacity: 0.8;
+}
+
+/* Empty state container */
+.empty-state-coastal {
+  position: relative;
+  background: var(--empty-gradient);
+}
+.empty-state-coastal.sand-grain::before {
+  opacity: var(--empty-grain-opacity);
+}
+
+/* Coral highlight (use sparingly - 1 per screen max) */
+.highlight-coral {
+  color: var(--sun-coral);
+}
+.highlight-coral-bg {
+  background-color: var(--secondary-subtle);
+  border-color: rgba(214, 138, 108, 0.25);
+}
+
+/* Teal indicator (water feel) */
+.indicator-teal {
+  background-color: var(--coastal-teal);
 }
 
 /* ============================================

@@ -94,8 +94,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
+        position: "relative",
       }}
     >
+      {/* Beach Atmosphere Overlay - ocean + burnt orange warmth */}
+      <div 
+        className="shoreline-overlay pointer-events-none"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "280px",
+          background: `
+            linear-gradient(180deg,
+              rgba(74, 89, 104, 0.12) 0%,
+              rgba(106, 127, 142, 0.10) 15%,
+              rgba(139, 160, 172, 0.06) 30%,
+              rgba(196, 114, 74, 0.08) 50%,
+              rgba(214, 139, 98, 0.04) 65%,
+              transparent 85%
+            )
+          `,
+          zIndex: 0,
+        }}
+        aria-hidden="true"
+      />
       <TopNav />
       <div
         className="mx-auto flex-1 w-full"
@@ -107,6 +131,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           display: "flex",
           flexDirection: "column",
           minHeight: 0,
+          position: "relative",
+          zIndex: 1,
         }}
       >
         <main className="pt-4 flex-1 overflow-auto flex flex-col">

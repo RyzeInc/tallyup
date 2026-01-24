@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * TagChips - Beach-themed chip styling
+ * 
+ * Design:
+ * - Unselected: Shell cream with soft border
+ * - Selected: Terracotta (burnt orange) tint - the hero color!
+ */
+
 export default function TagChips({
   value,
   onChange,
@@ -24,13 +32,19 @@ export default function TagChips({
             type="button"
             key={tag}
             onClick={() => toggle(tag)}
-            className={[
-              "rounded-full px-3 py-1 text-xs border",
-              active
-                ? "bg-neutral-900/40 text-neutral-200 border-neutral-800"
-                : "bg-neutral-900/40 text-neutral-200 border-neutral-800 hover:border-neutral-600",
-            ].join(" ")}
-            style={active ? { backgroundColor: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" } : undefined}
+            className="rounded-full px-3 py-1 text-xs border"
+            style={{
+              backgroundColor: active 
+                ? "rgba(196, 114, 74, 0.15)"   /* Terracotta tint */
+                : "var(--shell-cream, var(--surface-2))",
+              color: active 
+                ? "var(--terracotta-deep, #A85D3B)" 
+                : "var(--text)",
+              borderColor: active 
+                ? "rgba(196, 114, 74, 0.50)"   /* Terracotta border */
+                : "var(--border-foam, var(--border))",
+              transition: "all var(--motion-medium, 150ms) var(--ease-wave, ease-out)",
+            }}
           >
             {tag}
           </button>
