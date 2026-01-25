@@ -11,9 +11,9 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
  * - Cards always white, text always crisp for finance app trust
  */
 
-type ThemeMode = "light" | "dim" | "estate" | "clarity";
+type ThemeMode = "porcelain" | "light" | "dim" | "estate" | "clarity";
 
-const THEME_CLASSES: ThemeMode[] = ["light", "dim", "estate", "clarity"];
+const THEME_CLASSES: ThemeMode[] = ["porcelain", "light", "dim", "estate", "clarity"];
 
 /**
  * Navigation Customization
@@ -55,9 +55,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = localStorage.getItem("tallyup.theme") as ThemeMode | null;
       if (saved && THEME_CLASSES.includes(saved)) return saved;
-      return "light";
+      return "porcelain";
     } catch {
-      return "light";
+      return "porcelain";
     }
   });
 
@@ -136,6 +136,7 @@ export function useTheme() {
 
 // Appearance options for Settings page
 export const APPEARANCE_OPTIONS: { value: ThemeMode; label: string; description: string }[] = [
+  { value: "porcelain", label: "Porcelain", description: "Porcelain + Ink — premium prismatic" },
   { value: "light", label: "Warm Sand", description: "Coastal daylight — sand, foam, sea" },
   { value: "dim", label: "Dim", description: "Reduced brightness for low-light" },
   { value: "estate", label: "Estate", description: "Black & green fintech style" },

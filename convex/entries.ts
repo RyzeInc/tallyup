@@ -649,6 +649,7 @@ export const updateEntry = mutation({
     id: v.id("entries"),
     category: v.optional(v.string()),
     categoryId: v.optional(v.union(v.id("categories"), v.null())),
+    subcategoryId: v.optional(v.union(v.id("categories"), v.null())),
     bucket: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     note: v.optional(v.string()),
@@ -722,6 +723,9 @@ export const updateEntry = mutation({
     if (args.tags !== undefined) patch.tags = cleanTags(args.tags);
     if (args.note !== undefined) patch.note = cleanStr(args.note);
     if (args.title !== undefined) patch.title = cleanStr(args.title);
+    if (args.subcategoryId !== undefined) {
+      patch.subcategoryId = args.subcategoryId === null ? undefined : args.subcategoryId;
+    }
     if (args.merchant !== undefined) {
       const nextMerchant = cleanStr(args.merchant);
       patch.merchant = nextMerchant;

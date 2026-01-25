@@ -1332,6 +1332,67 @@ export const listAllPlaidTransactions = query({
   },
 });
 
+// Delete a raw Plaid transaction
+export const deletePlaidTransaction = mutation({
+  args: { 
+    id: v.id("plaidTransactions"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    // Get the transaction first to verify ownership
+    const transaction = await ctx.db.get(args.id);
+    if (!transaction) {
+      throw new Error("Transaction not found");
+    }
+    
+    // Verify ownership
+    if (transaction.userId !== identity.subject) {
+      throw new Error("Not authorized to delete this transaction");
+    }
+    
+    // Delete the transaction
+    await ctx.db.delete(args.id);
+    
+    return { success: true };
+  },
+});
+
+// Bulk delete raw Plaid transactions
+export const deletePlaidTransactionsBulk = mutation({
+  args: { 
+    ids: v.array(v.id("plaidTransactions")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    
+    let deleted = 0;
+    let failed = 0;
+    
+    for (const id of args.ids) {
+      const transaction = await ctx.db.get(id);
+      if (!transaction) {
+        failed++;
+        continue;
+      }
+      
+      // Verify ownership
+      if (transaction.userId !== identity.subject) {
+        failed++;
+        continue;
+      }
+      
+      // Delete the transaction
+      await ctx.db.delete(id);
+      deleted++;
+    }
+    
+    return { deleted, failed };
+  },
+});
+
 export const getPlaidSyncStatus = query({
   args: {},
   handler: async (ctx) => {

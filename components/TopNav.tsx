@@ -113,16 +113,13 @@ export default function TopNav() {
 
   return (
     <nav
-      className="sticky top-0 z-50 safe-area-inset-top"
+      className="sticky top-0 z-50 safe-area-inset-top header-band"
       style={{
-        backgroundColor: "var(--foam-white, var(--surface))",
-        borderBottom: "1px solid var(--border-foam, var(--border))",
-        /* Subtle foam blur for coastal feel */
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
+        /* Header band gradient from theme */
+        background: "var(--header-gradient)",
       }}
     >
-      {/* App Title Bar */}
+      {/* App Title Bar - white text on gradient */}
       <div
         className="flex items-center justify-between px-4"
         style={{ height: "var(--topbar-height)" }}
@@ -130,23 +127,31 @@ export default function TopNav() {
         <button
           onClick={() => setActiveTab("more")}
           className="text-lg font-semibold hover:opacity-80 transition-opacity"
-          style={{ color: "var(--text)", letterSpacing: "-0.01em", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          style={{ color: "var(--header-text)", letterSpacing: "-0.01em", background: "none", border: "none", cursor: "pointer", padding: 0 }}
           aria-label="Open menu"
         >
           TallyUp
         </button>
         
-        {/* Quick Log Button - Burnt Orange (the hero color!) */}
+        {/* Quick Log Button - white on gradient */}
         <button
           onClick={openQuickLog}
           className="flex items-center justify-center rounded-full"
           style={{
             width: 40,
             height: 40,
-            background: "var(--btn-primary-gradient, var(--primary))",
-            color: "var(--primary-foreground)",
-            boxShadow: "0 2px 10px -2px rgba(196, 114, 74, 0.40)",
+            background: "rgba(255, 255, 255, 0.2)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            color: "var(--header-text)",
+            border: "1px solid rgba(255, 255, 255, 0.3)",
             transition: "all var(--motion-medium, 150ms) var(--ease-wave, ease-out)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.3)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255, 255, 255, 0.2)";
           }}
           aria-label="Log transaction"
         >
@@ -154,24 +159,24 @@ export default function TopNav() {
         </button>
       </div>
 
-      {/* Scrollable Tab Bar */}
+      {/* Scrollable Tab Bar - underline style on gradient */}
       <div className="relative">
-        {/* Left fade indicator */}
+        {/* Left fade indicator - gradient aware */}
         {showLeftFade && (
           <div
             className="absolute left-0 top-0 bottom-0 w-8 z-10 pointer-events-none"
             style={{
-              background: "linear-gradient(to right, var(--foam-white, var(--surface)), transparent)",
+              background: "linear-gradient(to right, rgba(0,0,0,0.15), transparent)",
             }}
           />
         )}
         
-        {/* Right fade indicator */}
+        {/* Right fade indicator - gradient aware */}
         {showRightFade && (
           <div
             className="absolute right-0 top-0 bottom-0 w-8 z-10 pointer-events-none"
             style={{
-              background: "linear-gradient(to left, var(--foam-white, var(--surface)), transparent)",
+              background: "linear-gradient(to left, rgba(0,0,0,0.15), transparent)",
             }}
           />
         )}
@@ -186,7 +191,7 @@ export default function TopNav() {
             scrollbarWidth: "none",
           }}
         >
-          <div className="flex px-2 pb-2 pt-1 gap-1">
+          <div className="flex px-2 pb-0 pt-1 gap-1">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.tabId;
               const Icon = iconMap[tab.iconName];
@@ -196,13 +201,13 @@ export default function TopNav() {
                   key={tab.id}
                   data-tab-id={tab.tabId}
                   onClick={() => setActiveTab(tab.tabId)}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap"
+                  className="flex items-center gap-2 px-4 py-2.5 whitespace-nowrap relative"
                   style={{
                     scrollSnapAlign: "center",
                     minHeight: 44,
-                    /* Sea-glass tint fill for selected, transparent for unselected */
-                    backgroundColor: isActive ? "var(--tab-selected-bg, var(--accent-subtle))" : "transparent",
-                    color: isActive ? "var(--tab-selected-text, var(--primary))" : "var(--tab-unselected-text, var(--text-secondary))",
+                    /* White text on gradient, opacity for inactive */
+                    backgroundColor: "transparent",
+                    color: isActive ? "var(--header-text)" : "var(--header-text-muted, rgba(255,255,255,0.75))",
                     fontWeight: isActive ? 600 : 500,
                     transition: "all var(--motion-medium, 150ms) var(--ease-wave, ease-out)",
                   }}
@@ -213,13 +218,23 @@ export default function TopNav() {
                     {tab.badge && (
                       <span
                         className="absolute -top-1.5 -right-1.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold"
-                        style={{ backgroundColor: "var(--sun-coral, var(--danger))", color: "#fff" }}
+                        style={{ backgroundColor: "#FBBF24", color: "#000" }}
                       >
                         {tab.badge > 99 ? "99+" : tab.badge}
                       </span>
                     )}
                   </span>
                   <span className="text-sm">{tab.label}</span>
+                  {/* Underline indicator - Rocket Money style */}
+                  {isActive && (
+                    <span
+                      className="absolute bottom-0 left-2 right-2 rounded-t"
+                      style={{
+                        height: "var(--tab-indicator-height, 3px)",
+                        backgroundColor: "var(--header-text)",
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}

@@ -218,6 +218,7 @@ export default function QuickLogModal({
         type: entryType,
         categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
         subcategoryId: (draft.subcategoryId || undefined) as Id<"categories"> | undefined,
+        title: draft.title?.trim() || undefined,
         note: draft.note?.trim() || undefined,
         merchant: draft.merchant?.trim() || undefined,
         methodOrAccount: draft.account.method?.trim() || undefined,

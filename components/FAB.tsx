@@ -25,7 +25,7 @@ export default function FAB({ className = "" }: FABProps) {
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = "translateX(-50%) scale(1.05)";
-        e.currentTarget.style.boxShadow = "0 6px 24px -2px rgba(196, 114, 74, 0.50)";
+        e.currentTarget.style.boxShadow = "var(--shadow-glow-lg, var(--shadow-fab))";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateX(-50%) scale(1)";

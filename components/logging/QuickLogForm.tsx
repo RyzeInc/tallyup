@@ -15,6 +15,7 @@ import {
   DetailsExpander,
   SummaryChips,
   StickyFooter,
+  AddAccountDialog,
 } from "./ui";
 
 export type QuickLogFormProps = {
@@ -62,6 +63,9 @@ export function QuickLogForm(props: QuickLogFormProps) {
       existing: props.existing,
     })
   );
+
+  // Add account dialog state
+  const [showAddAccountDialog, setShowAddAccountDialog] = React.useState(false);
 
   // Top-level categories for the Category dropdown (no subcategories)
   const categories = React.useMemo(() => {
@@ -323,18 +327,35 @@ export function QuickLogForm(props: QuickLogFormProps) {
         </div>
 
         {/* Account Selection - Prominent placement for easy card/account selection */}
-        {props.accounts.length > 0 && (
-          <div>
-            {state.draft.type === "transfer" ? (
-              // Transfer: Show From/To account selection
-              <div className="space-y-3">
-                <div>
-                  <div
-                    className="text-[10px] font-medium uppercase tracking-wider mb-2"
-                    style={{ color: "var(--text-tertiary)" }}
-                  >
-                    From Account
+        <div>
+          {state.draft.type === "transfer" ? (
+            // Transfer: Show From/To account selection
+            <div className="space-y-3">
+              <div>
+                <div
+                  className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                  style={{ color: "var(--text-tertiary)" }}
+                >
+                  From Account
+                </div>
+                {props.accounts.length === 0 ? (
+                  // Skeleton with Add button when no accounts
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAccountDialog(true)}
+                      className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
+                      style={{
+                        backgroundColor: "transparent",
+                        color: "var(--primary)",
+                        border: "1px dashed var(--primary)",
+                      }}
+                    >
+                      <Lucide.Plus className="h-3.5 w-3.5" />
+                      Add
+                    </button>
                   </div>
+                ) : (
                   <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
                     {props.accounts
                       .filter((acc) => acc.id !== state.draft.account.toAccountId)
@@ -361,14 +382,33 @@ export function QuickLogForm(props: QuickLogFormProps) {
                         );
                       })}
                   </div>
+                )}
+              </div>
+              <div>
+                <div
+                  className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                  style={{ color: "var(--text-tertiary)" }}
+                >
+                  To Account
                 </div>
-                <div>
-                  <div
-                    className="text-[10px] font-medium uppercase tracking-wider mb-2"
-                    style={{ color: "var(--text-tertiary)" }}
-                  >
-                    To Account
+                {props.accounts.length === 0 ? (
+                  // Skeleton with Add button when no accounts
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAccountDialog(true)}
+                      className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
+                      style={{
+                        backgroundColor: "transparent",
+                        color: "var(--primary)",
+                        border: "1px dashed var(--primary)",
+                      }}
+                    >
+                      <Lucide.Plus className="h-3.5 w-3.5" />
+                      Add
+                    </button>
                   </div>
+                ) : (
                   <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
                     {props.accounts
                       .filter((acc) => acc.id !== state.draft.account.fromAccountId)
@@ -395,17 +435,36 @@ export function QuickLogForm(props: QuickLogFormProps) {
                         );
                       })}
                   </div>
-                </div>
+                )}
               </div>
-            ) : (
-              // Regular: Single account selection
-              <>
-                <div
-                  className="text-[10px] font-medium uppercase tracking-wider mb-2"
-                  style={{ color: "var(--text-tertiary)" }}
-                >
-                  Account / Card
+            </div>
+          ) : (
+            // Regular: Single account selection
+            <>
+              <div
+                className="text-[10px] font-medium uppercase tracking-wider mb-2"
+                style={{ color: "var(--text-tertiary)" }}
+              >
+                Account
+              </div>
+              {props.accounts.length === 0 ? (
+                // Skeleton with Add button when no accounts
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccountDialog(true)}
+                    className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg text-xs font-medium transition-colors"
+                    style={{
+                      backgroundColor: "transparent",
+                      color: "var(--primary)",
+                      border: "1px dashed var(--primary)",
+                    }}
+                  >
+                    <Lucide.Plus className="h-3.5 w-3.5" />
+                    Add
+                  </button>
                 </div>
+              ) : (
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: "none" }}>
                   {props.accounts.map((acc) => {
                     const isSelected = state.draft.account.accountId === acc.id;
@@ -430,10 +489,10 @@ export function QuickLogForm(props: QuickLogFormProps) {
                     );
                   })}
                 </div>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
 
         {/* Inline Details Expander */}
         <DetailsExpander
@@ -525,6 +584,16 @@ export function QuickLogForm(props: QuickLogFormProps) {
         onSubmit={() => dispatch({ type: "SUBMIT" })}
         helperText={helperText}
         error={state.status === "error" ? state.lastError : undefined}
+      />
+
+      {/* Add Account Dialog */}
+      <AddAccountDialog
+        open={showAddAccountDialog}
+        onOpenChange={setShowAddAccountDialog}
+        onAccountCreated={(accountId) => {
+          // Auto-select the newly created account
+          dispatch({ type: "SET_ACCOUNT", patch: { accountId: accountId as unknown as AccountOption["id"] } });
+        }}
       />
     </div>
   );

@@ -14,3 +14,6 @@ export { ContextTagPicker, useFilteredContextTags, type ContextTagPickerProps } 
 
 // Entry display
 export { EntryPreview, EntryPreviewList, type EntryPreviewProps } from "./EntryPreview";
+
+// UI Components
+export { default as SectionHeader, DismissableSectionHeader } from "./SectionHeader";

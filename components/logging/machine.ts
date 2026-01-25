@@ -80,6 +80,13 @@ export type Event =
 // Create Initial State
 // ============================================
 export function createInitialState(args: InitArgs): QuickLogState {
+  // Debug: log what we're initializing with
+  console.log("[QuickLog machine] createInitialState called with existing:", {
+    title: args.existing?.title,
+    merchant: args.existing?.merchant,
+    subcategoryId: args.existing?.subcategoryId,
+    categoryId: args.existing?.categoryId,
+  });
   const base: TxDraft = {
     id: args.existing?.id,
     type: args.existing?.type ?? "spent",

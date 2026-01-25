@@ -49,9 +49,13 @@
   --ocean-foam: #8BA0AC;                   /* Where ocean meets foam */
   --ocean-light: #A8BAC5;                  /* Light ocean tint */
   
-  /* -------- Sea Glass (from foam reflections) -------- */
+  /* -------- Sea Glass / Sea Green (from foam & shallow water) -------- */
   --sea-glass: #C5D8DC;                    /* Pale blue-gray from foam */
   --sea-glass-subtle: rgba(197, 216, 220, 0.30);
+  --sea-green: #5A9A94;                    /* Muted teal-green from shallow water */
+  --sea-green-light: #7AB5AE;              /* Lighter sea green */
+  --sea-green-deep: #4A8A84;               /* Deeper sea green */
+  --sea-green-subtle: rgba(90, 154, 148, 0.12);  /* Very subtle tint */
   
   /* -------- Background Layer System -------- */
   --bg: var(--sand-dry);                   /* bg = Dry Sand (warm beige) */
@@ -67,9 +71,10 @@
   --text: var(--ocean-deep);               /* Primary: Deep ocean slate */
   --muted: var(--ocean-slate);             /* Secondary: lighter slate */
   
-  /* -------- Borders -------- */
-  --border: rgba(74, 89, 104, 0.14);       /* Ocean-tinted border */
-  --border-foam: rgba(74, 89, 104, 0.08);  /* Hairline for foam cards */
+  /* -------- Borders (Sea-Green Tinted!) -------- */
+  --border: rgba(90, 154, 148, 0.22);      /* Sea-green tinted border */
+  --border-foam: rgba(90, 154, 148, 0.12); /* Subtle sea-green for cards */
+  --border-ocean: rgba(74, 89, 104, 0.14); /* Ocean slate border (alt) */
   
   /* -------- Primary Accent (BURNT ORANGE - the painting's hero!) -------- */
   --primary: var(--terracotta);            /* The burnt orange from wet sand ridge */
@@ -180,22 +185,32 @@
       var(--sand-dry) 100%                /* Dry beige sand */
     );
   
+  /* -------- Sand Texture (like real beach sand) -------- */
+  --sand-texture: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  
   /* -------- Background (Beachy gradient you can feel!) -------- */
   --bg-full: 
-    /* Ocean atmosphere at top - visible! */
+    /* Ocean atmosphere at top - MORE visible! */
     linear-gradient(180deg, 
-      rgba(74, 89, 104, 0.08) 0%,
-      rgba(106, 127, 142, 0.05) 8%,
-      transparent 20%
+      rgba(74, 89, 104, 0.18) 0%,
+      rgba(90, 154, 148, 0.12) 8%,         /* Sea green hint - stronger */
+      rgba(106, 127, 142, 0.08) 15%,
+      rgba(90, 154, 148, 0.04) 25%,
+      transparent 35%
     ),
-    /* Burnt orange warmth in upper-mid section */
-    radial-gradient(ellipse 140% 35% at 50% 25%, rgba(196, 114, 74, 0.12) 0%, transparent 70%),
+    /* Burnt orange warmth band (like wet sand at shoreline) - BOOSTED */
+    radial-gradient(ellipse 160% 30% at 50% 20%, rgba(196, 114, 74, 0.20) 0%, transparent 65%),
+    /* Sea green shimmer (like sunlight on shallow water) - MORE visible */
+    radial-gradient(ellipse 130% 45% at 25% 40%, rgba(90, 154, 148, 0.10) 0%, transparent 55%),
+    radial-gradient(ellipse 110% 40% at 75% 50%, rgba(90, 154, 148, 0.08) 0%, transparent 55%),
     /* Warm sand base with natural variation */
     linear-gradient(175deg, 
       #F4E8D6 0%,                          /* Lighter warm sand */
-      var(--sand-dry) 30%,                 /* Main sand color */
-      var(--sand-warm) 60%,                /* Warmer mid-section */
-      var(--sand-dry) 100%                 /* Back to lighter */
+      var(--sand-dry) 25%,                 /* Main sand color */
+      #EFE0C8 45%,                         /* Slight warm variation */
+      var(--sand-warm) 65%,                /* Warmer mid-section */
+      var(--sand-dry) 85%,                 /* Back to lighter */
+      #F4E8D6 100%                         /* Soft edge */
     );
   
   /* -------- Semantic mappings -------- */
@@ -268,6 +283,11 @@
   --chip-exclude-border: rgba(74, 89, 104, 0.40);
   --chip-exclude-text: var(--ocean-deep);
   
+  /* -------- Card Styling (Foam with sea-green border) -------- */
+  --card-border: var(--border-foam);       /* Sea-green tinted */
+  --card-shadow: var(--shadow-foam);
+  --card-highlight: rgba(90, 154, 148, 0.08); /* Sea-green inner glow on hover */
+  
   /* -------- shadcn/ui Compatibility -------- */
   --background: var(--canvas);
   --foreground: var(--text);
@@ -320,6 +340,322 @@
   /* Empty states */
   --empty-grain-opacity: 0.025;
   --empty-gradient: radial-gradient(ellipse 80% 40% at 50% 30%, rgba(196, 114, 74, 0.06) 0%, transparent 70%);
+  
+  /* Atmosphere overlay (beach theme) */
+  --atmosphere-overlay: linear-gradient(180deg,
+    rgba(74, 89, 104, 0.14) 0%,
+    rgba(90, 154, 148, 0.12) 10%,
+    rgba(106, 127, 142, 0.10) 20%,
+    rgba(90, 154, 148, 0.08) 30%,
+    rgba(139, 160, 172, 0.06) 40%,
+    rgba(196, 114, 74, 0.08) 55%,
+    rgba(214, 139, 98, 0.04) 70%,
+    transparent 90%
+  );
+  --atmosphere-height: 300px;
+  --use-sand-texture: 1;
+  
+  /* ======== ROCKET MONEY-INSPIRED HEADER SYSTEM ======== */
+  /* Bold gradient header band that creates visual hierarchy */
+  --header-gradient: linear-gradient(135deg, 
+    var(--terracotta) 0%, 
+    var(--coral-pink) 50%,
+    var(--terracotta-deep) 100%
+  );
+  --header-text: #FFFFFF;
+  --header-text-muted: rgba(255, 255, 255, 0.85);
+  --header-height: 180px;
+  
+  /* Tab underline indicator (Rocket Money style) */
+  --tab-indicator-color: var(--terracotta);
+  --tab-indicator-height: 3px;
+  
+  /* Floating card system */
+  --floating-card-shadow: 0 4px 20px -4px rgba(74, 89, 104, 0.15),
+                          0 8px 40px -8px rgba(74, 89, 104, 0.10);
+  --floating-card-border: rgba(255, 255, 255, 0.8);
+  
+  /* Category badge colors (from beach palette) */
+  --badge-blue: rgba(74, 89, 104, 0.12);
+  --badge-blue-text: var(--ocean-deep);
+  --badge-green: rgba(90, 148, 116, 0.12);
+  --badge-green-text: #3D6B52;
+  --badge-orange: rgba(196, 114, 74, 0.12);
+  --badge-orange-text: var(--terracotta-deep);
+  --badge-teal: rgba(90, 154, 148, 0.12);
+  --badge-teal-text: var(--sea-green-deep);
+  --badge-pink: rgba(201, 138, 122, 0.15);
+  --badge-pink-text: #8B5A4A;
+  
+  /* Category badge numbered system */
+  --category-badge-1: rgba(90, 148, 116, 0.18);      /* Green - income */
+  --category-badge-1-text: #3D6B52;
+  --category-badge-2: rgba(74, 89, 104, 0.15);      /* Ocean slate - bills */
+  --category-badge-2-text: var(--ocean-deep);
+  --category-badge-3: rgba(196, 114, 74, 0.15);     /* Terracotta - food */
+  --category-badge-3-text: var(--terracotta-deep);
+  --category-badge-4: rgba(90, 154, 148, 0.15);     /* Sea green - shopping */
+  --category-badge-4-text: var(--sea-green-deep);
+  --category-badge-5: rgba(106, 127, 142, 0.15);    /* Ocean mid - transport */
+  --category-badge-5-text: var(--ocean-slate);
+  --category-badge-6: rgba(184, 107, 74, 0.15);     /* Rust - entertainment */
+  --category-badge-6-text: var(--rust-accent);
+  --category-badge-7: rgba(122, 181, 174, 0.18);    /* Sea green light - health */
+  --category-badge-7-text: var(--sea-green);
+  --category-badge-8: rgba(201, 138, 122, 0.15);    /* Coral - education */
+  --category-badge-8-text: #8B5A4A;
+}
+
+/* ============================================
+   PORCELAIN THEME — "PRISMATIC APERTURE"
+   
+   Design Philosophy:
+   Inspired by the Ryze Inc logo — a cosmic aperture with flowing
+   prismatic bands of color (iris → orchid → rose → ember) swirling
+   around a deep cosmic center with starfield warmth.
+   
+   Visual Language:
+   - Clean porcelain canvas as the "white space"
+   - Prismatic gradient accents that FLOW (not static)
+   - Deep cosmic ink for text (like the logo's center)
+   - Multiple accent colors used together, not just one
+   - Subtle prismatic shimmer in the atmosphere
+   ============================================ */
+html.porcelain {
+  /* -------- Porcelain Canvas -------- */
+  --porcelain: #FCFBFA;                    /* Premium white canvas */
+  --soft-paper: #F6F4F1;                   /* Soft warm white */
+  --warm-ash: #E8E3DF;                     /* Neutral borders */
+  
+  /* -------- Cosmic Ink (from logo center) -------- */
+  --deep-core: #0B1026;                    /* The cosmic void - deepest */
+  --ink: #0F1320;                          /* Primary text */
+  --slate: #354158;                        /* Secondary text */
+  --slate-light: #64748B;                  /* Tertiary text */
+  
+  /* -------- Prismatic Spectrum (the flowing bands!) -------- */
+  --iris: #5F64E8;                         /* Cool blue-violet */
+  --iris-bright: #4F6CFF;                  /* Electric iris */
+  --indigo: #1E2EA8;                       /* Deep indigo */
+  --orchid: #9B3FE0;                       /* Rich purple */
+  --orchid-soft: #BD61D4;                  /* Soft orchid-pink */
+  --rose: #E53A5D;                         /* Vibrant rose */
+  --ember: #FF8A2A;                        /* Warm ember orange */
+  --ember-glow: #F9AA88;                   /* Soft ember (from logo edge) */
+  
+  /* -------- The Signature Prismatic Gradient -------- */
+  --prismatic-gradient: linear-gradient(135deg, 
+    #5F64E8 0%, 
+    #BD61D4 50%, 
+    #F9AA88 100%
+  );
+  --prismatic-gradient-vivid: linear-gradient(135deg, 
+    #4F6CFF 0%, 
+    #9B3FE0 35%,
+    #E53A5D 65%,
+    #FF8A2A 100%
+  );
+  --prismatic-conic: conic-gradient(from 180deg, 
+    #5F64E8, #BD61D4, #F9AA88, #5F64E8
+  );
+  
+  /* -------- Background System -------- */
+  --bg: var(--porcelain);
+  --bg-elevated: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-2: var(--soft-paper);
+  --bg-gradient-a: var(--porcelain);
+  --bg-gradient-b: var(--soft-paper);
+  
+  /* Prismatic atmosphere background (like light through an aperture) */
+  --bg-full: 
+    /* Iris glow - top left */
+    radial-gradient(ellipse 80% 50% at 15% 10%, rgba(95, 100, 232, 0.08) 0%, transparent 50%),
+    /* Orchid bloom - top right */
+    radial-gradient(ellipse 70% 45% at 85% 15%, rgba(155, 63, 224, 0.06) 0%, transparent 50%),
+    /* Ember warmth - bottom accent */
+    radial-gradient(ellipse 90% 40% at 50% 95%, rgba(249, 170, 136, 0.05) 0%, transparent 40%),
+    /* Rose kiss - mid right */
+    radial-gradient(ellipse 50% 35% at 90% 50%, rgba(229, 58, 93, 0.03) 0%, transparent 40%),
+    /* Clean porcelain base */
+    linear-gradient(175deg, var(--porcelain) 0%, var(--soft-paper) 60%, var(--porcelain) 100%);
+  
+  /* -------- Typography -------- */
+  --text: var(--ink);
+  --muted: var(--slate);
+  --text-secondary: var(--slate);
+  --text-tertiary: var(--slate-light);
+  --text-placeholder: #94A3B8;
+  
+  /* -------- Borders (subtle prismatic tint) -------- */
+  --border: var(--warm-ash);
+  --border-subtle: rgba(232, 227, 223, 0.6);
+  --border-prismatic: linear-gradient(135deg, rgba(95, 100, 232, 0.2), rgba(189, 97, 212, 0.2), rgba(249, 170, 136, 0.2));
+  
+  /* -------- Primary Accent (Iris as base, but prismatic for CTAs) -------- */
+  --primary: var(--iris);
+  --primary-hover: var(--indigo);
+  --primary-foreground: #FFFFFF;
+  
+  /* -------- Semantic Colors -------- */
+  --success: #059669;
+  --success-subtle: rgba(5, 150, 105, 0.10);
+  --success-foreground: #D1FAE5;
+  --danger: var(--rose);
+  --danger-subtle: rgba(229, 58, 93, 0.10);
+  --danger-foreground: #FEE2E2;
+  --warning: var(--ember);
+  --warning-subtle: rgba(255, 138, 42, 0.10);
+  --warning-foreground: #FEF3C7;
+  
+  /* Money colors */
+  --income: var(--success);
+  --expense: var(--slate);
+  --net: var(--iris);
+  --net-subtle: rgba(95, 100, 232, 0.10);
+  
+  /* -------- Shadows (with prismatic glow option) -------- */
+  --shadow: 0px 1px 2px rgba(11, 16, 38, 0.04),
+            0px 4px 12px rgba(11, 16, 38, 0.06);
+  --shadow-card: 0px 1px 3px rgba(11, 16, 38, 0.05),
+                 0px 6px 20px rgba(11, 16, 38, 0.08);
+  --shadow-lg: 0px 10px 24px rgba(11, 16, 38, 0.12);
+  
+  /* Prismatic glow for FAB and primary CTAs */
+  --shadow-glow: 0 0 20px rgba(95, 100, 232, 0.3), 
+                 0 0 40px rgba(189, 97, 212, 0.15);
+  --shadow-glow-lg: 0 0 30px rgba(95, 100, 232, 0.35), 
+                    0 0 60px rgba(189, 97, 212, 0.2),
+                    0 0 80px rgba(249, 170, 136, 0.1);
+  
+  /* -------- Surface Layers -------- */
+  --canvas: var(--bg);
+  --surface-elevated: #FFFFFF;
+  --surface-subtle: var(--surface-2);
+  
+  /* -------- Accent Mappings (prismatic!) -------- */
+  --accent: var(--iris);
+  --accent-hover: var(--indigo);
+  --accent-foreground: #FFFFFF;
+  --accent-subtle: rgba(95, 100, 232, 0.12);
+  --accent-orchid: var(--orchid);
+  --accent-rose: var(--rose);
+  --accent-ember: var(--ember);
+  
+  /* -------- Charts (Full prismatic spectrum!) -------- */
+  --chart-1: var(--iris);                  /* Blue-violet */
+  --chart-2: var(--orchid);                /* Purple */
+  --chart-3: var(--orchid-soft);           /* Soft pink-purple */
+  --chart-4: var(--rose);                  /* Rose */
+  --chart-5: var(--ember);                 /* Ember orange */
+  --chart-6: var(--ember-glow);            /* Soft peach */
+  --chart-7: var(--indigo);                /* Deep indigo */
+  --chart-8: var(--iris-bright);           /* Electric blue */
+  
+  /* -------- Component Tokens -------- */
+  
+  /* Buttons - PRISMATIC gradient for primary! */
+  --btn-primary-gradient: var(--prismatic-gradient);
+  --btn-primary-gradient-hover: var(--prismatic-gradient-vivid);
+  --shadow-fab: var(--shadow-glow);
+  
+  /* Tabs - subtle prismatic tint on selection */
+  --tab-selected-bg: linear-gradient(135deg, rgba(95, 100, 232, 0.10) 0%, rgba(189, 97, 212, 0.06) 100%);
+  --tab-selected-text: var(--iris);
+  --tab-border: transparent;
+  
+  /* Chips - prismatic tints */
+  --chip-include-bg: linear-gradient(135deg, rgba(95, 100, 232, 0.10) 0%, rgba(155, 63, 224, 0.06) 100%);
+  --chip-include-border: rgba(95, 100, 232, 0.30);
+  --chip-include-text: var(--indigo);
+  --chip-exclude-bg: rgba(229, 58, 93, 0.08);
+  --chip-exclude-border: rgba(229, 58, 93, 0.25);
+  --chip-exclude-text: var(--rose);
+  
+  /* Badges - each can use different prismatic colors */
+  --badge-iris: rgba(95, 100, 232, 0.12);
+  --badge-orchid: rgba(155, 63, 224, 0.12);
+  --badge-rose: rgba(229, 58, 93, 0.12);
+  --badge-ember: rgba(255, 138, 42, 0.12);
+  
+  /* Focus ring - prismatic! */
+  --ring: var(--iris);
+  --ring-offset: var(--porcelain);
+  
+  /* Empty states */
+  --empty-grain-opacity: 0.01;
+  --empty-gradient: radial-gradient(ellipse 80% 40% at 50% 30%, 
+    rgba(95, 100, 232, 0.05) 0%, 
+    rgba(189, 97, 212, 0.03) 50%,
+    transparent 70%
+  );
+  
+  /* -------- Atmosphere Overlay (PRISMATIC aurora!) -------- */
+  --atmosphere-overlay: 
+    /* Iris band - left */
+    radial-gradient(ellipse 60% 80% at 10% 0%, rgba(95, 100, 232, 0.12) 0%, transparent 50%),
+    /* Orchid bloom - center-right */
+    radial-gradient(ellipse 50% 70% at 70% 5%, rgba(155, 63, 224, 0.10) 0%, transparent 45%),
+    /* Rose accent - right edge */
+    radial-gradient(ellipse 40% 60% at 95% 15%, rgba(229, 58, 93, 0.06) 0%, transparent 40%),
+    /* Ember warmth - far right */
+    radial-gradient(ellipse 35% 50% at 100% 25%, rgba(249, 170, 136, 0.05) 0%, transparent 35%),
+    /* Soft overall gradient */
+    linear-gradient(180deg, rgba(95, 100, 232, 0.03) 0%, transparent 40%);
+  --atmosphere-height: 280px;
+  --use-sand-texture: 0;
+  
+  /* ======== ROCKET MONEY-INSPIRED HEADER SYSTEM ======== */
+  /* PRISMATIC gradient header - the signature look! */
+  --header-gradient: linear-gradient(135deg, 
+    #5F64E8 0%,                            /* Iris */
+    #9B3FE0 35%,                           /* Orchid */
+    #BD61D4 60%,                           /* Soft orchid */
+    #E53A5D 85%,                           /* Rose */
+    #FF8A2A 100%                           /* Ember */
+  );
+  --header-text: #FFFFFF;
+  --header-text-muted: rgba(255, 255, 255, 0.85);
+  --header-height: 180px;
+  
+  /* Tab underline indicator (prismatic) */
+  --tab-indicator-color: var(--iris);
+  --tab-indicator-height: 3px;
+  
+  /* Floating card system */
+  --floating-card-shadow: 0 4px 24px -4px rgba(11, 16, 38, 0.12),
+                          0 12px 48px -8px rgba(95, 100, 232, 0.08);
+  --floating-card-border: rgba(255, 255, 255, 0.9);
+  
+  /* Category badge colors (prismatic palette) */
+  --badge-blue: rgba(95, 100, 232, 0.12);
+  --badge-blue-text: var(--indigo);
+  --badge-green: rgba(5, 150, 105, 0.12);
+  --badge-green-text: #047857;
+  --badge-orange: rgba(255, 138, 42, 0.12);
+  --badge-orange-text: #C2410C;
+  --badge-purple: rgba(155, 63, 224, 0.12);
+  --badge-purple-text: #7C3AED;
+  --badge-pink: rgba(229, 58, 93, 0.12);
+  --badge-pink-text: #BE185D;
+  
+  /* Category badge numbered system (for CategoryBadge component) */
+  --category-badge-1: rgba(5, 150, 105, 0.15);       /* Green - income */
+  --category-badge-1-text: #047857;
+  --category-badge-2: rgba(95, 100, 232, 0.15);      /* Iris - bills/utilities */
+  --category-badge-2-text: #3730A3;
+  --category-badge-3: rgba(155, 63, 224, 0.15);     /* Orchid - food/dining */
+  --category-badge-3-text: #7C3AED;
+  --category-badge-4: rgba(20, 184, 166, 0.15);     /* Teal - shopping */
+  --category-badge-4-text: #0D9488;
+  --category-badge-5: rgba(59, 130, 246, 0.15);     /* Blue - transport */
+  --category-badge-5-text: #2563EB;
+  --category-badge-6: rgba(255, 138, 42, 0.15);     /* Ember - entertainment */
+  --category-badge-6-text: #C2410C;
+  --category-badge-7: rgba(6, 182, 212, 0.15);      /* Cyan - health */
+  --category-badge-7-text: #0891B2;
+  --category-badge-8: rgba(139, 92, 246, 0.15);     /* Violet - education */
+  --category-badge-8-text: #6D28D9;
 }
 
 /* -------- Dim Theme (Beta) -------- */
@@ -381,6 +717,57 @@ html.dim {
   --sidebar-bg: var(--surface);
   --sidebar-active: var(--accent-subtle);
   --sidebar-active-text: var(--accent);
+  
+  /* Atmosphere overlay (subtle for dim theme) */
+  --atmosphere-overlay: linear-gradient(180deg,
+    rgba(127, 209, 194, 0.04) 0%,
+    transparent 40%
+  );
+  --atmosphere-height: 150px;
+  
+  /* ======== HEADER SYSTEM (Dim) ======== */
+  --header-gradient: linear-gradient(135deg, 
+    #1A1612 0%, 
+    #2E2B28 50%,
+    #3D3A36 100%
+  );
+  --header-text: #F5F5F4;
+  --header-text-muted: rgba(245, 245, 244, 0.75);
+  --header-height: 160px;
+  --tab-indicator-color: var(--primary);
+  --tab-indicator-height: 3px;
+  --floating-card-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
+  --floating-card-border: rgba(61, 58, 54, 0.5);
+  
+  /* Category badges */
+  --badge-blue: rgba(127, 209, 194, 0.15);
+  --badge-blue-text: #7FD1C2;
+  --badge-green: rgba(92, 184, 142, 0.15);
+  --badge-green-text: #5CB88E;
+  --badge-orange: rgba(251, 191, 36, 0.15);
+  --badge-orange-text: #FBBF24;
+  --badge-purple: rgba(167, 139, 250, 0.15);
+  --badge-purple-text: #A78BFA;
+  --badge-pink: rgba(244, 114, 182, 0.15);
+  --badge-pink-text: #F472B6;
+  
+  /* Category badge numbered system */
+  --category-badge-1: rgba(92, 184, 142, 0.20);      /* Green - income */
+  --category-badge-1-text: #5CB88E;
+  --category-badge-2: rgba(127, 209, 194, 0.20);    /* Teal - bills */
+  --category-badge-2-text: #7FD1C2;
+  --category-badge-3: rgba(167, 139, 250, 0.20);    /* Purple - food */
+  --category-badge-3-text: #A78BFA;
+  --category-badge-4: rgba(45, 212, 191, 0.20);     /* Cyan - shopping */
+  --category-badge-4-text: #2DD4BF;
+  --category-badge-5: rgba(96, 165, 250, 0.20);     /* Blue - transport */
+  --category-badge-5-text: #60A5FA;
+  --category-badge-6: rgba(251, 191, 36, 0.20);     /* Amber - entertainment */
+  --category-badge-6-text: #FBBF24;
+  --category-badge-7: rgba(34, 211, 238, 0.20);     /* Cyan - health */
+  --category-badge-7-text: #22D3EE;
+  --category-badge-8: rgba(192, 132, 252, 0.20);    /* Violet - education */
+  --category-badge-8-text: #C084FC;
 }
 
 /* -------- Estate Theme (Black + Green Fintech) -------- */
@@ -450,6 +837,58 @@ html.estate {
   --chart-4: #4ADE80;
   --chart-5: #22D3EE;
   --chart-6: #34D399;
+  
+  /* Atmosphere overlay (subtle green glow for estate) */
+  --atmosphere-overlay: linear-gradient(180deg,
+    rgba(0, 210, 106, 0.05) 0%,
+    transparent 35%
+  );
+  --atmosphere-height: 120px;
+  
+  /* ======== HEADER SYSTEM (Estate - dark green premium) ======== */
+  --header-gradient: linear-gradient(135deg, 
+    #0A0A0A 0%, 
+    #111111 40%,
+    #00D26A 100%
+  );
+  --header-text: #F0F0F0;
+  --header-text-muted: rgba(240, 240, 240, 0.75);
+  --header-height: 160px;
+  --tab-indicator-color: var(--primary);
+  --tab-indicator-height: 3px;
+  --floating-card-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.5),
+                          0 8px 40px -8px rgba(0, 210, 106, 0.1);
+  --floating-card-border: rgba(42, 42, 42, 0.8);
+  
+  /* Category badges */
+  --badge-blue: rgba(56, 189, 248, 0.15);
+  --badge-blue-text: #38BDF8;
+  --badge-green: rgba(0, 210, 106, 0.15);
+  --badge-green-text: #00D26A;
+  --badge-orange: rgba(251, 191, 36, 0.15);
+  --badge-orange-text: #FBBF24;
+  --badge-purple: rgba(167, 139, 250, 0.15);
+  --badge-purple-text: #A78BFA;
+  --badge-pink: rgba(244, 114, 182, 0.15);
+  --badge-pink-text: #F472B6;
+  
+  /* Category badge numbered system */
+  --category-badge-1: rgba(0, 210, 106, 0.20);       /* Green - income */
+  --category-badge-1-text: #00D26A;
+  --category-badge-2: rgba(56, 189, 248, 0.20);     /* Sky - bills */
+  --category-badge-2-text: #38BDF8;
+  --category-badge-3: rgba(167, 139, 250, 0.20);    /* Purple - food */
+  --category-badge-3-text: #A78BFA;
+  --category-badge-4: rgba(45, 212, 191, 0.20);     /* Teal - shopping */
+  --category-badge-4-text: #2DD4BF;
+  --category-badge-5: rgba(96, 165, 250, 0.20);     /* Blue - transport */
+  --category-badge-5-text: #60A5FA;
+  --category-badge-6: rgba(251, 191, 36, 0.20);     /* Amber - entertainment */
+  --category-badge-6-text: #FBBF24;
+  --category-badge-7: rgba(34, 211, 238, 0.20);     /* Cyan - health */
+  --category-badge-7-text: #22D3EE;
+  --category-badge-8: rgba(192, 132, 252, 0.20);    /* Violet - education */
+  --category-badge-8-text: #C084FC;
 }
 
 /* -------- Clarity Theme (White + Blue Fintech) -------- */
@@ -519,6 +958,58 @@ html.clarity {
   --chart-4: #06B6D4;
   --chart-5: #14B8A6;
   --chart-6: #6366F1;
+  
+  /* Atmosphere overlay (subtle blue for clarity) */
+  --atmosphere-overlay: linear-gradient(180deg,
+    rgba(37, 99, 235, 0.04) 0%,
+    transparent 30%
+  );
+  --atmosphere-height: 120px;
+  
+  /* ======== HEADER SYSTEM (Clarity - clean blue) ======== */
+  --header-gradient: linear-gradient(135deg, 
+    #2563EB 0%, 
+    #3B82F6 50%,
+    #60A5FA 100%
+  );
+  --header-text: #FFFFFF;
+  --header-text-muted: rgba(255, 255, 255, 0.85);
+  --header-height: 160px;
+  --tab-indicator-color: var(--primary);
+  --tab-indicator-height: 3px;
+  --floating-card-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1),
+                          0 8px 40px -8px rgba(37, 99, 235, 0.08);
+  --floating-card-border: rgba(255, 255, 255, 0.9);
+  
+  /* Category badges */
+  --badge-blue: rgba(37, 99, 235, 0.10);
+  --badge-blue-text: #1D4ED8;
+  --badge-green: rgba(22, 163, 74, 0.10);
+  --badge-green-text: #15803D;
+  --badge-orange: rgba(234, 88, 12, 0.10);
+  --badge-orange-text: #C2410C;
+  --badge-purple: rgba(124, 58, 237, 0.10);
+  --badge-purple-text: #6D28D9;
+  --badge-pink: rgba(219, 39, 119, 0.10);
+  --badge-pink-text: #BE185D;
+  
+  /* Category badge numbered system */
+  --category-badge-1: rgba(22, 163, 74, 0.12);       /* Green - income */
+  --category-badge-1-text: #15803D;
+  --category-badge-2: rgba(37, 99, 235, 0.12);      /* Blue - bills */
+  --category-badge-2-text: #1D4ED8;
+  --category-badge-3: rgba(124, 58, 237, 0.12);     /* Purple - food */
+  --category-badge-3-text: #6D28D9;
+  --category-badge-4: rgba(20, 184, 166, 0.12);     /* Teal - shopping */
+  --category-badge-4-text: #0D9488;
+  --category-badge-5: rgba(14, 165, 233, 0.12);     /* Sky - transport */
+  --category-badge-5-text: #0284C7;
+  --category-badge-6: rgba(234, 88, 12, 0.12);      /* Orange - entertainment */
+  --category-badge-6-text: #C2410C;
+  --category-badge-7: rgba(6, 182, 212, 0.12);      /* Cyan - health */
+  --category-badge-7-text: #0891B2;
+  --category-badge-8: rgba(139, 92, 246, 0.12);     /* Violet - education */
+  --category-badge-8-text: #7C3AED;
 }
 
 /* ============================================
@@ -545,10 +1036,23 @@ body {
   line-height: 1.5;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   min-height: 100vh;
+  position: relative;
+}
+
+/* Sand texture overlay on body - only for Warm Sand theme */
+html.light body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='sand'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23sand)'/%3E%3C/svg%3E");
+  opacity: 0.035;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  z-index: 0;
 }
 
 /* ============================================
-   COASTAL BACKGROUND UTILITIES
+   COASTAL BACKGROUND UTILITIES (Warm Sand theme)
    ============================================ */
 
 /* Background utility class */
@@ -586,11 +1090,11 @@ body {
   background-color: var(--bg-elevated);
 }
 
-/* Sand grain texture (very subtle noise) */
+/* Sand grain texture (very subtle noise) - only for Warm Sand */
 .sand-grain {
   position: relative;
 }
-.sand-grain::before {
+html.light .sand-grain::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -601,26 +1105,364 @@ body {
 }
 
 /* ============================================
-   FOAM CARD SYSTEM
+   PORCELAIN PRISMATIC UTILITIES
    ============================================ */
 
-/* Card utility - Foam Card treatment */
+/* Prismatic gradient background (signature element) */
+.gradient-prismatic {
+  background: var(--prismatic-gradient, linear-gradient(135deg, #5F64E8 0%, #BD61D4 50%, #F9AA88 100%));
+}
+
+/* Prismatic gradient text */
+.gradient-prismatic-text {
+  background: var(--prismatic-gradient, linear-gradient(135deg, #5F64E8 0%, #BD61D4 50%, #F9AA88 100%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Prismatic border (for premium CTAs) */
+html.porcelain .border-prismatic {
+  position: relative;
+}
+html.porcelain .border-prismatic::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--prismatic-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Prismatic glow effect */
+html.porcelain .prismatic-glow {
+  box-shadow: var(--shadow-glow);
+}
+html.porcelain .prismatic-glow:hover {
+  box-shadow: var(--shadow-glow-lg);
+}
+
+/* Prismatic underline accent */
+html.porcelain .accent-underline {
+  position: relative;
+  display: inline;
+}
+html.porcelain .accent-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0.1em;
+  width: 100%;
+  height: 3px;
+  background: var(--prismatic-gradient);
+  border-radius: 2px;
+}
+
+/* Prismatic divider */
+html.porcelain .divider-prismatic {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #5F64E8, #BD61D4, #F9AA88, transparent);
+}
+
+/* Subtle prismatic pulse animation for hero elements */
+@keyframes prismaticPulse {
+  0%, 100% {
+    opacity: 0.6;
+    filter: blur(40px);
+  }
+  50% {
+    opacity: 0.8;
+    filter: blur(50px);
+  }
+}
+
+html.porcelain .prismatic-pulse {
+  animation: prismaticPulse 6s ease-in-out infinite;
+}
+
+/* ============================================
+   ROCKET MONEY-INSPIRED COMPONENTS
+   Premium floating cards, header bands, badges
+   ============================================ */
+
+/* Header gradient band - the hero visual element */
+.header-band {
+  background: var(--header-gradient);
+  color: var(--header-text);
+  position: relative;
+  overflow: hidden;
+}
+
+.header-band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, 
+    rgba(255, 255, 255, 0.05) 0%, 
+    transparent 50%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  pointer-events: none;
+}
+
+/* Floating card - sits on gradient with elevated shadow */
+.floating-card {
+  background: var(--surface);
+  border-radius: var(--card-radius);
+  box-shadow: var(--floating-card-shadow);
+  border: 1px solid var(--floating-card-border);
+  position: relative;
+  z-index: 10;
+}
+
+/* Floating card that overlaps header */
+.floating-card-overlap {
+  margin-top: calc(-1 * var(--space-8));
+}
+
+/* Tab underline indicator (Rocket Money style) */
+.tab-underline {
+  position: relative;
+}
+
+.tab-underline::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--tab-indicator-height, 3px);
+  background: var(--tab-indicator-color);
+  border-radius: 2px 2px 0 0;
+  transform: scaleX(0);
+  transition: transform var(--motion-medium) var(--ease-out);
+}
+
+.tab-underline[data-active="true"]::after,
+.tab-underline.active::after {
+  transform: scaleX(1);
+}
+
+/* Category badge system - colored circles like Rocket Money */
+.category-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  font-size: var(--text-meta);
+}
+
+.category-badge-sm {
+  width: 32px;
+  height: 32px;
+  font-size: var(--text-micro);
+}
+
+.category-badge-lg {
+  width: 48px;
+  height: 48px;
+  font-size: var(--text-body);
+}
+
+/* Numbered category badge variants (1-8) - used by CategoryBadge component */
+.category-badge-1 {
+  background: var(--category-badge-1);
+  color: var(--category-badge-1-text);
+}
+
+.category-badge-2 {
+  background: var(--category-badge-2);
+  color: var(--category-badge-2-text);
+}
+
+.category-badge-3 {
+  background: var(--category-badge-3);
+  color: var(--category-badge-3-text);
+}
+
+.category-badge-4 {
+  background: var(--category-badge-4);
+  color: var(--category-badge-4-text);
+}
+
+.category-badge-5 {
+  background: var(--category-badge-5);
+  color: var(--category-badge-5-text);
+}
+
+.category-badge-6 {
+  background: var(--category-badge-6);
+  color: var(--category-badge-6-text);
+}
+
+.category-badge-7 {
+  background: var(--category-badge-7);
+  color: var(--category-badge-7-text);
+}
+
+.category-badge-8 {
+  background: var(--category-badge-8);
+  color: var(--category-badge-8-text);
+}
+
+/* Badge color variants */
+.badge-blue {
+  background: var(--badge-blue);
+  color: var(--badge-blue-text);
+}
+
+.badge-green {
+  background: var(--badge-green);
+  color: var(--badge-green-text);
+}
+
+.badge-orange {
+  background: var(--badge-orange);
+  color: var(--badge-orange-text);
+}
+
+.badge-purple {
+  background: var(--badge-purple, var(--badge-blue));
+  color: var(--badge-purple-text, var(--badge-blue-text));
+}
+
+.badge-pink {
+  background: var(--badge-pink);
+  color: var(--badge-pink-text);
+}
+
+.badge-teal {
+  background: var(--badge-teal, var(--badge-blue));
+  color: var(--badge-teal-text, var(--badge-blue-text));
+}
+
+/* Income indicator (green circle with $ sign) */
+.income-badge {
+  background: var(--badge-green);
+  color: var(--badge-green-text);
+}
+
+/* Upcoming bill cards (horizontal scroll like Rocket Money) */
+.upcoming-cards {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.upcoming-cards::-webkit-scrollbar {
+  display: none;
+}
+
+.upcoming-card {
+  flex: 0 0 auto;
+  width: 140px;
+  scroll-snap-align: start;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.upcoming-card-header {
+  width: 100%;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Section header style (uppercase label like Rocket Money) */
+.section-header {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: var(--space-3) 0;
+}
+
+/* Dismissible card prompt */
+.promo-card {
+  background: var(--surface);
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border);
+  padding: var(--space-5);
+  position: relative;
+}
+
+.promo-card-dismiss {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-meta);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ============================================
+   FOAM CARD SYSTEM (with sea-green accents)
+   ============================================ */
+
+/* Card utility - Foam Card treatment with sea-green tint */
 .card {
   background-color: var(--surface);
-  border: 1px solid var(--border-foam);
+  border: 1px solid var(--border-foam);  /* Sea-green tinted border */
   border-radius: var(--card-radius);
   box-shadow: var(--shadow-card);
   padding: var(--card-padding);
   position: relative;
+  transition: border-color var(--motion-fast) var(--ease-out),
+              box-shadow var(--motion-fast) var(--ease-out);
+}
+
+/* Card hover - subtle sea-green glow */
+.card:hover,
+.card-hover:hover {
+  border-color: rgba(90, 154, 148, 0.28);
+  box-shadow: var(--shadow-card), 
+              0 0 0 1px rgba(90, 154, 148, 0.06);
 }
 
 /* Foam card with inner highlight (light catching foam) */
 .card-foam {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, var(--surface) 8%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, var(--surface) 12%);
   border: 1px solid var(--border-foam);
   border-radius: var(--card-radius);
   box-shadow: var(--shadow-foam), var(--shadow-inner-highlight);
   padding: var(--card-padding);
+}
+
+/* Sea-green accent card variant */
+.card-sea {
+  background: linear-gradient(180deg, rgba(90, 154, 148, 0.03) 0%, var(--surface) 20%);
+  border: 1px solid rgba(90, 154, 148, 0.18);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--card-padding);
+}
+
+/* Sea-green accent card hover */
+.card-sea:hover {
+  border-color: rgba(90, 154, 148, 0.35);
+  box-shadow: var(--shadow-card),
+              0 0 0 2px rgba(90, 154, 148, 0.08);
 }
 
 /* Input utility - Shell Cream styling */

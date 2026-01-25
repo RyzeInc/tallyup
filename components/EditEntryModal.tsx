@@ -18,6 +18,8 @@ interface Entry {
   date: number;
   category?: string;
   categoryId?: Id<"categories">;
+  subcategoryId?: Id<"categories">;
+  title?: string;
   bucket?: string;
   note?: string;
   merchant?: string;
@@ -224,6 +226,14 @@ export default function EditEntryModal({
 
   // Map the existing entry into the QuickLog TxDraft shape - memoized to avoid re-creating on every render
   const existingDraft = useMemo<TxDraft>(() => {
+    // Debug: log the raw entry data being mapped
+    console.log("[EditEntryModal] Mapping entry to draft:", {
+      id: entry._id,
+      title: entry.title,
+      merchant: entry.merchant,
+      subcategoryId: entry.subcategoryId,
+      categoryId: entry.categoryId,
+    });
     const d = new Date(entry.date);
     const dateISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
       d.getDate()
@@ -261,9 +271,11 @@ export default function EditEntryModal({
       type,
       amount: (Math.abs(entry.amountCents) / 100).toFixed(2),
       dateISO,
+      title: entry.title ?? undefined,
       merchant: entry.merchant ?? undefined,
       note: entry.note ?? undefined,
       categoryId: entry.categoryId ?? undefined,
+      subcategoryId: entry.subcategoryId ?? undefined,
       contextScope,
       contextFlags: flags,
       intent,
@@ -273,7 +285,7 @@ export default function EditEntryModal({
       recurring: undefined,
       needsReview: entry.needsReview ?? false,
     };
-  }, [entry._id, entry.type, entry.amountCents, entry.date, entry.merchant, entry.note, entry.category, entry.bucket, entry.tags, entry.methodOrAccount, entry.needsReview, entry.accountId, entry.goalId, entry.contextTags, entry.intentTags]);
+  }, [entry._id, entry.type, entry.amountCents, entry.date, entry.title, entry.merchant, entry.note, entry.category, entry.bucket, entry.tags, entry.methodOrAccount, entry.needsReview, entry.accountId, entry.goalId, entry.contextTags, entry.intentTags, entry.categoryId, entry.subcategoryId]);
 
   // Memoize the date for QuickLogForm to avoid triggering re-renders
   const nowDateISO = useMemo(() => todayISO(), []);
@@ -308,6 +320,9 @@ export default function EditEntryModal({
       await updateEntry({
         id: entry._id as Id<"entries">,
         categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
+        subcategoryId: (draft.subcategoryId || undefined) as Id<"categories"> | undefined,
+        title: draft.title?.trim() || undefined,
+        merchant: draft.merchant?.trim() || undefined,
         amountCents,
         date: dateTs,
         note: draft.note?.trim() || undefined,

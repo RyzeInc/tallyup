@@ -459,12 +459,6 @@ export function DetailsExpander(props: DetailsExpanderProps) {
           onClick={() => onToggleSection("intent")}
         />
         <Pill
-          label="Account"
-          badge={counts.hasAccount ? "•" : undefined}
-          isExpanded={expandedSection === "account"}
-          onClick={() => onToggleSection("account")}
-        />
-        <Pill
           label="Note"
           badge={counts.hasNote ? "•" : undefined}
           isExpanded={expandedSection === "note"}
@@ -679,20 +673,6 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                     </button>
                   );
                 })}
-                {/* Add Account Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowAddAccountDialog(true)}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
-                  style={{
-                    backgroundColor: "transparent",
-                    color: "var(--primary)",
-                    border: "1px dashed var(--primary)",
-                  }}
-                >
-                  <Lucide.Plus className="h-3 w-3" />
-                  Add
-                </button>
               </div>
             </div>
           </div>
@@ -719,20 +699,6 @@ export function DetailsExpander(props: DetailsExpanderProps) {
                     </button>
                   );
                 })}
-                {/* Add Account Button */}
-                <button
-                  type="button"
-                  onClick={() => setShowAddAccountDialog(true)}
-                  className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0"
-                  style={{
-                    backgroundColor: "transparent",
-                    color: "var(--primary)",
-                    border: "1px dashed var(--primary)",
-                  }}
-                >
-                  <Lucide.Plus className="h-3 w-3" />
-                  Add
-                </button>
               </div>
             </div>
             {/* Helper text */}

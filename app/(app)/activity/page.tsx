@@ -13,7 +13,7 @@ import { useTimeRange } from "@/components/TimeRangeProvider";
 import EmptyState from "@/components/ui/EmptyState";
 import { EntryType, CONTEXT_TAGS, getCategoryDisplayName } from "@/components/utils";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Doc } from "convex/_generated/dataModel";
+import type { Doc, Id } from "convex/_generated/dataModel";
 
 type EntryDoc = Doc<"entries">;
 type PlaidTransaction = Doc<"plaidTransactions">;
@@ -233,6 +233,12 @@ export default function ActivityPage() {
   }, [type, q, selectedCategories, selectedTags, router, reviewOnly, searchParams]);
 
   const deleteEntry = useMutation(api.entries.deleteEntry);
+  const deletePlaidTransaction = useMutation(api.plaid.deletePlaidTransaction);
+  const deletePlaidTransactionsBulk = useMutation(api.plaid.deletePlaidTransactionsBulk);
+  
+  // Selection state for Plaid transactions
+  const [selectedPlaidIds, setSelectedPlaidIds] = useState<Set<string>>(new Set());
+  const [plaidSelectMode, setPlaidSelectMode] = useState(false);
 
   // paginated entries: cursor-based pages from server
   const [pages, setPages] = useState<EntryDoc[][]>([]);
@@ -1185,8 +1191,118 @@ export default function ActivityPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)", marginBottom: "var(--space-1)" }}>
-                  Showing {plaidTransactions.length} raw transactions
+                {/* Action bar for Plaid transactions */}
+                <div style={{ 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "space-between",
+                  marginBottom: "var(--space-1)",
+                }}>
+                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
+                    {plaidSelectMode && selectedPlaidIds.size > 0 
+                      ? `${selectedPlaidIds.size} selected`
+                      : `Showing ${plaidTransactions.length} raw transactions`
+                    }
+                  </div>
+                  <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                    {plaidSelectMode ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            // Select all
+                            if (selectedPlaidIds.size === plaidTransactions.length) {
+                              setSelectedPlaidIds(new Set());
+                            } else {
+                              setSelectedPlaidIds(new Set(plaidTransactions.map(t => t._id)));
+                            }
+                          }}
+                          style={{
+                            padding: "4px 12px",
+                            fontSize: "var(--text-sm)",
+                            fontWeight: 500,
+                            color: "var(--text-secondary)",
+                            backgroundColor: "var(--surface-2)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--radius-md)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {selectedPlaidIds.size === plaidTransactions.length ? "Deselect All" : "Select All"}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (selectedPlaidIds.size === 0) return;
+                            if (!confirm(`Delete ${selectedPlaidIds.size} raw Plaid transactions? This cannot be undone.`)) return;
+                            try {
+                              await deletePlaidTransactionsBulk({ 
+                                ids: Array.from(selectedPlaidIds) as Id<"plaidTransactions">[]
+                              });
+                              setSelectedPlaidIds(new Set());
+                              setPlaidSelectMode(false);
+                            } catch (err) {
+                              console.error("Failed to delete:", err);
+                              alert("Failed to delete some transactions");
+                            }
+                          }}
+                          disabled={selectedPlaidIds.size === 0}
+                          style={{
+                            padding: "4px 12px",
+                            fontSize: "var(--text-sm)",
+                            fontWeight: 500,
+                            color: selectedPlaidIds.size > 0 ? "#fff" : "var(--text-tertiary)",
+                            backgroundColor: selectedPlaidIds.size > 0 ? "var(--destructive)" : "var(--surface-2)",
+                            border: "none",
+                            borderRadius: "var(--radius-md)",
+                            cursor: selectedPlaidIds.size > 0 ? "pointer" : "not-allowed",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "var(--space-1)",
+                          }}
+                        >
+                          <Lucide.Trash2 size={14} />
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPlaidSelectMode(false);
+                            setSelectedPlaidIds(new Set());
+                          }}
+                          style={{
+                            padding: "4px 12px",
+                            fontSize: "var(--text-sm)",
+                            fontWeight: 500,
+                            color: "var(--text-secondary)",
+                            backgroundColor: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: "var(--radius-md)",
+                            cursor: "pointer",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setPlaidSelectMode(true)}
+                        style={{
+                          padding: "4px 12px",
+                          fontSize: "var(--text-sm)",
+                          fontWeight: 500,
+                          color: "var(--text-secondary)",
+                          backgroundColor: "transparent",
+                          border: "1px solid var(--border)",
+                          borderRadius: "var(--radius-md)",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "var(--space-1)",
+                        }}
+                      >
+                        <Lucide.CheckSquare size={14} />
+                        Select
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {plaidTransactions.map((tx) => {
                   const statusColor = 
@@ -1194,22 +1310,53 @@ export default function ActivityPage() {
                     tx.importStatus === "imported" ? "var(--success)" :
                     tx.importStatus === "duplicate" ? "var(--destructive)" :
                     "var(--text-tertiary)";
+                  const isSelected = selectedPlaidIds.has(tx._id);
                   
                   return (
                     <div
                       key={tx._id}
+                      onClick={() => {
+                        if (plaidSelectMode) {
+                          setSelectedPlaidIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(tx._id)) {
+                              next.delete(tx._id);
+                            } else {
+                              next.add(tx._id);
+                            }
+                            return next;
+                          });
+                        }
+                      }}
                       style={{
-                        backgroundColor: "var(--surface)",
+                        backgroundColor: isSelected ? "var(--accent-subtle)" : "var(--surface)",
                         borderRadius: "var(--card-radius)",
-                        border: "1px solid var(--border)",
+                        border: `1px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
                         padding: "var(--space-3)",
                         display: "flex",
                         flexDirection: "column",
                         gap: "var(--space-2)",
+                        cursor: plaidSelectMode ? "pointer" : "default",
+                        transition: "all 0.15s ease-out",
                       }}
                     >
-                      {/* Top row: name, amount, status */}
+                      {/* Top row: checkbox (if select mode), name, amount, status, delete */}
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--space-2)" }}>
+                        {plaidSelectMode && (
+                          <div style={{ paddingTop: 2 }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              style={{ 
+                                width: 18, 
+                                height: 18, 
+                                cursor: "pointer",
+                                accentColor: "var(--primary)",
+                              }}
+                            />
+                          </div>
+                        )}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, fontSize: "var(--text-base)", color: "var(--text)", marginBottom: 2 }}>
                             {tx.merchantName || tx.name || "Unknown"}
@@ -1220,25 +1367,55 @@ export default function ActivityPage() {
                             </div>
                           )}
                         </div>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ 
-                            fontWeight: 600, 
-                            fontSize: "var(--text-base)", 
-                            color: tx.amount < 0 ? "var(--income)" : "var(--expense)"
-                          }}>
-                            {tx.amount < 0 ? "+" : "-"}${Math.abs(tx.amount).toFixed(2)}
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ 
+                              fontWeight: 600, 
+                              fontSize: "var(--text-base)", 
+                              color: tx.amount < 0 ? "var(--income)" : "var(--expense)"
+                            }}>
+                              {tx.amount < 0 ? "+" : "-"}${Math.abs(tx.amount).toFixed(2)}
+                            </div>
+                            <div style={{ 
+                              display: "inline-flex", 
+                              alignItems: "center", 
+                              gap: 4, 
+                              fontSize: "var(--text-micro)",
+                              color: statusColor,
+                              fontWeight: 500,
+                            }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: statusColor }} />
+                              {tx.importStatus}
+                            </div>
                           </div>
-                          <div style={{ 
-                            display: "inline-flex", 
-                            alignItems: "center", 
-                            gap: 4, 
-                            fontSize: "var(--text-micro)",
-                            color: statusColor,
-                            fontWeight: 500,
-                          }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: statusColor }} />
-                            {tx.importStatus}
-                          </div>
+                          {!plaidSelectMode && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!confirm("Delete this raw Plaid transaction? This cannot be undone.")) return;
+                                try {
+                                  await deletePlaidTransaction({ id: tx._id });
+                                } catch (err) {
+                                  console.error("Failed to delete:", err);
+                                  alert("Failed to delete transaction");
+                                }
+                              }}
+                              style={{
+                                padding: "4px",
+                                backgroundColor: "transparent",
+                                border: "none",
+                                borderRadius: "var(--radius-sm)",
+                                cursor: "pointer",
+                                color: "var(--text-tertiary)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                              title="Delete transaction"
+                            >
+                              <Lucide.Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </div>
                       

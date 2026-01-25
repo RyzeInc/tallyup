@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 import TopNav from "@/components/TopNav";
+import BottomNav from "@/components/BottomNav";
 import { TabContainer, TabPanel } from "@/components/PersistentTabs";
 import dynamic from "next/dynamic";
 import { TimeRangeProvider } from "@/components/TimeRangeProvider";
@@ -21,14 +22,15 @@ const AccountsPage = dynamic(() => import("@/app/(app)/accounts/page"), { ssr: f
 const CalendarPage = dynamic(() => import("@/app/(app)/calendar/page"), { ssr: false });
 
 /**
- * AppShell - Unified shell with:
- * - Consistent background gradient
- * - Safe-area padding
- * - Top navigation (scrollable tabs)
+ * AppShell - Unified shell with (Rocket Money-style):
+ * - Top header with gradient band and page title
+ * - Fixed bottom tab bar for primary navigation
+ * - Scrollable top tabs for secondary navigation
  * 
  * Design principles:
  * - 16px page horizontal padding
- * - Top navigation for discoverability
+ * - Bottom nav for primary destinations
+ * - Top scrollable tabs for secondary navigation
  * - Background gradient never clashes with readable content
  */
 
@@ -97,25 +99,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         position: "relative",
       }}
     >
-      {/* Beach Atmosphere Overlay - ocean + burnt orange warmth */}
+      {/* Theme-aware atmosphere overlay - starts below header band */}
       <div 
-        className="shoreline-overlay pointer-events-none"
+        className="atmosphere-overlay pointer-events-none"
         style={{
           position: "absolute",
-          top: 0,
+          top: "var(--topbar-height, 120px)",
           left: 0,
           right: 0,
-          height: "280px",
-          background: `
-            linear-gradient(180deg,
-              rgba(74, 89, 104, 0.12) 0%,
-              rgba(106, 127, 142, 0.10) 15%,
-              rgba(139, 160, 172, 0.06) 30%,
-              rgba(196, 114, 74, 0.08) 50%,
-              rgba(214, 139, 98, 0.04) 65%,
-              transparent 85%
-            )
-          `,
+          height: "var(--atmosphere-height, 160px)",
+          background: "var(--atmosphere-overlay, transparent)",
+          opacity: 0.5,
           zIndex: 0,
         }}
         aria-hidden="true"
@@ -179,6 +173,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </main>
       </div>
+      {/* Fixed Bottom Navigation - Rocket Money style (hidden until ready to implement) */}
+      {/* <BottomNav /> */}
     </div>
   );
 }
