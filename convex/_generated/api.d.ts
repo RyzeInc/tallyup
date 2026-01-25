@@ -22,6 +22,7 @@ import type * as coachKnowledge from "../coachKnowledge.js";
 import type * as coach_aggregates from "../coach_aggregates.js";
 import type * as coach_internal from "../coach_internal.js";
 import type * as crons from "../crons.js";
+import type * as dashboard from "../dashboard.js";
 import type * as detector from "../detector.js";
 import type * as entries from "../entries.js";
 import type * as finance_aggregates from "../finance_aggregates.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   coach_aggregates: typeof coach_aggregates;
   coach_internal: typeof coach_internal;
   crons: typeof crons;
+  dashboard: typeof dashboard;
   detector: typeof detector;
   entries: typeof entries;
   finance_aggregates: typeof finance_aggregates;

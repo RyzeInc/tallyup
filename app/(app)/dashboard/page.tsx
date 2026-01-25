@@ -12,14 +12,24 @@ import { useTabs } from "@/components/PersistentTabs";
 import LocalDateRangePicker from "@/components/LocalDateRangePicker";
 import Link from "next/link";
 
+// New dashboard modules
+import {
+  UpcomingBillsModule,
+  PaydayCountdownModule,
+  SafeToSpendModule,
+  BudgetHealthRingsModule,
+} from "@/components/dashboard";
+
 /**
  * Dashboard - Financial overview at a glance
  * 
  * Structure:
  * 1. Net money hero (income - expenses)
- * 2. Income/Expense breakdown
- * 3. Recent activity
- * 4. Quick actions
+ * 2. Safe-to-Spend + Payday countdown
+ * 3. Budget health rings
+ * 4. Upcoming bills
+ * 5. Recent activity
+ * 6. Category breakdown
  */
 
 type Entry = Doc<"entries">;
@@ -35,6 +45,7 @@ export default function DashboardPage() {
   const { setActiveTab } = useTabs();
   const [editingEntry, setEditingEntry] = useState<EditableEntry | null>(null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [safeToSpendExpanded, setSafeToSpendExpanded] = useState(false);
   
   // Dashboard has its own independent time range (not linked to global)
   // Default to "This Month" for a snapshot of current financial situation
@@ -71,6 +82,13 @@ export default function DashboardPage() {
   const { startDate, endDate, label } = useMemo(() => {
     return getDateRangeFromPreset(dashboardPreset);
   }, [dashboardPreset]);
+
+  // Fetch dashboard module data (upcoming bills, payday, budgets, safe-to-spend)
+  const dashboardData = useQuery(api.dashboard.getDashboardData, {
+    periodStart: startDate,
+    periodEnd: endDate,
+    upcomingDays: 30,
+  });
 
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Entry[] | undefined;
@@ -253,6 +271,48 @@ export default function DashboardPage() {
           </button>
         )}
       </SignedIn>
+
+      {/* === PHASE 1 DASHBOARD MODULES === */}
+
+      {/* Safe-to-Spend + Payday Row */}
+      <SignedIn>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Safe-to-Spend Module */}
+          <SafeToSpendModule
+            data={dashboardData?.safeToSpend ?? null}
+            isLoading={!dashboardData}
+            expanded={safeToSpendExpanded}
+            onToggleExpand={() => setSafeToSpendExpanded(!safeToSpendExpanded)}
+          />
+
+          {/* Payday Countdown Module */}
+          <PaydayCountdownModule
+            nextPayday={dashboardData?.nextPayday ?? null}
+            upcomingIncome={dashboardData?.upcomingIncome}
+            isLoading={!dashboardData}
+          />
+        </div>
+      </SignedIn>
+
+      {/* Budget Health Rings */}
+      <SignedIn>
+        <BudgetHealthRingsModule
+          budgets={dashboardData?.budgetStatus ?? []}
+          isLoading={!dashboardData}
+          maxItems={5}
+        />
+      </SignedIn>
+
+      {/* Upcoming Bills */}
+      <SignedIn>
+        <UpcomingBillsModule
+          bills={(dashboardData?.upcomingBills ?? []).filter(b => b.type === "expense")}
+          isLoading={!dashboardData}
+          maxItems={5}
+        />
+      </SignedIn>
+
+      {/* === END PHASE 1 MODULES === */}
 
       {/* Quick Actions */}
       <SignedIn>
