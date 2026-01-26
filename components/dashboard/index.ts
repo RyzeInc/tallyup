@@ -13,3 +13,25 @@ export type { SafeToSpendData, SafeToSpendModuleProps } from "./SafeToSpendModul
 
 export { BudgetHealthRingsModule } from "./BudgetHealthRingsModule";
 export type { BudgetStatus, BudgetHealthRingsProps } from "./BudgetHealthRingsModule";
+
+// Phase 2 components
+export { GoalsPreviewModule } from "./GoalsPreviewModule";
+export type { GoalPreview, GoalsPreviewModuleProps } from "./GoalsPreviewModule";
+
+export { NetWorthSummaryCard } from "./NetWorthSummaryCard";
+export type { AccountBalance, NetWorthData, NetWorthSummaryCardProps } from "./NetWorthSummaryCard";
+
+export { PeriodComparisonCards } from "./PeriodComparisonCards";
+export type { PeriodComparisonData, PeriodDelta, PeriodComparisonCardProps } from "./PeriodComparisonCards";
+
+export { ReviewAlertCard } from "./ReviewAlertCard";
+export type { ReviewAlertData, ReviewAlertCardProps } from "./ReviewAlertCard";
+
+// Accountability system
+export { AccountabilityCard } from "./AccountabilityCard";
+export type { 
+  AccountabilityData, 
+  AccountabilityAlert, 
+  AccountabilitySummary,
+  AccountabilityCardProps 
+} from "./AccountabilityCard";

@@ -5,31 +5,46 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
-import { centsToDollars, formatMoney, getCategoryDisplayName, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
+import { centsToDollars, getCategoryDisplayName, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
 import LocalDateRangePicker from "@/components/LocalDateRangePicker";
 import Link from "next/link";
 
-// New dashboard modules
+// In-place action modals
+import QuickLogModal from "@/components/log/QuickLogModal";
+import RuleEditorDialog from "@/app/(app)/recurring/_components/rules/RuleEditorDialog";
+
+// Dashboard modules (Phase 1 + Phase 2 + Accountability)
 import {
   UpcomingBillsModule,
   PaydayCountdownModule,
   SafeToSpendModule,
   BudgetHealthRingsModule,
+  // Phase 2
+  GoalsPreviewModule,
+  NetWorthSummaryCard,
+  PeriodComparisonCards,
+  ReviewAlertCard,
+  // Accountability
+  AccountabilityCard,
 } from "@/components/dashboard";
 
 /**
  * Dashboard - Financial overview at a glance
  * 
  * Structure:
- * 1. Net money hero (income - expenses)
- * 2. Safe-to-Spend + Payday countdown
- * 3. Budget health rings
- * 4. Upcoming bills
- * 5. Recent activity
- * 6. Category breakdown
+ * 1. Accountability Health Check (cross-entity sync)
+ * 2. Net Worth Summary (optional)
+ * 3. Review Alert (prominent, when needed)
+ * 4. Net money hero with period comparison
+ * 5. Safe-to-Spend + Payday countdown
+ * 6. Budget health rings
+ * 7. Goals preview
+ * 8. Upcoming bills
+ * 9. Recent activity
+ * 10. Category breakdown
  */
 
 type Entry = Doc<"entries">;
@@ -46,6 +61,12 @@ export default function DashboardPage() {
   const [editingEntry, setEditingEntry] = useState<EditableEntry | null>(null);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [safeToSpendExpanded, setSafeToSpendExpanded] = useState(false);
+  const [netWorthExpanded, setNetWorthExpanded] = useState(false);
+  
+  // In-place action modal states
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const [recurringEditorOpen, setRecurringEditorOpen] = useState(false);
+  const [recurringEditorType, setRecurringEditorType] = useState<"income" | "expense">("income");
   
   // Dashboard has its own independent time range (not linked to global)
   // Default to "This Month" for a snapshot of current financial situation
@@ -88,6 +109,12 @@ export default function DashboardPage() {
     periodStart: startDate,
     periodEnd: endDate,
     upcomingDays: 30,
+  });
+
+  // Fetch accountability check data (cross-entity synchronization)
+  const accountabilityData = useQuery(api.accountability.getAccountabilityCheck, {
+    periodStart: startDate,
+    periodEnd: endDate,
   });
 
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
@@ -191,84 +218,80 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <>
-              {/* Hero: Net Amount */}
-              <div className="mb-4">
-                <div className="text-micro mb-1" style={{ color: "var(--text-secondary)" }}>
-                  {label} Net
-                </div>
-                <div
-                  className="text-kpi tabular-nums"
-                  style={{ color: computed.net >= 0 ? "var(--net)" : "var(--danger)" }}
-                >
-                  {formatMoney(computed.net, { signMode: "always" })}
-                </div>
-              </div>
-
-              {/* Income / Expense Grid */}
-              <div className="grid grid-cols-2 gap-3">
-                <div
-                  className="rounded-xl p-3"
-                  style={{ backgroundColor: "var(--success-subtle)" }}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Lucide.ArrowDownLeft className="h-4 w-4" style={{ color: "var(--success)" }} />
-                    <span className="text-micro font-medium" style={{ color: "var(--success)" }}>
-                      Income
-                    </span>
-                  </div>
-                  <div className="text-body font-semibold tabular-nums" style={{ color: "var(--text)" }}>
-                    {formatMoney(computed.income)}
-                  </div>
-                </div>
-
-                <div
-                  className="rounded-xl p-3"
-                  style={{ backgroundColor: "var(--danger-subtle)" }}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <Lucide.ArrowUpRight className="h-4 w-4" style={{ color: "var(--danger)" }} />
-                    <span className="text-micro font-medium" style={{ color: "var(--danger)" }}>
-                      Expenses
-                    </span>
-                  </div>
-                  <div className="text-body font-semibold tabular-nums" style={{ color: "var(--text)" }}>
-                    {formatMoney(computed.expense)}
-                  </div>
-                </div>
-              </div>
-            </>
+            <PeriodComparisonCards
+              label={label}
+              previousLabel="vs last period"
+              income={computed.income}
+              expense={computed.expense}
+              previousIncome={dashboardData?.periodComparison?.previous.incomeCents}
+              previousExpense={dashboardData?.periodComparison?.previous.expenseCents}
+              isLoading={!dashboardData}
+            />
           )}
         </SignedIn>
       </div>
 
-      {/* Review Alert */}
+      {/* === ACCOUNTABILITY HEALTH CHECK === */}
+      {/* Cross-entity synchronization: budgets vs income vs accounts vs goals */}
       <SignedIn>
-        {reviewCount > 0 && (
-          <button
-            onClick={() => setActiveTab("activity")}
-            className="w-full rounded-xl p-4 text-left flex items-center gap-3 transition-colors"
-            style={{
-              backgroundColor: "var(--warning-subtle)",
-              border: "1px solid var(--warning)",
+        {accountabilityData && accountabilityData.alerts.length > 0 && (
+          <AccountabilityCard
+            data={accountabilityData}
+            isLoading={!accountabilityData}
+            onAction={(actionType, alertId, relatedEntity) => {
+              // Handle actions - open modals in-place instead of redirecting
+              switch (actionType) {
+                case "add_transaction":
+                  // Open quick log modal to add a transaction right here
+                  setQuickLogOpen(true);
+                  break;
+                case "adjust_budget":
+                  // Navigate to budgeting for now (complex edit UI)
+                  setActiveTab("budgeting");
+                  break;
+                case "add_income":
+                  // Open recurring rule editor to add income source in-place
+                  setRecurringEditorType("income");
+                  setRecurringEditorOpen(true);
+                  break;
+                case "link_account":
+                  // Navigate to accounts (requires Plaid flow)
+                  setActiveTab("accounts");
+                  break;
+                case "review_goal":
+                  // Navigate to goals for complex goal management
+                  setActiveTab("goals");
+                  break;
+                default:
+                  break;
+              }
             }}
-          >
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
-              style={{ backgroundColor: "var(--warning)" }}
-            >
-              <Lucide.Inbox className="h-5 w-5" style={{ color: "#fff" }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-body font-medium" style={{ color: "var(--text)" }}>
-                {reviewCount} transaction{reviewCount !== 1 ? "s" : ""} to review
-              </div>
-              <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-                Tap to categorize
-              </div>
-            </div>
-            <Lucide.ChevronRight className="h-5 w-5 shrink-0" style={{ color: "var(--text-tertiary)" }} />
-          </button>
+          />
+        )}
+      </SignedIn>
+
+      {/* === PHASE 2: PROMINENT REVIEW ALERT === */}
+      <SignedIn>
+        <ReviewAlertCard
+          data={{
+            count: reviewCount,
+            totalAmountCents: dashboardData?.reviewTotalCents,
+          }}
+          onAction={() => setActiveTab("activity")}
+          variant="prominent"
+        />
+      </SignedIn>
+
+      {/* === PHASE 2: NET WORTH SUMMARY === */}
+      <SignedIn>
+        {dashboardData?.accounts && dashboardData.accounts.balances.length > 0 && (
+          <NetWorthSummaryCard
+            data={dashboardData.accounts}
+            isLoading={!dashboardData}
+            expanded={netWorthExpanded}
+            onToggleExpand={() => setNetWorthExpanded(!netWorthExpanded)}
+            onManageAccounts={() => setActiveTab("accounts")}
+          />
         )}
       </SignedIn>
 
@@ -303,6 +326,24 @@ export default function DashboardPage() {
         />
       </SignedIn>
 
+      {/* === PHASE 2: GOALS PREVIEW === */}
+      <SignedIn>
+        <GoalsPreviewModule
+          goals={(dashboardData?.goals?.active ?? []).map(g => ({
+            id: g.id,
+            name: g.name,
+            targetCents: g.targetCents,
+            currentCents: g.currentCents,
+            remainingCents: g.remainingCents,
+            monthlyContributionCents: g.monthlyContributionCents,
+            periodContributionCents: g.periodContributionCents,
+          }))}
+          isLoading={!dashboardData}
+          maxItems={2}
+          onViewAll={() => setActiveTab("goals")}
+        />
+      </SignedIn>
+
       {/* Upcoming Bills */}
       <SignedIn>
         <UpcomingBillsModule
@@ -312,7 +353,7 @@ export default function DashboardPage() {
         />
       </SignedIn>
 
-      {/* === END PHASE 1 MODULES === */}
+      {/* === END PHASE 1 + 2 MODULES === */}
 
       {/* Quick Actions */}
       <SignedIn>
@@ -506,6 +547,19 @@ export default function DashboardPage() {
           onClose={() => setEditingEntry(null)}
         />
       )}
+      
+      {/* Quick Log Modal - for "Add Transaction" actions from accountability alerts */}
+      <QuickLogModal
+        open={quickLogOpen}
+        onClose={() => setQuickLogOpen(false)}
+      />
+      
+      {/* Recurring Rule Editor - for "Add Income Source" actions from accountability alerts */}
+      <RuleEditorDialog
+        open={recurringEditorOpen}
+        onClose={() => setRecurringEditorOpen(false)}
+        defaultType={recurringEditorType}
+      />
     </div>
   );
 }

@@ -41,30 +41,40 @@ function getStatusColor(status: "on-track" | "warning" | "over"): string {
 
 /**
  * Default emoji icons for common budget categories
+ * Updated to align with the 10-category budget system
  */
 const CATEGORY_ICONS: Record<string, string> = {
-  "Groceries": "🛒",
-  "Food": "🍽️",
+  // Primary budget categories
+  "Housing": "🏠",
+  "Transportation": "🚗",
+  "Food": "🥬",
+  "Insurance": "🛡️",
+  "Healthcare": "🏥",
+  "Debt Payments": "💳",
+  "Debt": "💳",
+  "Savings & Investments": "💰",
+  "Savings": "💰",
+  "Quality of Life": "✨",
+  "True Expenses": "📋",
+  "Values & Buffer": "💝",
+  // Legacy / fallback mappings
+  "Groceries": "🥬",
   "Dining": "🍽️",
   "Restaurants": "🍽️",
   "Entertainment": "🎬",
   "Shopping": "🛍️",
   "Clothing": "👕",
-  "Transportation": "🚗",
   "Car": "🚗",
   "Gas": "⛽",
   "Utilities": "💡",
   "Bills": "📄",
   "Health": "🏥",
-  "Healthcare": "🏥",
   "Personal": "💆",
   "Subscriptions": "📱",
   "Travel": "✈️",
   "Education": "📚",
   "Gifts": "🎁",
   "Home": "🏠",
-  "Housing": "🏠",
-  "Insurance": "🛡️",
   "Pets": "🐕",
 };
 

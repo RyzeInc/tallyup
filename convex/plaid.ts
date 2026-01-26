@@ -1885,6 +1885,7 @@ export const importPlaidTransaction = mutation({
     if (!isTransfer && (!budgetCategoryId || categoryInput)) {
       budgetCategoryId = await resolveBudgetCategoryId(ctx, identity.subject, {
         category: resolvedCategory,
+        categoryId: categoryId,
         merchant: merchantLabel,
         tags: resolvedTags,
       });
@@ -2043,6 +2044,7 @@ export const bulkImportPlaidTransactions = mutation({
         if (!isTransfer && !budgetCategoryId) {
           budgetCategoryId = await resolveBudgetCategoryId(ctx, identity.subject, {
             category: resolvedCategory,
+            categoryId: categoryId,
             merchant: merchantLabel,
           });
         }

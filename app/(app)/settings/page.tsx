@@ -89,10 +89,15 @@ export default function SettingsPage() {
   const cleanupDuplicateCategories = useMutation(api.categories.cleanupDuplicateCategories);
   const resetCategoriesToDefaults = useMutation(api.categories.resetCategoriesToDefaults);
   const fixParentRelationships = useMutation(api.categories.fixParentRelationships);
+  const applyRecommendedMatchCategories = useMutation(api.budgets.applyRecommendedMatchCategories);
+  const backfillEntryBudgetCategories = useMutation(api.budgets.backfillEntryBudgetCategories);
+  const backfillMissingBudgetPlans = useMutation(api.budgets.backfillMissingBudgetPlans);
+  const forceBudgetRematerialization = useMutation(api.budgets.forceBudgetRematerialization);
 
   // Cleanup state
   const [cleaningUp, setCleaningUp] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [syncingBudgets, setSyncingBudgets] = useState(false);
 
   // Subcategory dialog state
   const [subcategoryDialogOpen, setSubcategoryDialogOpen] = useState(false);
@@ -637,6 +642,159 @@ export default function SettingsPage() {
                   )}
                   {resetting ? "Resetting..." : "Reset to defaults"}
                 </button>
+              </div>
+
+              {/* Budget Sync Section */}
+              <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+                <h4 className="text-sm font-medium mb-2" style={{ color: "var(--text)" }}>Budget Synchronization</h4>
+                <p className="text-xs mb-3" style={{ color: "var(--text-tertiary)" }}>
+                  Sync transactions with budget categories for accurate tracking
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {/* Apply Recommended Match Categories */}
+                  <button
+                    onClick={async () => {
+                      setSyncingBudgets(true);
+                      try {
+                        const result = await applyRecommendedMatchCategories({});
+                        toast.success("Budget categories updated", {
+                          description: `Applied matching rules to ${result.updated} of ${result.processed} categories`
+                        });
+                      } catch (error) {
+                        toast.error("Update failed", {
+                          description: error instanceof Error ? error.message : "Unknown error"
+                        });
+                      } finally {
+                        setSyncingBudgets(false);
+                      }
+                    }}
+                    disabled={syncingBudgets || cleaningUp || resetting}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: "var(--primary-subtle)",
+                      color: "var(--primary)",
+                      border: "1px solid var(--primary)",
+                    }}
+                  >
+                    {syncingBudgets ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Link2 className="h-4 w-4" />
+                    )}
+                    {syncingBudgets ? "Syncing..." : "Sync budget rules"}
+                  </button>
+
+                  {/* Backfill Entry Budget Categories */}
+                  <button
+                    onClick={async () => {
+                      setSyncingBudgets(true);
+                      try {
+                        let totalUpdated = 0;
+                        let totalSkipped = 0;
+                        let hasMore = true;
+                        while (hasMore) {
+                          const result = await backfillEntryBudgetCategories({ limit: 500 });
+                          totalUpdated += result.updated;
+                          totalSkipped += result.skipped;
+                          hasMore = result.remaining;
+                        }
+                        toast.success("Transactions linked to budgets", {
+                          description: `Updated ${totalUpdated} transactions, ${totalSkipped} had no matching budget`
+                        });
+                      } catch (error) {
+                        toast.error("Backfill failed", {
+                          description: error instanceof Error ? error.message : "Unknown error"
+                        });
+                      } finally {
+                        setSyncingBudgets(false);
+                      }
+                    }}
+                    disabled={syncingBudgets || cleaningUp || resetting}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: "var(--surface-subtle)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {syncingBudgets ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {syncingBudgets ? "Linking..." : "Re-link transactions"}
+                  </button>
+
+                  {/* Create Missing Budget Plans */}
+                  <button
+                    onClick={async () => {
+                      setSyncingBudgets(true);
+                      try {
+                        const result = await backfillMissingBudgetPlans({});
+                        if (result.created > 0) {
+                          toast.success("Budget plans created", {
+                            description: `Created ${result.created} missing budget plans`
+                          });
+                        } else {
+                          toast.info("All budget categories already have plans");
+                        }
+                      } catch (error) {
+                        toast.error("Failed to create budget plans", {
+                          description: error instanceof Error ? error.message : "Unknown error"
+                        });
+                      } finally {
+                        setSyncingBudgets(false);
+                      }
+                    }}
+                    disabled={syncingBudgets || cleaningUp || resetting}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: "var(--surface-subtle)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {syncingBudgets ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                    {syncingBudgets ? "Creating..." : "Create missing plans"}
+                  </button>
+
+                  {/* Force Budget Rematerialization */}
+                  <button
+                    onClick={async () => {
+                      setSyncingBudgets(true);
+                      try {
+                        const result = await forceBudgetRematerialization({});
+                        toast.success("Budget recalculation queued", {
+                          description: `Queued ${result.plansQueued} plans for recalculation. Changes will appear in ~1 minute.`
+                        });
+                      } catch (error) {
+                        toast.error("Failed to queue recalculation", {
+                          description: error instanceof Error ? error.message : "Unknown error"
+                        });
+                      } finally {
+                        setSyncingBudgets(false);
+                      }
+                    }}
+                    disabled={syncingBudgets || cleaningUp || resetting}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: "var(--surface-subtle)",
+                      color: "var(--text-secondary)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {syncingBudgets ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {syncingBudgets ? "Queuing..." : "Recalculate spending"}
+                  </button>
+                </div>
               </div>
             </div>
 

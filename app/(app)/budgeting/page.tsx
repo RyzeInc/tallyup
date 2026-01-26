@@ -51,16 +51,69 @@ interface BudgetStatusSummary {
 }
 
 const DEFAULT_BUDGET_CATEGORIES = [
-  { id: "housing", name: "Housing", icon: "🏠", description: "Rent, mortgage, property taxes", suggestedPercent: 30, matchCategories: ["rent", "mortgage", "rent_utilities_rent", "loan_payments_mortgage"] },
-  { id: "utilities", name: "Utilities", icon: "💡", description: "Electric, gas, water, internet, phone", suggestedPercent: 8, matchCategories: ["utilities", "rent_utilities", "electricity", "gas_electricity", "water", "internet", "telephone"] },
-  { id: "food", name: "Food", icon: "🍽️", description: "Groceries and dining out", suggestedPercent: 12, matchCategories: ["food", "groceries", "food_groceries", "food_restaurant", "food_coffee", "food_fast_food", "food_and_drink"] },
-  { id: "transportation", name: "Transportation", icon: "🚗", description: "Gas, car payments, transit", suggestedPercent: 10, matchCategories: ["transportation", "transport", "transport_gas", "transport_parking", "transport_public_transit", "transport_rideshare"] },
-  { id: "insurance", name: "Insurance", icon: "🛡️", description: "Health, auto, home, life insurance", suggestedPercent: 8, matchCategories: ["insurance", "services_insurance"] },
-  { id: "debt", name: "Debt Payments", icon: "💳", description: "Credit cards, student loans", suggestedPercent: 10, matchCategories: ["debt", "loan", "loan_payments", "credit_card", "loan_payments_credit_card", "loan_payments_student_loan", "loan_payments_car"] },
-  { id: "healthcare", name: "Health Care", icon: "🏥", description: "Medical, dental, prescriptions", suggestedPercent: 5, matchCategories: ["healthcare", "medical", "dental", "pharmacy", "medical_dental", "medical_pharmacies", "medical_primary_care"] },
-  { id: "personal", name: "Personal Care", icon: "✨", description: "Clothing, haircuts, gym", suggestedPercent: 5, matchCategories: ["personal", "personal_care", "clothing", "gym", "personal_care_gyms", "personal_care_hair", "merchandise_clothing"] },
-  { id: "entertainment", name: "Entertainment", icon: "🎬", description: "Movies, games, streaming", suggestedPercent: 5, matchCategories: ["entertainment", "movies", "games", "streaming", "entertainment_tv_movies", "entertainment_games", "entertainment_music"] },
-  { id: "savings", name: "Savings", icon: "💰", description: "Emergency fund, investments", suggestedPercent: 10, matchCategories: ["savings", "investments", "transfer_out_savings", "transfer_out_investment"] },
+  // 1. Housing: Rent/Mortgage, Insurance, Utilities, Maintenance
+  { id: "housing", name: "Housing", icon: "🏠", description: "Rent/Mortgage, Insurance, Utilities, Maintenance", suggestedPercent: 25, matchCategories: [
+    "utilities_rent", "loan_mortgage", "utilities_gas_electric", "utilities_internet_cable", 
+    "utilities_sewage", "utilities_telephone", "utilities_water", "utilities_other",
+    "rent_utilities", "rent", "mortgage"
+  ] },
+  // 2. Transportation: Payment, Insurance, Fuel, Maintenance/Transit
+  { id: "transportation", name: "Transportation", icon: "🚗", description: "Payment, Insurance, Fuel, Maintenance/Transit", suggestedPercent: 10, matchCategories: [
+    "loan_car_payment", "transport_gas", "transport_parking", "transport_public_transit",
+    "transport_rideshare", "transport_tolls", "transport_bikes_scooters", "transport_other",
+    "services_automotive", "transportation"
+  ] },
+  // 3. Food: Groceries only (Household supplies go to True Expenses)
+  { id: "food", name: "Food", icon: "🥬", description: "Groceries only", suggestedPercent: 10, matchCategories: [
+    "food_groceries"
+  ] },
+  // 4. Insurance: Health, Dental, Vision, Life, Disability
+  { id: "insurance", name: "Insurance", icon: "🛡️", description: "Health, Dental, Vision, Life, Disability", suggestedPercent: 5, matchCategories: [
+    "services_insurance"
+  ] },
+  // 5. Healthcare: Copays, prescriptions, mental health, wellness
+  { id: "healthcare", name: "Healthcare", icon: "🏥", description: "Copays, prescriptions, mental health, wellness", suggestedPercent: 5, matchCategories: [
+    "medical_dental", "medical_eye", "medical_hospitals", "medical_pharmacy",
+    "medical_primary_care", "medical_other", "personal_gyms", "medical"
+  ] },
+  // 6. Debt Payments: Minimum required payments (excludes mortgage/car which go to Housing/Transportation)
+  { id: "debt", name: "Debt Payments", icon: "💳", description: "Minimum required payments", suggestedPercent: 10, matchCategories: [
+    "loan_credit_card", "loan_personal", "loan_student", "loan_other", "loan_payments",
+    "bank_fees_atm", "bank_fees_foreign_transaction", "bank_fees_insufficient_funds",
+    "bank_fees_interest_charge", "bank_fees_overdraft", "bank_fees_other", "bank_fees"
+  ] },
+  // 7. Savings & Investments: Emergency fund, retirement, specific goals (automated)
+  { id: "savings", name: "Savings & Investments", icon: "💰", description: "Emergency fund, retirement, specific goals", suggestedPercent: 15, matchCategories: [
+    "transfer_out_savings", "transfer_out_investment", "transfer_out_withdrawal",
+    "transfer_out_account", "transfer_out_other", "transfer_out"
+  ] },
+  // 8. Quality of Life: Dining out, entertainment, hobbies, personal care, subscriptions
+  { id: "quality_of_life", name: "Quality of Life", icon: "✨", description: "Dining out, entertainment, hobbies, personal care, subscriptions", suggestedPercent: 10, matchCategories: [
+    "food_beer_wine_liquor", "food_coffee", "food_fast_food", "food_restaurant",
+    "food_vending_machines", "food_other", "food_and_drink",
+    "entertainment_casinos_gambling", "entertainment_music_audio", "entertainment_sporting_events",
+    "entertainment_tv_movies", "entertainment_video_games", "entertainment_other", "entertainment",
+    "merchandise_bookstores", "merchandise_clothing", "merchandise_electronics",
+    "merchandise_sporting_goods", "merchandise_tobacco",
+    "personal_hair_beauty", "personal_laundry", "personal_other", "personal_care",
+    "services_education"
+  ] },
+  // 9. True Expenses: Household supplies, car registration, gifts, vacations, pet care, home maintenance (sinking funds)
+  { id: "true_expenses", name: "True Expenses", icon: "📋", description: "Household supplies, car registration, gifts, vacations, pet care, home maintenance", suggestedPercent: 5, matchCategories: [
+    "merchandise_convenience", "merchandise_department", "merchandise_discount",
+    "merchandise_office", "merchandise_online", "merchandise_pets", "merchandise_superstores",
+    "merchandise_gifts", "merchandise_other", "general_merchandise",
+    "home_furniture", "home_hardware", "home_repair", "home_security", "home_other", "home_improvement",
+    "medical_veterinary", "services_veterinary",
+    "travel_flights", "travel_lodging", "travel_rental_cars", "travel_other", "travel",
+    "services_accounting_tax", "services_childcare", "services_consulting",
+    "services_postage_shipping", "services_storage", "services_other", "general_services",
+    "government_departments", "government_tax_payment", "government_other", "government_nonprofit"
+  ] },
+  // 10. Values & Buffer: Giving, charity, "stuff I forgot," flexibility
+  { id: "values_buffer", name: "Values & Buffer", icon: "💝", description: "Giving, charity, flexibility", suggestedPercent: 5, matchCategories: [
+    "government_donations"
+  ] },
 ];
 
 export default function BudgetingPage() {

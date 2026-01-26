@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as accountability from "../accountability.js";
 import type * as accounts from "../accounts.js";
 import type * as analytics from "../analytics.js";
 import type * as budgetEngine from "../budgetEngine.js";
@@ -45,6 +46,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountability: typeof accountability;
   accounts: typeof accounts;
   analytics: typeof analytics;
   budgetEngine: typeof budgetEngine;

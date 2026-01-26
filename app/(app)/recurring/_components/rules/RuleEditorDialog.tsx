@@ -27,9 +27,11 @@ function dollarsToCents(raw: string): number | undefined {
 function RuleEditorForm({
   rule,
   onClose,
+  defaultType,
 }: {
   rule?: Rule;
   onClose: () => void;
+  defaultType?: "income" | "expense";
 }) {
   const toast = useToast();
   const createRule = useMutation(api.recurring.createRecurringRule);
@@ -47,7 +49,7 @@ function RuleEditorForm({
   const anchorTs = rule?.cadence?.anchorDate ?? (rule?.cadenceAnchor ? Date.parse(rule.cadenceAnchor) : undefined);
   
   const [name, setName] = useState(rule?.displayName ?? rule?.name ?? "");
-  const [type, setType] = useState<"expense" | "income">(rule?.type ?? "expense");
+  const [type, setType] = useState<"expense" | "income">(rule?.type ?? defaultType ?? "expense");
   const [amount, setAmount] = useState(centsToDollars(rule?.amountPolicy?.amountCents ?? rule?.amountCents));
   const [cadence, setCadence] = useState<CadenceKind>((rule?.cadence?.kind ?? rule?.cadenceType ?? "monthly") as CadenceKind);
   const [anchorDate, setAnchorDate] = useState(anchorTs ? new Date(anchorTs).toISOString().slice(0, 10) : "");
@@ -396,13 +398,15 @@ export default function RuleEditorDialog({
   open,
   onClose,
   rule,
+  defaultType,
 }: {
   open: boolean;
   onClose: () => void;
   rule?: Rule;
+  defaultType?: "income" | "expense";
 }) {
   if (!open) return null;
   
   // Key forces form to remount when rule changes, resetting all state
-  return <RuleEditorForm key={rule?._id ?? "new"} rule={rule} onClose={onClose} />;
+  return <RuleEditorForm key={rule?._id ?? `new-${defaultType}`} rule={rule} onClose={onClose} defaultType={defaultType} />;
 }

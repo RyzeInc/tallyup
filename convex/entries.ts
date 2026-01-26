@@ -306,20 +306,13 @@ export const addEntry = mutation({
     const contextTags = cleanTags(args.contextTags);
     const intentTags = cleanTags(args.intentTags);
     
-    // Resolve subcategory for budget matching
-    let subcategorySlug: string | undefined;
-    if (args.subcategoryId) {
-      const subcategory = await ctx.db.get(args.subcategoryId);
-      if (subcategory && subcategory.userId === userId) {
-        subcategorySlug = subcategory.slug ?? subcategory.name?.toLowerCase().replace(/\s+/g, "_");
-      }
-    }
-    
+    // Resolve budget category using IDs for accurate slug matching
     const budgetCategoryId =
       args.budgetCategoryId ??
       (await resolveBudgetCategoryId(ctx, userId, {
         category,
-        subcategory: subcategorySlug,
+        categoryId: categoryIdInput ?? categoryId,
+        subcategoryId: args.subcategoryId,
         merchant,
         tags,
       }));
@@ -792,7 +785,7 @@ export const updateEntry = mutation({
     if (
       args.budgetCategoryId === undefined &&
       existing.budgetCategoryId === undefined &&
-      (categoryTouched || args.tags !== undefined || args.merchant !== undefined)
+      (categoryTouched || args.tags !== undefined || args.merchant !== undefined || args.subcategoryId !== undefined)
     ) {
       const nextCategoryValue = getEffectiveCategory({
         category: patch.category ?? existing.category,
@@ -800,8 +793,14 @@ export const updateEntry = mutation({
       });
       const nextMerchant = patch.merchant ?? existing.merchant;
       const nextTags = patch.tags ?? existing.tags;
+      const nextCategoryId = patch.categoryId ?? existing.categoryId;
+      const nextSubcategoryId = args.subcategoryId !== undefined 
+        ? (args.subcategoryId === null ? undefined : args.subcategoryId)
+        : existing.subcategoryId;
       patch.budgetCategoryId = await resolveBudgetCategoryId(ctx, userId, {
         category: nextCategoryValue,
+        categoryId: nextCategoryId,
+        subcategoryId: nextSubcategoryId,
         merchant: nextMerchant,
         tags: nextTags,
       });
