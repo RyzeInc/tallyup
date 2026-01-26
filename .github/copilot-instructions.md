@@ -1,61 +1,233 @@
-# Copilot / AI agent instructions — TallyUp
+# Copilot / AI Agent Instructions — TallyUp
 
-Short, actionable notes to help an AI contributor be productive immediately.
+Actionable notes for AI contributors to be productive immediately.
 
-## Quick start (dev)
-- Install deps and run Next dev: `npm install` then `npm run dev` (or `pnpm dev`/`yarn dev`).
-- Convex (DB + server functions) is required for full local behavior: run `npx convex dev` in a separate terminal. The Convex CLI prints a URL — set `NEXT_PUBLIC_CONVEX_URL` to that URL for the Next app (`app/ConvexClientProvider.tsx` throws if it's missing).
-- Convex actions do not have direct DB access. In `action` functions use `ctx.runQuery(...)` and `ctx.runMutation(...)` to call queries/mutations (don't use `ctx.db` inside actions).
-- Clerk auth is required for end-to-end Convex mutations. For local development: configure Clerk dev keys or run without auth and mock `ctx.auth.getUserIdentity()` when testing server functions.
-- Lint: `npm run lint` (ESLint configured via `eslint.config.mjs`).
+## Quick Start
+```bash
+npm install && npm run dev          # Next.js on :3000
+npx convex dev                      # Backend (separate terminal) — sets NEXT_PUBLIC_CONVEX_URL
+npm run lint && npm run check       # Lint + Convex type-check
+npm test                            # Vitest
+```
+**Critical**: Convex actions (`action`) have no direct DB access — use `ctx.runQuery()`/`ctx.runMutation()`. Clerk auth required for mutations; mock `ctx.auth.getUserIdentity()` for local testing.
 
-## Product vision (short)
-TallyUp is an *event-first* personal financial truth engine focused on awareness (not optimization). Treat each inflow/outflow as a first-class event and surface volatility, not smooth averages. Implement features in ways that preserve event detail (timestamps, origin, tags, areas) and support psychological honesty (flag uncertain events, surface `needsReview`, avoid collapsing irregular income into steady monthly metrics).
+## Architecture Overview
+| Layer | Location | Key Pattern |
+|-------|----------|-------------|
+| Web App | `app/(app)/` | Next.js App Router, pages like `dashboard`, `log`, `review`, `recurring` |
+| AI Coach | `app/(coach)/`, `convex/coach*.ts`, `lib/coach/` | LLM abstraction with cost guards (`ALPHA_COST_GUARD=true` → mock) |
+| Backend | `convex/` | Queries/mutations with `requireUserId()` auth pattern |
+| Generated | `convex/_generated/` | **Regenerate with `npx convex dev` after schema changes** |
+| Shared UI | `components/` | Client components with `"use client"`, Tailwind classes |
 
-## High level architecture
-- Next.js App Router (app/) is the web app. Pages live in `app/(app)/` (e.g., `summary`, `log`, `history`, `inbox`).
-- Auth: Clerk is the auth provider (see `app/layout.tsx` and `app/proxy.ts`).
-- Backend / DB: Convex hosts server functions and the DB. Convex server code lives in `convex/` and generated client helpers are under `convex/_generated/` (regenerate by running `npx convex dev`).
-- Client ↔ server: Client components use `convex/react` hooks and the typed `api` from `convex/_generated/api` (e.g. `useQuery(api.entries.listEntries, {...})`).
+## Core Data Conventions
 
-## How product concepts map to code (act immediately useful)
-- Event model: `convex/schema.ts` table `entries` stores each event (fields: `type`, `bucket`, `category`, `tags`, `amountCents`, `date`, `needsReview`, `createdAt`/`updatedAt`). Treat these as immutable events when possible; updates patch existing docs via `convex/entries.ts` mutations.
-- Needs review / Inbox: `needsReview` is set when `category` is missing; used by `listInbox` in `convex/entries.ts` and displayed in `app/(app)/inbox/page.tsx`.
-- Areas & Tags: Defaults in `components/utils.ts` (DEFAULT_BUCKETS, DEFAULT_TAGS); areas are free-text (normalized on queries/filters) and used heavily in UX (summary areas pie, filters in add).
-- Money & Dates: Use `amountCents` (integer cents) and the helpers in `components/utils.ts` (`dollarsToCents`, `centsToDollars`, `yyyymmddToLocalMidnightTs`, `startOfWeekLocalTs`).
-- Summary & insights: Summary calculations live in `app/(app)/summary/page.tsx` — replicate its approach when building new analytics: aggregate event-level data, preserve outliers, avoid smoothing into monthly salary.
+### Money — Always Integer Cents
+```typescript
+amountCents: v.number()  // Never floats. Use helpers:
+dollarsToCents(99.99)    // → 9999
+centsToDollars(9999)     // → 99.99
+```
 
-## Recurring series & matching (current implementation)
-- Data: A `recurringRules` table stores series/matcher information (now expanded to include fields like `displayName`, `autolinkEnabled`, cadence guidance, amountMode, min/max/tolerance, and `confidence`). Entries link to a recurring series using `entries.recurringRuleId` (typed `v.id("recurringRules")`).
-- Detection: A detector prototype lives in `convex/detector.ts` (`detectRecurringCandidatesFromEntries`) which groups by `(type,area,category)`, analyzes intervals and amount variability, and returns candidates with `amountMode` and `amountTolerancePercent`. (UI exposes these as Areas to keep language friendly)
-- Auto-apply: `addEntry` (in `convex/entries.ts`) now performs a conservative auto-apply pass: it queries active patterns with `autolinkEnabled` (server flag) and links the best match when criteria (area/category/amount tolerance) are satisfied. This is intentionally conservative — adjust thresholds in server logic as needed.
-- Backfill: `convex/recurring.ts` implements a `backfillRecurringRules` action that creates series from strong candidates and can link matching historical entries (dry-run support provided in the action args).
+### Timestamps
+- `date`: Local-midnight timestamp for event occurrence (used in indexes)
+- `createdAt`/`updatedAt`: System timestamps via `Date.now()`
+- Helpers in `components/utils.ts`: `yyyymmddToLocalMidnightTs()`, `startOfWeekLocalTs()`
 
-Notes: The repo favors a "Series (user-facing)" mindset backed by matcher fields; if you prefer a 2-table model (Series + Matchers) that is still straightforward to add later, but currently the series object contains matching knobs for Phase 1.
+### Auth Pattern (every query/mutation)
+```typescript
+async function requireUserId(ctx: AuthCtx): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthorized");
+  return identity.subject;  // Clerk subject = userId throughout
+}
+```
 
-## Implementation checklist (when adding features)
-1. Server: add/modify Convex queries/mutations in `convex/` following patterns in `entries.ts` and validate inputs server-side.
-2. Regenerate: run `npx convex dev` to regenerate `convex/_generated/*` and commit generated files if needed in this repo's workflow.
-3. Client: import `api` from `convex/_generated/api` and call with `useQuery`/`useMutation` in pages or components.
-4. UI: add small presentational components under `components/` (prefer `/components` over `src/components`). Mark client components with `"use client"` and use Tailwind utility classes.
-5. Tests & checks: run `npm run lint`, add small integration tests or CI checks for Convex changes if the feature affects data shape or user flows.
-6. PR checklist: lint passes, regenerate `convex/_generated/`, update README or docs when behavior changes, add notes about migrations if schema changes.
+## Key Subsystems
 
-## UX & edge-case guidance (product-aligned)
-- Preserve raw events: avoid algorithms that permanently lose event attributes (source, note, tags). If downsampling, keep an export or derived view but don't change stored events.
-- Treat income as unreliable: new summary features should highlight volatility (streak detection, run-rate windows, source exposure) rather than smoothing into stable monthly income by default.
-- Use `needsReview` liberally: events without category should flow to the inbox for user labeling; keep that flow fast and reversible.
+### Entries & Review Flow
+- `entries` table: Core transaction events with `type` (expense/income/transfer), `amountCents`, `category`, `needsReview`
+- **Inbox flow**: Missing category → `needsReview: true` + `reviewReason: "NEEDS_CATEGORY"` → surfaces in `/review`
+- Exclusion flags: `excludeFromTotals`, `excludeFromBudgets`, `excludeFromCashFlow`, `excludeFromRecurring`
+- Soft delete: `isArchived` + `archivedAt` (never hard delete)
 
-## Key files to inspect for examples
-- `convex/schema.ts` (data model)
-- `convex/entries.ts` (server-side queries/mutations and auth patterns)
-- `app/ConvexClientProvider.tsx` (requires NEXT_PUBLIC_CONVEX_URL)
-- `components/utils.ts` (money/date helpers, DEFAULT_BUCKETS/TAGS)
-- `app/(app)/summary/page.tsx` and `app/(app)/inbox/page.tsx` (analytics & inbox flows)
-- `components/EntryCard.tsx`, `components/TagChips.tsx` (UI patterns)
+### Category System
+- `convex/categoryCatalog.ts`: Plaid-aligned hierarchical categories (slug → name)
+- `convex/categoryResolver.ts`: Resolves category input → `Id<"categories">` (checks slug, name, creates if needed)
+- Built-in slugs: `food_and_drink`, `transportation`, `income_wages`, etc.
 
-### Design principles
-Refer to the project's design principles for UI/UX guidance: `docs/DESIGN_PRINCIPLES.md`
+### Budget System
+- `budgetCategories` → `budgetPlans` → `budgetPeriods` (materialized spending)
+- `budgetDirtyQueue`: Async recomputation — entry changes enqueue dirty items vs. immediate recompute
+- Matching priority in `budgetMatcher.ts`: subcategory slug → category slug → merchant → tags
 
----
-If you'd like, I can: add a short local Clerk setup snippet (env keys used here), or add a small PR template that enforces the `convex/_generated` regeneration step. Which would you prefer I add next? ✅
+### Plaid Integration
+- Flow: Plaid API → `plaidActions.ts` → `plaidTransactions` table → user review → `entries` table
+- `plaidConnections`: Access tokens + sync cursors
+- `categoryResolver` maps Plaid categories to internal slugs during import
+
+### Recurring Detection
+- `convex/detector.ts`: Groups by `(type, area, category)`, analyzes intervals/amounts
+- `recurringRules` table: Matchers with `amountMode`, `amountTolerancePercent`, `cadenceType`
+- Auto-link: `addEntry` checks `autolinkEnabled` rules and links matches conservatively
+
+### AI Coach (Alpha)
+- Providers: `lib/llm/` abstraction (mock, groq, cloudflare, openai)
+- **Cost guard**: `ALPHA_COST_GUARD=true` (default) forces mock provider
+- Context packet: `convex/coach_internal.ts` builds BalanceSheet, IncomeProfile, RiskProfile, etc.
+- Session state: `coachSessions`, `coachSlots` (tracks asked questions), `coachMemories`
+
+### Coach Context Condensation (Token Management)
+The coach system builds rich financial context but must fit within LLM token limits. Key files: `lib/llm/contextBuilder.ts`, `lib/llm/types.ts`.
+
+**Adaptive Depth** (`contextDepth: "minimal" | "standard" | "full"`):
+- Computed in `coach_internal.ts` based on user data completeness (has accounts? goals? conversation history?)
+- Controls how much detail is serialized:
+  - `minimal`: ~100-150 tokens — new users, simple queries
+  - `standard`: ~200-350 tokens — active users, most queries  
+  - `full`: ~400-600 tokens — complex analysis, power users
+
+**Depth Config** (in `contextBuilder.ts`):
+```typescript
+DEPTH_CONFIG = {
+  minimal: { maxAccounts: 1, maxGoals: 1, maxDebts: 1, maxCategories: 3, includeSecondaryMetrics: false },
+  standard: { maxAccounts: 2, maxGoals: 2, maxDebts: 2, maxCategories: 4, includeSecondaryMetrics: true },
+  full: { maxAccounts: 3, maxGoals: 3, maxDebts: 3, maxCategories: 5, includeSecondaryMetrics: true },
+}
+```
+
+**Intent-Gated Sections** — Only include context relevant to the detected domain:
+- `debt`: DebtContext + BalanceSheet + Income (for debt-to-income)
+- `budgeting`: SpendContext + BalanceSheet + Income
+- `savings`: GoalsContext + BalanceSheet + Income
+- `investing`: BalanceSheet + RiskProfile + TaxProfile
+- `tax`: TaxProfile + Income
+- `app_help`: Minimal core only
+
+**Token-Efficient Format** — Stable key=value, no markdown/prose:
+```
+HEALTH score=healthy concern=high_cc_util opportunity=automate_savings
+CF month=Jan2026 inc=5000 exp=4200 net=+800
+NW net=+15000 assets=45000 liab=30000
+DEBT total=8500 minPay=350 avgAPR=18.5%
+```
+
+**Anti-Loop Guards** (`lib/coach/slotLedger.ts`):
+- `slotLedger` tracks which intake questions were asked and when
+- `DONTASK` line prevents re-asking within cooldown period
+- `establishedFacts` provides confirmed info so LLM doesn't ask again
+- `frustrationDetectedAt` triggers extra caution mode
+
+## ⚠️ Cross-Entity Synchronization (MANDATORY)
+
+**Every mutation that modifies data MUST consider downstream effects on related entities.** This is non-negotiable for all new features and changes.
+
+### Entity Relationship Map
+
+```
+accounts ←──────────────────────────────────────────────────────────┐
+    │                                                               │
+    ├── accountSnapshots (balance history)                          │
+    │                                                               │
+    └── entries.accountId ──────────────────────────────────────────┤
+                │                                                   │
+                ├── goals.currentAmountCents (via goalId)           │
+                │                                                   │
+                ├── budgetPeriods (via budgetDirtyQueue)            │
+                │       ↑                                           │
+                │       └── budgetCategories ← budgetPlans          │
+                │                                                   │
+                └── recurringRules.lastMatchedAt (via autolink)     │
+                        │                                           │
+                        ├── expectedCharges (forecast)              │
+                        │                                           │
+                        └── accountScope.accountIds ────────────────┘
+```
+
+### Sync Requirements by Entity
+
+| When Creating/Modifying | Must Consider Effects On |
+|------------------------|--------------------------|
+| **Entry** | Budget periods, Goal progress, Account balance, Recurring autolink, Coach cache |
+| **Account** | Entries with `accountId`, Recurring rules with `accountScope`, Balance sheet |
+| **Budget Category** | Existing entries matching criteria, Budget plans, Budget periods |
+| **Recurring Rule** | Historical entries (backfill), Expected charges (forecast), Entry autolink |
+| **Goal** | Entry contributions, Progress calculations |
+
+### Current Sync Patterns (reference `convex/entries.ts`)
+
+When an **entry** is added/updated/deleted:
+| Entity | Sync Mechanism | When to Trigger |
+|--------|----------------|-----------------|
+| Budget periods | `enqueueBudgetDirty()` → `budgetDirtyQueue` | Entry affects expense with `budgetCategoryId` |
+| Goal progress | `applyGoalDelta()` → `goals.currentAmountCents` | Entry has `goalId` (contributions) |
+| Account balances | `adjustManualAccountBalance()` → `accountSnapshots` | Entry has `accountId` (manual accounts only) |
+| Recurring rules | Check `autolinkEnabled` rules | New entry matches pattern |
+| Coach context cache | Invalidated via TTL | Any financial data change |
+
+When a **recurring rule** is created (`convex/recurring.ts`):
+- **Historical entries**: Optionally backfill past entries matching cadence
+- **Expected charges**: Generate future forecast in `expectedCharges` table
+- **Budget behavior**: `budgetBehavior.committed` affects budget calculations
+
+When a **budget category** is created (`convex/budgets.ts`):
+- **Budget plan**: Auto-creates `budgetPlans` record
+- **Plan version**: Creates initial `budgetPlanVersions` record
+- **Existing entries**: Should recompute periods for entries matching criteria
+
+When an **account** is created/archived (`convex/accounts.ts`):
+- **Initial snapshot**: Creates `accountSnapshots` record
+- **Recurring rules**: Rules with `accountScope.accountIds` may need updates
+- **Balance sheet**: Coach context packet includes account balances
+
+### Implementation Requirements
+
+1. **Identify all affected entities** before writing any mutation
+2. **Use async queues** for expensive recomputations (e.g., `budgetDirtyQueue` pattern)
+3. **Respect exclusion flags**: `excludeFromTotals`, `excludeFromBudgets`, `excludeFromCashFlow`
+4. **Handle reversals**: Deletes/updates must reverse previous effects (negative deltas)
+5. **Skip linked accounts**: Plaid-linked accounts get authoritative balances from sync, not entry changes
+6. **Cascade archive operations**: Archiving an entity should consider dependent records
+
+### Example: Entry Update with Full Sync
+```typescript
+// 1. Reverse old effects
+if (oldEntry.goalId) await applyGoalDelta(ctx, userId, oldEntry.goalId, -oldAmount);
+if (shouldAffectBudgets(oldEntry)) await enqueueBudgetDirty(ctx, userId, oldEntry.date, oldEntry.budgetCategoryId, "entry_updated");
+
+// 2. Apply new effects  
+if (newGoalId) await applyGoalDelta(ctx, userId, newGoalId, newAmount);
+if (shouldAffectBudgets(newEntry)) await enqueueBudgetDirty(ctx, userId, newEntry.date, newEntry.budgetCategoryId, "entry_updated");
+
+// 3. Adjust account balance (handles delta calculation internally)
+await adjustManualAccountBalance(ctx, userId, accountId, balanceDelta);
+```
+
+**PR Review Checkpoint**: Any mutation touching `entries`, `accounts`, `goals`, `budgetCategories`, or `recurringRules` must document which cross-entity syncs are handled.
+
+## Implementation Checklist
+1. **Server**: Add Convex queries/mutations following `entries.ts` patterns; validate inputs server-side
+2. **Cross-Entity Sync**: Identify and implement all downstream entity updates (see section above)
+3. **Regenerate**: Run `npx convex dev` after any `schema.ts` changes
+4. **Client**: `useQuery(api.entries.listEntries, {...})` / `useMutation(api.entries.addEntry)`
+5. **UI**: Components in `/components`, `"use client"` directive, Tailwind utilities
+6. **Tests**: `npm test` (Vitest); unit tests for pure logic, component tests with Testing Library
+
+## Product Principles
+- **Event-first**: Preserve raw event details (timestamps, origin, tags). Never collapse into averages that lose provenance.
+- **`needsReview` liberally**: Uncertain entries flow to inbox for user labeling
+- **Income as unreliable**: Surface volatility (source exposure, streak detection), not smoothed monthly salary
+- **Calm UI, loud numbers**: Money/dates are heroes; one primary CTA per screen (see `docs/DESIGN_PRINCIPLES.md`)
+
+## Key Files by Feature
+| Feature | Files |
+|---------|-------|
+| Data model | `convex/schema.ts` |
+| Entry CRUD + auth | `convex/entries.ts` |
+| Money/date helpers | `components/utils.ts` |
+| Category catalog | `convex/categoryCatalog.ts`, `convex/categoryResolver.ts` |
+| Budget engine | `convex/budgets.ts`, `convex/budgetEngine.ts`, `convex/budgetMatcher.ts` |
+| Plaid sync | `convex/plaid.ts`, `convex/plaidActions.ts`, `docs/PLAID_INTEGRATION.md` |
+| AI coach | `convex/coach.ts`, `lib/coach/`, `lib/llm/` |
+| Recurring | `convex/recurring.ts`, `convex/detector.ts` |
+| UI patterns | `components/EntryCard.tsx`, `components/ui/` |
