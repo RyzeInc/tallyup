@@ -120,7 +120,25 @@ export function parseCoachOutput(rawContent: string): CoachOutput {
   }
 
   try {
-    const parsedJson = JSON.parse(trimmed) as OutputCandidate;
+    const parsedJson = JSON.parse(trimmed) as OutputCandidate & { version?: number; blocks?: unknown[] };
+    
+    // Check for new block format (version: 1 + blocks array)
+    if (parsedJson.version === 1 && Array.isArray(parsedJson.blocks)) {
+      // Pass through the raw JSON as assistantMessage - the frontend will parse it
+      return CoachOutputSchema.parse({
+        assistantMessage: trimmed, // Keep the raw JSON for BlockRenderer
+        summaryBullets: [],
+        actions: [],
+        openQuestions: Array.isArray(parsedJson.openQuestions) ? parsedJson.openQuestions : [],
+        metricsUsed: [],
+        profileUpdates: parsedJson.profileUpdates,
+        foundationUpdates: parsedJson.foundationUpdates,
+        memoryDelta: parsedJson.memoryDelta,
+        memoryUpdates: parsedJson.memoryUpdates,
+        transactionDrilldownRequest: parsedJson.transactionDrilldownRequest,
+      });
+    }
+    
     const fallbackQuestions = extractQuestionsFromText(trimmed);
     const assistantMessage =
       typeof parsedJson.assistantMessage === "string" && parsedJson.assistantMessage.trim()
@@ -133,6 +151,25 @@ export function parseCoachOutput(rawContent: string): CoachOutput {
 
   const extracted = extractJsonBlock(trimmed);
   if (extracted.json) {
+    // Check for block format within code block
+    const jsonWithBlocks = extracted.json as OutputCandidate & { version?: number; blocks?: unknown[] };
+    if (jsonWithBlocks.version === 1 && Array.isArray(jsonWithBlocks.blocks)) {
+      // Reconstruct the JSON string for the block format
+      const blockJson = JSON.stringify({ version: 1, blocks: jsonWithBlocks.blocks });
+      return CoachOutputSchema.parse({
+        assistantMessage: blockJson,
+        summaryBullets: [],
+        actions: [],
+        openQuestions: Array.isArray(jsonWithBlocks.openQuestions) ? jsonWithBlocks.openQuestions : [],
+        metricsUsed: [],
+        profileUpdates: jsonWithBlocks.profileUpdates,
+        foundationUpdates: jsonWithBlocks.foundationUpdates,
+        memoryDelta: jsonWithBlocks.memoryDelta,
+        memoryUpdates: jsonWithBlocks.memoryUpdates,
+        transactionDrilldownRequest: jsonWithBlocks.transactionDrilldownRequest,
+      });
+    }
+    
     const fallbackQuestions = extractQuestionsFromText(extracted.cleaned);
     return coerceOutput(extracted.json, extracted.cleaned, fallbackQuestions);
   }

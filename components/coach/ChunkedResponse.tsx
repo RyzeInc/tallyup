@@ -1,11 +1,22 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import * as Lucide from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import Button from "@/components/ui/Button";
+import BlockRenderer from "./BlockRenderer";
+import {
+  type Block,
+  type BlockResponse,
+  parseBlockResponse,
+  markdownToBlocks,
+  chunkBlocks,
+  generateFormatTelemetry,
+} from "@/lib/llm/blocks";
+import { recordFormatTelemetry } from "@/lib/llm/telemetry";
+import { isBlockFormatEnabled } from "@/lib/constants";
 
 /**
  * Preprocess markdown content to fix common LLM formatting issues:
@@ -382,4 +393,206 @@ export function parseIntoChunks(
   }
   
   return chunks;
+}
+
+// ============================================
+// BLOCK-BASED CHUNKED RESPONSE
+// ============================================
+
+export interface BlockChunkedResponseProps {
+  /** Raw content from the LLM (JSON blocks or markdown) */
+  content: string;
+  /** Provider name for telemetry */
+  provider?: string;
+  /** Visual cards to display */
+  cards?: React.ReactNode[];
+  /** Called when user advances through chunks */
+  onAdvance?: (chunkIndex: number) => void;
+  /** Show all chunks at once */
+  showAll?: boolean;
+  className?: string;
+}
+
+/**
+ * BlockChunkedResponse - Progressive disclosure using block-based rendering.
+ * 
+ * This component:
+ * 1. Tries to parse content as block format
+ * 2. Falls back to markdown→blocks conversion if parsing fails
+ * 3. Chunks by blocks (never splitting mid-list)
+ * 4. Records telemetry for format tracking
+ */
+export function BlockChunkedResponse({
+  content,
+  provider = "unknown",
+  cards = [],
+  onAdvance,
+  showAll = false,
+  className = "",
+}: BlockChunkedResponseProps) {
+  // Parse and chunk on mount
+  const { blockChunks, telemetry } = useMemo(() => {
+    const parseResult = parseBlockResponse(content);
+    
+    let finalResponse: BlockResponse;
+    let finalBlocks: Block[];
+    
+    if (parseResult.success && parseResult.response) {
+      // Block format parsed successfully
+      finalResponse = parseResult.response;
+      finalBlocks = finalResponse.blocks;
+    } else {
+      // Fallback: convert markdown to blocks
+      finalResponse = markdownToBlocks(parseResult.rawContent);
+      finalBlocks = finalResponse.blocks;
+    }
+    
+    // Generate telemetry
+    const telemetryData = generateFormatTelemetry(parseResult, provider, finalBlocks);
+    
+    // Chunk the blocks
+    const chunks = chunkBlocks(finalResponse, {
+      maxBlocksPerChunk: 2,
+      keepHeadingWithContent: true,
+    });
+    
+    return { blockChunks: chunks, telemetry: telemetryData };
+  }, [content, provider]);
+
+  // Record telemetry once on mount
+  useMemo(() => {
+    recordFormatTelemetry(telemetry);
+  }, [telemetry]);
+
+  const [localIndex, setLocalIndex] = useState(0);
+  
+  const visibleIndex = showAll ? blockChunks.length - 1 : localIndex;
+  const visibleChunks = showAll ? blockChunks : blockChunks.slice(0, visibleIndex + 1);
+  
+  // Merge all visible blocks for rendering
+  const visibleBlocks = useMemo(() => {
+    return visibleChunks.flatMap(chunk => chunk.blocks);
+  }, [visibleChunks]);
+
+  const handleContinue = useCallback(() => {
+    const nextIndex = localIndex + 1;
+    if (nextIndex < blockChunks.length) {
+      setLocalIndex(nextIndex);
+      onAdvance?.(nextIndex);
+    }
+  }, [localIndex, blockChunks.length, onAdvance]);
+
+  const lastVisibleChunk = visibleChunks[visibleChunks.length - 1];
+  const hasMore = !showAll && localIndex < blockChunks.length - 1;
+
+  return (
+    <div className={`space-y-4 ${className}`}>
+      {/* Render all visible blocks */}
+      <BlockRenderer blocks={visibleBlocks} />
+
+      {/* Render cards */}
+      {cards.map((card, idx) => (
+        <div key={`card-${idx}`} className="my-3">
+          {card}
+        </div>
+      ))}
+
+      {/* Continue button */}
+      {hasMore && !lastVisibleChunk?.isFinal && (
+        <div className="flex gap-2 mt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleContinue}
+          >
+            <span>Continue</span>
+            <Lucide.ChevronRight style={{ width: 16, height: 16, marginLeft: 4 }} />
+          </Button>
+        </div>
+      )}
+
+      {/* Progress indicator */}
+      {!showAll && blockChunks.length > 1 && (
+        <div 
+          className="flex justify-center gap-1 pt-2"
+          style={{ opacity: 0.6 }}
+        >
+          {blockChunks.map((_, idx) => (
+            <div
+              key={idx}
+              className="rounded-full transition-all duration-200"
+              style={{
+                width: idx <= visibleIndex ? 8 : 6,
+                height: idx <= visibleIndex ? 8 : 6,
+                backgroundColor: idx <= visibleIndex 
+                  ? "var(--primary)" 
+                  : "var(--border)",
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// SMART CHUNKED RESPONSE (AUTO-SELECTS MODE)
+// ============================================
+
+export interface SmartChunkedResponseProps {
+  /** Raw content from the LLM */
+  content: string;
+  /** Provider name for telemetry */
+  provider?: string;
+  /** Visual cards to display */
+  cards?: React.ReactNode[];
+  /** Called when user advances through chunks */
+  onAdvance?: (chunkIndex: number) => void;
+  /** Show all chunks at once */
+  showAll?: boolean;
+  className?: string;
+}
+
+/**
+ * SmartChunkedResponse - Automatically selects block or markdown mode.
+ * 
+ * Uses the feature flag to determine rendering mode:
+ * - "blocks" or "auto": Uses BlockChunkedResponse
+ * - "markdown": Uses legacy ChunkedResponse
+ */
+export function SmartChunkedResponse({
+  content,
+  provider = "unknown",
+  cards = [],
+  onAdvance,
+  showAll = false,
+  className = "",
+}: SmartChunkedResponseProps) {
+  const useBlocks = isBlockFormatEnabled();
+
+  if (useBlocks) {
+    return (
+      <BlockChunkedResponse
+        content={content}
+        provider={provider}
+        cards={cards}
+        onAdvance={onAdvance}
+        showAll={showAll}
+        className={className}
+      />
+    );
+  }
+
+  // Legacy markdown mode
+  const chunks = parseIntoChunks(content, { maxChars: 280 });
+  
+  return (
+    <ChunkedResponse
+      chunks={chunks}
+      onAdvance={onAdvance}
+      showAll={showAll}
+      className={className}
+    />
+  );
 }

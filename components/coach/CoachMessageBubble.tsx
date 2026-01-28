@@ -1,14 +1,18 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import CoachAvatar from "./CoachAvatar";
-import ChunkedResponse, { parseIntoChunks, ResponseChunk, ChunkAction } from "./ChunkedResponse";
+import { SmartChunkedResponse } from "./ChunkedResponse";
+import { isBlockFormatEnabled } from "@/lib/constants";
+import BlockRenderer from "./BlockRenderer";
+import { parseBlockResponse, markdownToBlocks } from "@/lib/llm/blocks";
 
 /**
  * Preprocess markdown content to fix common LLM formatting issues
+ * (Only used when block format is disabled)
  */
 function preprocessMarkdown(content: string): string {
   let processed = content;
@@ -50,6 +54,7 @@ function preprocessMarkdown(content: string): string {
  * 
  * Renders user or coach messages with appropriate styling.
  * Supports progressive disclosure via chunked responses for long messages.
+ * Uses block-based rendering when enabled for reliable formatting.
  * 
  * Response Length Guidelines (1-3-1 Rule):
  * - 1 main insight per message
@@ -72,8 +77,8 @@ interface CoachMessageBubbleProps {
   enableChunking?: boolean;
   /** Called when user advances through chunks */
   onChunkAdvance?: (chunkIndex: number) => void;
-  /** Called when user selects a chunk action */
-  onChunkAction?: (action: ChunkAction, chunkId: string) => void;
+  /** Provider name for telemetry */
+  provider?: string;
   className?: string;
 }
 
@@ -85,28 +90,28 @@ export default function CoachMessageBubble({
   cards = [],
   enableChunking = true,
   onChunkAdvance,
-  onChunkAction,
+  provider = "unknown",
   className = "",
 }: CoachMessageBubbleProps) {
   const isUser = role === "user";
+  const useBlocks = isBlockFormatEnabled();
   
-  // Parse content into chunks if enabled and content is long
+  // Determine if chunking should be used
   const shouldChunk = useMemo(() => {
     return !isUser && enableChunking && content.length > CHUNK_THRESHOLD;
   }, [isUser, enableChunking, content.length]);
   
-  const chunks = useMemo(() => {
-    if (!shouldChunk) return null;
-    return parseIntoChunks(content, { maxChars: 280 });
-  }, [shouldChunk, content]);
-  
-  // Track chunk progress
-  const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
-  
-  const handleChunkAdvance = (index: number) => {
-    setCurrentChunkIndex(index);
-    onChunkAdvance?.(index);
-  };
+  // For short messages, parse blocks directly (no chunking)
+  const shortMessageBlocks = useMemo(() => {
+    if (isUser || shouldChunk || !useBlocks) return null;
+    
+    const parseResult = parseBlockResponse(content);
+    if (parseResult.success && parseResult.response) {
+      return parseResult.response.blocks;
+    }
+    // Fallback to markdown conversion
+    return markdownToBlocks(content).blocks;
+  }, [isUser, shouldChunk, useBlocks, content]);
 
   return (
     <div
@@ -159,16 +164,20 @@ export default function CoachMessageBubble({
           </div>
         ) : isUser ? (
           <p style={{ fontSize: "var(--text-body)" }}>{content}</p>
-        ) : shouldChunk && chunks ? (
-          // Chunked progressive disclosure for long messages
-          <ChunkedResponse
-            chunks={chunks}
-            currentChunkIndex={currentChunkIndex}
-            onAdvance={handleChunkAdvance}
-            onAction={onChunkAction}
+        ) : shouldChunk ? (
+          // Chunked progressive disclosure for long messages (uses blocks or markdown)
+          <SmartChunkedResponse
+            content={content}
+            provider={provider}
+            cards={cards}
+            onAdvance={onChunkAdvance}
+            showAll={false}
           />
+        ) : useBlocks && shortMessageBlocks ? (
+          // Block-based rendering for short messages
+          <BlockRenderer blocks={shortMessageBlocks} />
         ) : (
-          // Standard markdown rendering for short messages
+          // Legacy markdown rendering for short messages (when blocks disabled)
           <div className="coach-markdown">
             <ReactMarkdown
               remarkPlugins={[remarkBreaks, remarkGfm]}
@@ -228,8 +237,8 @@ export default function CoachMessageBubble({
           </div>
         )}
 
-        {/* Visual cards (displayed after text content) */}
-        {!isUser && cards.length > 0 && (
+        {/* Visual cards (displayed after text content, but not if using SmartChunkedResponse which handles cards) */}
+        {!isUser && !shouldChunk && cards.length > 0 && (
           <div className="mt-3 space-y-3">
             {cards.map((card, idx) => (
               <div key={idx}>{card}</div>

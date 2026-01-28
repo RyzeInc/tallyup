@@ -162,3 +162,45 @@ export function parseDrilldown(
   }
   return null;
 }
+
+// ============================================
+// COACH FEATURE FLAGS
+// ============================================
+
+/**
+ * Feature flag for block-based response format.
+ * - "blocks": Always use block format (with markdown fallback)
+ * - "markdown": Always use markdown (legacy)
+ * - "auto": Use blocks but fall back to markdown if parsing fails
+ */
+export type CoachResponseFormat = "blocks" | "markdown" | "auto";
+
+/**
+ * Get the current coach response format setting.
+ * Reads from localStorage or defaults to "auto".
+ */
+export function getCoachResponseFormat(): CoachResponseFormat {
+  if (typeof window === "undefined") return "auto";
+  
+  const stored = localStorage.getItem("coach_response_format");
+  if (stored === "blocks" || stored === "markdown" || stored === "auto") {
+    return stored;
+  }
+  return "auto";
+}
+
+/**
+ * Set the coach response format.
+ */
+export function setCoachResponseFormat(format: CoachResponseFormat): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("coach_response_format", format);
+}
+
+/**
+ * Check if block format is enabled.
+ */
+export function isBlockFormatEnabled(): boolean {
+  const format = getCoachResponseFormat();
+  return format === "blocks" || format === "auto";
+}

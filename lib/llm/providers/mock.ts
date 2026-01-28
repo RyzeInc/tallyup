@@ -361,6 +361,46 @@ function buildMockResponse(input: CoachProviderInput): Partial<CoachOutput> {
   };
 }
 
+/**
+ * Convert a mock response to block format for testing the new rendering.
+ */
+function convertToBlockFormat(response: Partial<CoachOutput>): string {
+  const blocks: Array<{ type: string; text?: string; items?: Array<{ text: string }>; start?: number }> = [];
+  
+  // Split the assistant message into sentences for paragraph blocks
+  const message = response.assistantMessage || "";
+  const sentences = message.split(/(?<=[.!?])\s+/).filter((s: string) => s.trim());
+  
+  // Group sentences into paragraphs (2-3 sentences each)
+  let currentParagraph: string[] = [];
+  for (const sentence of sentences) {
+    currentParagraph.push(sentence);
+    if (currentParagraph.length >= 2 || sentence.endsWith("?")) {
+      blocks.push({ type: "paragraph", text: currentParagraph.join(" ") });
+      currentParagraph = [];
+    }
+  }
+  if (currentParagraph.length > 0) {
+    blocks.push({ type: "paragraph", text: currentParagraph.join(" ") });
+  }
+  
+  // Add actions as a numbered list if present
+  if (response.actions && response.actions.length > 0) {
+    blocks.push({
+      type: "ordered_list",
+      start: 1,
+      items: response.actions.map((action: string) => ({ text: action })),
+    });
+  }
+  
+  // Ensure at least one block
+  if (blocks.length === 0) {
+    blocks.push({ type: "paragraph", text: "I'm here to help with your finances." });
+  }
+  
+  return JSON.stringify({ version: 1, blocks });
+}
+
 function formatNewFacts(facts: ExtractedFacts, established: string[]): string | null {
   const parts: string[] = [];
 
@@ -565,13 +605,31 @@ function buildFoundationUpdates(
 // Provider Export
 // ============================================================================
 
+/**
+ * Check if block format is enabled for mock responses.
+ * Uses environment variable or defaults to true for testing.
+ */
+function shouldUseBlockFormat(): boolean {
+  // Default to block format for testing the new rendering
+  const envValue = process.env.MOCK_BLOCK_FORMAT;
+  if (envValue === "false") return false;
+  return true; // Default to blocks
+}
+
 export function createMockProvider(): CoachProvider {
   return {
     id: "mock",
     generate: async (input) => {
       const payload = buildMockResponse(input);
+      const useBlocks = shouldUseBlockFormat();
+      
+      // If block format is enabled, convert the response
+      const assistantMessage = useBlocks 
+        ? convertToBlockFormat(payload)
+        : (payload.assistantMessage ?? "I'm ready to help. What would you like to focus on?");
+      
       return CoachOutputSchema.parse({
-        assistantMessage: payload.assistantMessage ?? "I'm ready to help. What would you like to focus on?",
+        assistantMessage,
         summaryBullets: payload.summaryBullets ?? [],
         actions: payload.actions ?? [],
         openQuestions: payload.openQuestions ?? [],
