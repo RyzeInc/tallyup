@@ -20,6 +20,7 @@ const MorePage = dynamic(() => import("@/app/(app)/more/page"), { ssr: false });
 const ReviewPage = dynamic(() => import("@/app/(app)/review/page"), { ssr: false });
 const AccountsPage = dynamic(() => import("@/app/(app)/accounts/page"), { ssr: false });
 const CalendarPage = dynamic(() => import("@/app/(app)/calendar/page"), { ssr: false });
+const CoachPage = dynamic(() => import("@/app/(coach)/coach/page"), { ssr: false });
 
 /**
  * AppShell - Unified shell with (Rocket Money-style):
@@ -159,6 +160,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </TabPanel>
                 <TabPanel tabId="accounts">
                   <AccountsPage />
+                </TabPanel>
+                <TabPanel tabId="coach">
+                  <CoachPage />
                 </TabPanel>
                 <TabPanel tabId="help">
                   <HelpPage />

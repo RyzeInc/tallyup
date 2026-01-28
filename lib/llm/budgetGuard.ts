@@ -1,7 +1,9 @@
 export const GLOBAL_USAGE_USER_ID = "__global__";
 
-const DEFAULT_USER_MAX = 0;
-const DEFAULT_GLOBAL_MAX = 0;
+// Default rate limits to prevent runaway costs
+// Set to 0 in env vars to disable limits (not recommended for production)
+const DEFAULT_USER_MAX = 50;    // Max requests per user per day
+const DEFAULT_GLOBAL_MAX = 5000; // Max requests globally per day
 
 function parseLimit(value: string | undefined, fallback: number): number {
   if (!value) return fallback;

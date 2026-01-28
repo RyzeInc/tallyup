@@ -1,11 +1,7 @@
 "use client";
 
-import CoachChat from "@/components/coach/CoachChat";
+import CoachDashboard from "@/components/coach/CoachDashboard";
 
 export default function CoachPage() {
-  return (
-    <div className="space-y-4">
-      <CoachChat />
-    </div>
-  );
+  return <CoachDashboard />;
 }

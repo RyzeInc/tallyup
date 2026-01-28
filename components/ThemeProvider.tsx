@@ -21,7 +21,7 @@ const THEME_CLASSES: ThemeMode[] = ["porcelain", "light", "dim", "estate", "clar
  * Users can show/hide certain pages from the main nav bar.
  * Hidden pages still accessible via More menu.
  */
-export type CustomizableNavItem = "activity" | "budgeting" | "recurring" | "goals" | "insights" | "calendar" | "review" | "accounts" | "auto-sort";
+export type CustomizableNavItem = "activity" | "budgeting" | "recurring" | "goals" | "insights" | "calendar" | "review" | "accounts" | "auto-sort" | "coach";
 
 export const NAV_ITEM_CONFIG: { id: CustomizableNavItem; label: string; description: string }[] = [
   { id: "activity", label: "Activity", description: "Transaction history and log" },
@@ -33,10 +33,11 @@ export const NAV_ITEM_CONFIG: { id: CustomizableNavItem; label: string; descript
   { id: "review", label: "Review", description: "Weekly/monthly review" },
   { id: "accounts", label: "Accounts", description: "Connected accounts" },
   { id: "auto-sort", label: "Auto-Sort", description: "Auto-categorize transactions" },
+  { id: "coach", label: "Coach", description: "AI financial coaching assistant" },
 ];
 
 // Default visible items in nav bar
-const DEFAULT_VISIBLE_NAV: CustomizableNavItem[] = ["activity", "budgeting", "recurring", "goals", "insights"];
+const DEFAULT_VISIBLE_NAV: CustomizableNavItem[] = ["activity", "budgeting", "recurring", "goals", "coach"];
 
 const NAV_PREFS_KEY = "tallyup.navItems";
 
@@ -68,7 +69,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved) as CustomizableNavItem[];
         // Validate items
-        return parsed.filter((item) => NAV_ITEM_CONFIG.some((c) => c.id === item));
+        const validated = parsed.filter((item) => NAV_ITEM_CONFIG.some((c) => c.id === item));
+        // Migration: Add coach if user has saved prefs but coach isn't included yet
+        // This ensures existing users get the coach tab added to their nav
+        if (!validated.includes("coach")) {
+          validated.push("coach");
+          // Persist the migration
+          localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(validated));
+        }
+        return validated;
       }
       return DEFAULT_VISIBLE_NAV;
     } catch {

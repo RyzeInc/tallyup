@@ -59,19 +59,12 @@ function extractSections(lines: string[]): {
   return { summary, actions, questions };
 }
 
-function extractQuestionsFromText(text: string): string[] {
-  const matches = text.match(/[^?]*\?/g);
-  if (!matches) return [];
-  const cleaned = matches
-    .map((match) => match.trim())
-    .map((match) => match.replace(/^\s*[-*]\s+/, "").trim())
-    .filter(Boolean);
-  const unique: string[] = [];
-  for (const question of cleaned.reverse()) {
-    if (!unique.includes(question)) unique.push(question);
-    if (unique.length >= 2) break;
-  }
-  return unique.reverse();
+function extractQuestionsFromText(_text: string): string[] {
+  // DISABLED: This function was extracting questions the COACH asks the user
+  // from the response text, then presenting them as options for the USER to send.
+  // This created a nonsensical feedback loop. 
+  // If the LLM doesn't provide explicit openQuestions, we show no follow-ups.
+  return [];
 }
 
 function coerceOutput(

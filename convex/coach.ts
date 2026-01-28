@@ -93,10 +93,12 @@ export const chat: ReturnType<typeof action> = action({
 
     const { provider, usesExternal, selected } = getCoachProvider();
     
-    // Dynamic system prompt based on user's health summary and context depth
+    // Dynamic system prompt based on user's health summary, context depth, AND intent
+    // Intent determines whether to give quick answers or thorough guidance
     const systemPrompt = buildCoachSystemPrompt({
       healthSummary: packetWithKnowledge.healthSummary,
       contextDepth: packetWithKnowledge.contextDepth,
+      intent: packetWithKnowledge.intent,
     });
     
     const rawMode = process.env.COACH_RAW_MODE === "true";
@@ -419,5 +421,184 @@ export const resetSession = mutation({
     }
 
     return { ok: true };
+  },
+});
+
+/**
+ * List conversation history grouped by session.
+ * Returns conversations from coachEvents table.
+ */
+export const listConversations = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const limit = args.limit ?? 50;
+
+    // Get all coach events for this user, ordered by most recent
+    const events = await ctx.db
+      .query("coachEvents")
+      .withIndex("by_user_createdAt", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
+
+    // Group events into "conversations" by time gaps (>30 min = new conversation)
+    const SESSION_GAP_MS = 30 * 60 * 1000; // 30 minutes
+    const conversations: Array<{
+      id: string;
+      startedAt: number;
+      lastMessageAt: number;
+      messageCount: number;
+      summary: string;
+      tags: string[];
+      events: Array<{
+        id: string;
+        userMessage?: string;
+        assistantMessage?: string;
+        createdAt: number;
+        summaryBullets: string[];
+      }>;
+    }> = [];
+
+    let currentConversation: typeof conversations[0] | null = null;
+
+    // Events are in descending order, so iterate normally and check gaps
+    for (const event of events) {
+      const needsNewConversation = !currentConversation || 
+        (currentConversation.events[currentConversation.events.length - 1].createdAt - event.createdAt) > SESSION_GAP_MS;
+
+      if (needsNewConversation) {
+        // Start a new conversation
+        currentConversation = {
+          id: event._id,
+          startedAt: event.createdAt,
+          lastMessageAt: event.createdAt,
+          messageCount: 0,
+          summary: "",
+          tags: [],
+          events: [],
+        };
+        conversations.push(currentConversation);
+      }
+
+      // Add event to current conversation
+      currentConversation!.events.push({
+        id: event._id,
+        userMessage: event.userMessage,
+        assistantMessage: event.assistantMessage,
+        createdAt: event.createdAt,
+        summaryBullets: event.summaryBullets,
+      });
+      currentConversation!.messageCount++;
+      currentConversation!.startedAt = Math.min(currentConversation!.startedAt, event.createdAt);
+      
+      // Build summary from first user message
+      if (event.userMessage && !currentConversation!.summary) {
+        currentConversation!.summary = event.userMessage.slice(0, 100);
+      }
+      
+      // Extract tags from summary bullets
+      event.summaryBullets.forEach(bullet => {
+        const lower = bullet.toLowerCase();
+        if (lower.includes("budget") && !currentConversation!.tags.includes("budgeting")) {
+          currentConversation!.tags.push("budgeting");
+        }
+        if ((lower.includes("debt") || lower.includes("loan") || lower.includes("credit")) && 
+            !currentConversation!.tags.includes("debt")) {
+          currentConversation!.tags.push("debt");
+        }
+        if ((lower.includes("save") || lower.includes("saving") || lower.includes("emergency")) && 
+            !currentConversation!.tags.includes("saving")) {
+          currentConversation!.tags.push("saving");
+        }
+        if ((lower.includes("invest") || lower.includes("stock") || lower.includes("401k")) && 
+            !currentConversation!.tags.includes("investing")) {
+          currentConversation!.tags.push("investing");
+        }
+        if ((lower.includes("spend") || lower.includes("expense")) && 
+            !currentConversation!.tags.includes("spending")) {
+          currentConversation!.tags.push("spending");
+        }
+      });
+    }
+
+    return conversations;
+  },
+});
+
+/**
+ * Get a specific conversation's full message history.
+ */
+export const getConversation = query({
+  args: {
+    conversationId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    
+    // Get the conversation's first event
+    const firstEvent = await ctx.db.get(args.conversationId as any);
+    if (!firstEvent || (firstEvent as any).userId !== userId) {
+      return null;
+    }
+
+    const SESSION_GAP_MS = 30 * 60 * 1000;
+    
+    // Get events around this time to find the full conversation
+    const events = await ctx.db
+      .query("coachEvents")
+      .withIndex("by_user_createdAt", (q) => q.eq("userId", userId))
+      .order("asc")
+      .collect();
+
+    // Find the conversation window
+    const messages: Array<{
+      role: "user" | "assistant";
+      content: string;
+      createdAt: number;
+    }> = [];
+
+    let inConversation = false;
+    let lastTime = 0;
+
+    for (const event of events) {
+      const gap = lastTime > 0 ? event.createdAt - lastTime : 0;
+      
+      if (event._id === args.conversationId) {
+        inConversation = true;
+      }
+      
+      if (inConversation) {
+        // Check if we've moved to a new conversation
+        if (gap > SESSION_GAP_MS && messages.length > 0) {
+          break;
+        }
+        
+        if (event.userMessage) {
+          messages.push({
+            role: "user",
+            content: event.userMessage,
+            createdAt: event.createdAt,
+          });
+        }
+        if (event.assistantMessage) {
+          messages.push({
+            role: "assistant",
+            content: event.assistantMessage,
+            createdAt: event.createdAt,
+          });
+        }
+      }
+      
+      lastTime = event.createdAt;
+    }
+
+    return {
+      id: args.conversationId,
+      messages,
+      startedAt: messages[0]?.createdAt,
+      lastMessageAt: messages[messages.length - 1]?.createdAt,
+    };
   },
 });

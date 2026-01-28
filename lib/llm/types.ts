@@ -170,6 +170,16 @@ export type CoachContextPacket = {
   intent?: {
     domain?: string | null;
     task?: string | null;
+    /** Response depth: quick (simple answer), standard, or deep (thorough analysis) */
+    depth?: "quick" | "standard" | "deep" | null;
+    /** Whether user is requesting a structured plan/roadmap */
+    needsStructuredPlan?: boolean | null;
+    /** User is signaling they're a beginner and need education, not questions */
+    needsEducation?: boolean | null;
+    /** User is pushing back or expressing frustration */
+    expressingFrustration?: boolean | null;
+    /** User explicitly doesn't want to answer questions right now */
+    resistingQuestions?: boolean | null;
   } | null;
   knowledgeSnippets?: Array<{
     docId: string;

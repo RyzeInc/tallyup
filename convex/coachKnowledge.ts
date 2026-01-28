@@ -55,6 +55,16 @@ export const removeKnowledgeByDoc = internalMutation({
   },
 });
 
+// Constant-time string comparison to prevent timing attacks
+function secureCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
 export const ingestKnowledge = action({
   args: {
     token: v.optional(v.string()),
@@ -71,7 +81,8 @@ export const ingestKnowledge = action({
   },
   handler: async (ctx, args) => {
     const expectedToken = process.env.COACH_KNOWLEDGE_INGEST_TOKEN;
-    if (expectedToken && args.token !== expectedToken) {
+    // Use constant-time comparison to prevent timing attacks
+    if (expectedToken && !secureCompare(args.token ?? "", expectedToken)) {
       throw new Error("Invalid ingest token.");
     }
 

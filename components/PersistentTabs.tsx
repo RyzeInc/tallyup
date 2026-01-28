@@ -4,7 +4,7 @@ import { ReactNode, createContext, useContext, useState, useCallback, useRef, us
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 
-export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts" | "auto-sort";
+export type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts" | "auto-sort" | "coach";
 
 interface TabsContextValue {
   activeTab: TabId;
@@ -28,6 +28,7 @@ const scrollPositions: Record<TabId, number> = {
   review: 0,
   accounts: 0,
   "auto-sort": 0,
+  coach: 0,
 };
 
 export function useTabs() {
@@ -52,6 +53,7 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     if (path.startsWith("/calendar")) return "calendar";
     if (path.startsWith("/review")) return "review";
     if (path === "/accounts") return "accounts";
+    if (path.startsWith("/coach")) return "coach";
     if (path.startsWith("/help") || path.startsWith("/learn")) return "help";
     if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) return "more";
     return "dashboard"; // default to dashboard
@@ -100,6 +102,7 @@ export function PersistentTabsProvider({ children }: { children: ReactNode }) {
     else if (path.startsWith("/calendar")) nextTab = "calendar";
     else if (path.startsWith("/review")) nextTab = "review";
     else if (path === "/accounts") nextTab = "accounts";
+    else if (path.startsWith("/coach")) nextTab = "coach";
     else if (path.startsWith("/help") || path.startsWith("/learn")) nextTab = "help";
     else if (path.startsWith("/more") || path.startsWith("/settings") || path.startsWith("/profile")) nextTab = "more";
 

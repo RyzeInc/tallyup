@@ -32,8 +32,10 @@ export const viewport: Viewport = {
   themeColor: "#4F6CFF",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 5,
-  userScalable: true,
+  // Disable pinch-to-zoom / webview scaling for PWAs and embedded WebViews.
+  // This sets a strict viewport so mobile pinch-to-zoom is turned off by default.
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -270,7 +270,18 @@ export function summarizePacket(packet: CoachContextPacket) {
   };
 }
 
-export function classifyIntent(message: string): { domain?: string; task?: string } {
+export function classifyIntent(message: string): { 
+  domain?: string; 
+  task?: string;
+  depth: "quick" | "standard" | "deep";
+  needsStructuredPlan?: boolean;
+  /** User is signaling they're a beginner and need education, not questions */
+  needsEducation?: boolean;
+  /** User is pushing back or expressing frustration */
+  expressingFrustration?: boolean;
+  /** User explicitly doesn't want to answer questions right now */
+  resistingQuestions?: boolean;
+} {
   const lower = message.toLowerCase();
   const hasAny = (terms: string[]) => terms.some((term) => lower.includes(term));
 
@@ -290,7 +301,119 @@ export function classifyIntent(message: string): { domain?: string; task?: strin
   else if (hasAny(["summarize", "summary"])) task = "summarize";
   else if (hasAny(["should i", "do i"])) task = "decide";
 
-  return { domain, task };
+  // ============================================
+  // EMOTIONAL/CONTEXT SIGNALS (check these first)
+  // ============================================
+  
+  // Beginner signals - user is saying they don't understand
+  const beginnerSignals = [
+    "don't know anything", "dont know anything",
+    "don't understand", "dont understand",
+    "never learned", "wasn't taught", "no idea",
+    "new to this", "beginner", "just starting",
+    "where do i start", "where do i begin",
+    "explain like", "eli5", "basics",
+    "i'm lost", "im lost", "confused about",
+    "what even is", "what does that mean",
+    "i don't get", "i dont get",
+  ];
+  const needsEducation = hasAny(beginnerSignals);
+  
+  // Frustration/pushback signals - user feels unheard
+  const frustrationSignals = [
+    "ignoring", "not listening", "you're not",
+    "already told you", "already said", "i said",
+    "that's not what i", "thats not what i",
+    "you keep asking", "stop asking",
+    "i feel like you", "feels like you",
+    "frustrated", "annoying", "annoyed",
+    "not helpful", "doesn't help", "doesnt help",
+    "aren't important", "not important", "don't care about",
+    "just tell me", "just show me", "just give me",
+  ];
+  const expressingFrustration = hasAny(frustrationSignals);
+  
+  // Resisting questions - user doesn't want to be interrogated
+  const questionResistanceSignals = [
+    "aren't important", "not important to me",
+    "don't want to answer", "cant answer",
+    "i don't know the answer", "how would i know",
+    "you have my data", "you should know",
+    "can you just", "why do you need",
+    "stop asking", "quit asking",
+  ];
+  const resistingQuestions = hasAny(questionResistanceSignals);
+
+  // ============================================
+  // RESPONSE DEPTH DETERMINATION
+  // ============================================
+  
+  let depth: "quick" | "standard" | "deep" = "standard";
+  let needsStructuredPlan = false;
+  
+  // Deep indicators - user wants thorough, actionable guidance
+  const deepIndicators = [
+    "build me", "create a", "make me", "help me", "give me a",
+    "plan", "strategy", "roadmap", "step by step", "steps",
+    "comprehensive", "detailed", "thorough", "complete",
+    "how should i", "what should i", "guide me", "walk me through",
+    "analyze", "review my", "look at my",
+    "payoff", "pay off", "get out of debt", "become debt free",
+    "retirement", "financial independence", "fire",
+    "long term", "long-term", "5 year", "10 year",
+  ];
+  
+  // Quick indicators - user wants fast, simple answer
+  const quickIndicators = [
+    "what is", "what's", "define", "meaning of",
+    "how much", "how many", "what was",
+    "balance", "total", "amount",
+    "yes or no", "quick question",
+    "remind me",
+  ];
+  
+  // Check for deep response needs
+  if (hasAny(deepIndicators)) {
+    depth = "deep";
+    // Specifically check if they want a structured plan
+    if (hasAny(["plan", "strategy", "roadmap", "step", "steps", "guide", "build me", "create"])) {
+      needsStructuredPlan = true;
+    }
+  } else if (hasAny(quickIndicators)) {
+    depth = "quick";
+  }
+  
+  // OVERRIDE: If user needs education, go deep but in teaching mode
+  if (needsEducation) {
+    depth = "deep";
+    needsStructuredPlan = false; // They need teaching, not a plan yet
+  }
+  
+  // OVERRIDE: If user is frustrated, keep it focused and direct
+  if (expressingFrustration || resistingQuestions) {
+    // Don't ask questions, just provide value
+    needsStructuredPlan = false;
+  }
+  
+  // Override: If the message is very short (<30 chars), probably quick
+  if (message.length < 30 && depth === "standard" && !needsEducation && !expressingFrustration) {
+    depth = "quick";
+  }
+  
+  // Override: If message contains "?" and is asking for plan/help, go deep
+  if (message.includes("?") && hasAny(["plan", "help", "advice", "recommend", "suggest"])) {
+    depth = "deep";
+  }
+
+  return { 
+    domain, 
+    task, 
+    depth, 
+    needsStructuredPlan,
+    needsEducation,
+    expressingFrustration,
+    resistingQuestions,
+  };
 }
 
 export const getOrBuildKnowledgeSnippets = internalMutation({

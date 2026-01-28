@@ -22,6 +22,17 @@ interface MenuGroup {
 
 const menuGroups: MenuGroup[] = [
   {
+    title: "Coaching",
+    items: [
+      { 
+        href: "/coach", 
+        label: "AI Coach", 
+        description: "Get personalized financial guidance",
+        icon: <Lucide.Sparkles className="h-5 w-5" /> 
+      },
+    ],
+  },
+  {
     title: "Workflows",
     items: [
       { 
