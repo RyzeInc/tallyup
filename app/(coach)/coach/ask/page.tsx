@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, Suspense } from "react";
-import { useAction, useConvex, useMutation } from "convex/react";
+import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
 
 // UI Components
@@ -14,11 +15,9 @@ import Skeleton from "@/components/ui/Skeleton";
 // Coach Components
 import CoachAvatar from "@/components/coach/CoachAvatar";
 import CoachMessageBubble from "@/components/coach/CoachMessageBubble";
-import InteractiveAnalysisCard from "@/components/coach/InteractiveAnalysisCard";
 import FollowUpSuggestions from "@/components/coach/FollowUpSuggestions";
-import ActionButton from "@/components/coach/ActionButton";
 import ActionOptions from "@/components/coach/ActionOptions";
-import type { ActionOption } from "@/components/coach/ActionOptions";
+import ChatSidebar, { SidebarToggle } from "@/components/coach/ChatSidebar";
 
 // Utils
 import { formatProfileUpdate } from "@/lib/coach/formatProfile";
@@ -38,12 +37,18 @@ import type { CoachFoundationUpdate } from "@/lib/coach/foundation";
  */
 
 type ChatMessage = { 
+  id?: string;
   role: "user" | "assistant"; 
   content: string; 
   timestamp: number;
   actions?: string[];
   followUps?: string[];
-  blocks?: any; // structured blocks from coach (if available)
+  blocks?: unknown; // structured blocks from coach (if available)
+  metadata?: {
+    actions?: string[];
+    followUps?: string[];
+    contextHash?: string;
+  };
 };
 
 const SNAPSHOT_TTL_MS = 90 * 1000;
@@ -109,6 +114,13 @@ function CoachAskContent() {
   // Initial question from URL param
   const initialQuestion = searchParams.get("q");
 
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  
+  // Conversation state for persistence
+  const [activeConversationId, setActiveConversationId] = useState<Id<"chatConversations"> | null>(null);
+  const [isTemporaryMode, setIsTemporaryMode] = useState(false);
+
   // State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -116,7 +128,7 @@ function CoachAskContent() {
   const [avatarState, setAvatarState] = useState<"idle" | "listening" | "thinking">("idle");
   
   // Snapshot state
-  const [snapshot, setSnapshot] = useState<CoachSnapshot | null>(null);
+  const [_snapshot, setSnapshot] = useState<CoachSnapshot | null>(null);
   const [contextHash, setContextHash] = useState<string | null>(null);
   const snapshotCache = useRef<{ data: CoachSnapshot; fetchedAt: number } | null>(null);
 
@@ -131,6 +143,18 @@ function CoachAskContent() {
   const updateCoachState = useMutation(api.coach.updateCoachState);
   const updateCoachFoundation = useMutation(api.coach.updateCoachFoundation);
   const resetSession = useMutation(api.coach.resetSession);
+  
+  // Conversation persistence
+  const createConversation = useMutation(api.chatConversations.createConversation);
+  const addMessage = useMutation(api.chatConversations.addMessage);
+  // saveTemporaryConversation available for future "save this chat" feature
+  // const saveTemporaryConversation = useMutation(api.chatConversations.saveTemporaryConversation);
+  
+  // Load messages for active conversation
+  const conversationMessages = useQuery(
+    api.chatConversations.getMessages,
+    activeConversationId ? { conversationId: activeConversationId } : "skip"
+  );
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -194,6 +218,33 @@ function CoachAskContent() {
     setMessages((prev) => [...prev, userMessage]);
     setSending(true);
 
+    // Create conversation if needed (first message and not temporary mode)
+    let conversationId = activeConversationId;
+    if (!isTemporaryMode && !conversationId) {
+      try {
+        conversationId = await createConversation({ 
+          title: trimmed.slice(0, 100) // Use first message as title
+        });
+        setActiveConversationId(conversationId);
+      } catch {
+        // Failed to create conversation, continue without persistence
+        console.warn("Failed to create conversation");
+      }
+    }
+
+    // Save user message if we have a conversation
+    if (conversationId) {
+      try {
+        await addMessage({
+          conversationId,
+          role: "user",
+          content: trimmed,
+        });
+      } catch {
+        console.warn("Failed to save user message");
+      }
+    }
+
     try {
       const result = await sendMessage({
         message: trimmed,
@@ -208,6 +259,24 @@ function CoachAskContent() {
         followUps: result.followUps,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Save assistant message if we have a conversation
+      if (conversationId) {
+        try {
+          await addMessage({
+            conversationId,
+            role: "assistant",
+            content: result.assistantMessage,
+            metadata: {
+              actions: result.actions,
+              followUps: result.followUps,
+              contextHash: result.contextHash,
+            },
+          });
+        } catch {
+          console.warn("Failed to save assistant message");
+        }
+      }
       
       setProfileUpdate(result.profileUpdates ?? null);
       setFoundationUpdate(result.foundationUpdates ?? null);
@@ -223,7 +292,7 @@ function CoachAskContent() {
       setSending(false);
       setAvatarState("idle");
     }
-  }, [input, sending, contextHash, sendMessage]);
+  }, [input, sending, contextHash, sendMessage, activeConversationId, isTemporaryMode, createConversation, addMessage]);
 
   // Handle profile update application
   const handleApplyProfile = async () => {
@@ -250,12 +319,13 @@ function CoachAskContent() {
   };
 
   // Handle new chat
-  const handleNewChat = async () => {
+  const handleNewChat = useCallback(async () => {
     try {
       await resetSession({});
       setMessages([]);
       setProfileUpdate(null);
       setFoundationUpdate(null);
+      setActiveConversationId(null);
       snapshotCache.current = null;
       
       const data = await convex.query(api.coach.getSnapshot, {});
@@ -267,7 +337,7 @@ function CoachAskContent() {
     } catch {
       // Ignore errors
     }
-  };
+  }, [resetSession, convex]);
 
   // Handle follow-up selection
   const handleFollowUpSelect = (suggestion: string) => {
@@ -295,53 +365,123 @@ function CoachAskContent() {
   const lastAssistantMessage = [...messages].reverse().find(m => m.role === "assistant");
   const followUps = lastAssistantMessage?.followUps || [];
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div 
-        className="flex items-center justify-between py-3 border-b shrink-0"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/coach")}
-            className="p-2 rounded-lg transition-colors"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            <Lucide.ChevronLeft style={{ width: 20, height: 20 }} />
-          </button>
-          <CoachAvatar state={avatarState} size="sm" />
-          <div>
-            <h1
-              style={{
-                fontSize: "var(--text-body)",
-                fontWeight: 600,
-                color: "var(--text)",
-              }}
-            >
-              Financial Coach
-            </h1>
-            <p
-              style={{
-                fontSize: "var(--text-micro)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              {sending ? "Thinking..." : "Ask anything about your finances"}
-            </p>
-          </div>
-        </div>
+  // Handle conversation selection from sidebar
+  const handleSelectConversation = useCallback(async (conversationId: Id<"chatConversations">) => {
+    setActiveConversationId(conversationId);
+    setIsTemporaryMode(false);
+    // Messages will be loaded via the useQuery hook
+  }, []);
 
-        {messages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleNewChat}
-          >
-            <Lucide.RefreshCw style={{ width: 16, height: 16 }} />
-            <span className="ml-1">New Chat</span>
-          </Button>
-        )}
+  // Handle sidebar new chat
+  const handleSidebarNewChat = useCallback(async () => {
+    setActiveConversationId(null);
+    setIsTemporaryMode(false);
+    await handleNewChat();
+  }, [handleNewChat]);
+
+  // Toggle temporary mode
+  const toggleTemporaryMode = useCallback(() => {
+    setIsTemporaryMode((prev) => !prev);
+    if (!isTemporaryMode) {
+      // Entering temporary mode - clear any active conversation
+      setActiveConversationId(null);
+    }
+  }, [isTemporaryMode]);
+
+  // Load messages when conversation changes
+  useEffect(() => {
+    if (conversationMessages && activeConversationId) {
+      const loadedMessages: ChatMessage[] = conversationMessages.map((msg) => ({
+        id: msg._id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.createdAt,
+        metadata: msg.metadata,
+      }));
+      setMessages(loadedMessages);
+    }
+  }, [conversationMessages, activeConversationId]);
+
+  return (
+    <div className="flex h-full">
+      {/* Sidebar */}
+      <ChatSidebar
+        activeConversationId={activeConversationId}
+        onSelectConversation={handleSelectConversation}
+        onNewChat={handleSidebarNewChat}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+      />
+      
+      {/* Main Chat Area */}
+      <div className="flex flex-col flex-1 min-w-0 h-full">
+        {/* Header */}
+        <div 
+          className="flex items-center justify-between px-4 py-3 border-b shrink-0"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div className="flex items-center gap-3">
+            {/* Sidebar toggle */}
+            <SidebarToggle isOpen={sidebarOpen} onClick={() => setSidebarOpen(!sidebarOpen)} />
+            
+            <button
+              onClick={() => router.push("/coach")}
+              className="p-2 rounded-lg transition-colors hover:bg-[var(--surface-2)]"
+              style={{ color: "var(--text-secondary)" }}
+              aria-label="Back to coach home"
+            >
+              <Lucide.ChevronLeft style={{ width: 20, height: 20 }} />
+            </button>
+            <CoachAvatar state={avatarState} size="sm" />
+            <div>
+              <h1
+                style={{
+                  fontSize: "var(--text-body)",
+                  fontWeight: 600,
+                  color: "var(--text)",
+                }}
+              >
+                Financial Coach
+              </h1>
+              <p
+                style={{
+                  fontSize: "var(--text-micro)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {sending ? "Thinking..." : isTemporaryMode ? "Temporary chat (won't be saved)" : "Ask anything about your finances"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Temporary chat toggle */}
+            <button
+              onClick={toggleTemporaryMode}
+              className={`p-2 rounded-lg transition-colors ${
+                isTemporaryMode 
+                  ? "bg-[var(--accent)] text-white" 
+                  : "hover:bg-[var(--surface-2)]"
+              }`}
+              style={{ 
+                color: isTemporaryMode ? "white" : "var(--text-secondary)",
+              }}
+              title={isTemporaryMode ? "Temporary mode on" : "Enable temporary mode"}
+              aria-label={isTemporaryMode ? "Disable temporary chat mode" : "Enable temporary chat mode"}
+            >
+              <Lucide.Clock style={{ width: 18, height: 18 }} />
+            </button>
+
+            {/* New chat button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleNewChat}
+            >
+              <Lucide.Plus style={{ width: 16, height: 16 }} />
+              <span className="ml-1">New Chat</span>
+            </Button>
+          </div>
       </div>
 
       {/* Chat messages */}
@@ -617,6 +757,7 @@ function CoachAskContent() {
           Enter to send • Shift+Enter for new line
         </div>
       </div>
+      </div>{/* End Main Chat Area */}
     </div>
   );
 }

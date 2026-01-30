@@ -275,6 +275,54 @@ export default defineSchema({
     .index("by_user_date", ["userId", "createdAt"]),
 
   // ============================================
+  // CHAT CONVERSATIONS - Persistent chat threads (Chat SDK style)
+  // ============================================
+  chatConversations: defineTable({
+    userId: v.string(),
+    // Auto-generated title from first message or user-set
+    title: v.string(),
+    // Visibility: private (default), public (shareable)
+    visibility: v.union(v.literal("private"), v.literal("public")),
+    // Temporary chat mode (TTL-based): hidden from sidebar, auto-deleted
+    isTemporary: v.boolean(),
+    // When temporary chat expires (null for permanent chats)
+    expiresAt: v.optional(v.number()),
+    // Last activity for sorting
+    lastMessageAt: v.number(),
+    // Message count for display
+    messageCount: v.number(),
+    // Soft delete
+    isArchived: v.optional(v.boolean()),
+    archivedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_lastMessage", ["userId", "lastMessageAt"])
+    .index("by_user_temporary", ["userId", "isTemporary"])
+    .index("by_user_archived", ["userId", "isArchived"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  chatMessages: defineTable({
+    userId: v.string(),
+    conversationId: v.id("chatConversations"),
+    // Message role: user or assistant
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    // Message content (markdown supported)
+    content: v.string(),
+    // Optional metadata from coach response
+    metadata: v.optional(v.object({
+      actions: v.optional(v.array(v.string())),
+      followUps: v.optional(v.array(v.string())),
+      contextHash: v.optional(v.string()),
+      profileUpdates: v.optional(v.any()),
+      foundationUpdates: v.optional(v.any()),
+    })),
+    createdAt: v.number(),
+  })
+    .index("by_conversation", ["conversationId", "createdAt"])
+    .index("by_user_conversation", ["userId", "conversationId"]),
+
+  // ============================================
   // COACHING - Alpha-safe financial coaching memory
   // ============================================
   coachState: defineTable({

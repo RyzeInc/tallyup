@@ -14,41 +14,109 @@ import type { Block, BlockResponse, ListItem } from "@/lib/llm/blocks";
  */
 
 /**
+ * Preprocess text to fix common LLM formatting issues before parsing.
+ * Handles malformed markers, spacing issues, and edge cases.
+ */
+function preprocessText(text: string): string {
+  let processed = text;
+
+  // Fix spaces inside bold markers: "** text **" -> "**text**"
+  processed = processed.replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**');
+  
+  // Fix spaces inside italic markers: "* text *" -> "*text*"
+  // Be careful not to match list items (line start with *)
+  processed = processed.replace(/(?<!^)(?<!\n)\*\s+([^*\n]+?)\s+\*(?!\*)/g, '*$1*');
+  
+  // Fix triple asterisks that should be bold+italic: "***text***" -> "***text***" (keep as-is, handle in parsing)
+  // Fix malformed triple asterisks like "** Additional tips: ***" -> "**Additional tips:**"
+  processed = processed.replace(/\*\*\s*([^*]+?):\s*\*\*\*/g, '**$1:**');
+  
+  // Fix dangling asterisks at end of sentences (like "important.**" or "word.***")
+  processed = processed.replace(/\.\*{2,}/g, '.**');
+  
+  // Ensure proper spacing around bold markers
+  // Add space before opening ** if preceded by alphanumeric (but not after punctuation)
+  processed = processed.replace(/([a-zA-Z0-9])\*\*([a-zA-Z])/g, '$1 **$2');
+  // Add space after closing ** if followed by alphanumeric
+  processed = processed.replace(/\*\*([a-zA-Z0-9])/g, '** $1');
+
+  return processed;
+}
+
+/**
  * Parse simple inline markdown (bold, italic, links) in text.
  * Returns React nodes.
+ * 
+ * Handles edge cases:
+ * - Spaces inside markers
+ * - Triple asterisks (bold+italic)
+ * - Malformed markers (render as literal text)
  */
 function parseInlineMarkdown(text: string): React.ReactNode[] {
+  // Preprocess to fix common issues
+  const processed = preprocessText(text);
+  
   const nodes: React.ReactNode[] = [];
   let key = 0;
 
-  // Pattern to match **bold**, *italic*, or [link](url)
-  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g;
+  // Pattern to match:
+  // 1. ***bold+italic*** (must come before ** and * patterns)
+  // 2. **bold**
+  // 3. *italic* (but not ** or list items)
+  // 4. [link](url)
+  // Use non-greedy matching and ensure content between markers has no markers
+  const pattern = /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|(?<!\*)\*(?!\*)[^*\n]+\*(?!\*)|\[[^\]]+\]\([^)]+\))/g;
 
   let match: RegExpExecArray | null;
   let lastIndex = 0;
 
-  while ((match = pattern.exec(text)) !== null) {
+  while ((match = pattern.exec(processed)) !== null) {
     // Add text before match
     if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
+      nodes.push(processed.slice(lastIndex, match.index));
     }
 
     const matched = match[0];
     
-    if (matched.startsWith("**") && matched.endsWith("**")) {
+    if (matched.startsWith("***") && matched.endsWith("***") && matched.length > 6) {
+      // Bold + Italic
+      const content = matched.slice(3, -3).trim();
+      if (content) {
+        nodes.push(
+          <strong key={key++} style={{ fontWeight: 600, fontStyle: "italic" }}>
+            {content}
+          </strong>
+        );
+      } else {
+        // Empty content, render as literal
+        nodes.push(matched);
+      }
+    } else if (matched.startsWith("**") && matched.endsWith("**") && matched.length > 4) {
       // Bold
-      nodes.push(
-        <strong key={key++} style={{ fontWeight: 600 }}>
-          {matched.slice(2, -2)}
-        </strong>
-      );
-    } else if (matched.startsWith("*") && matched.endsWith("*")) {
+      const content = matched.slice(2, -2).trim();
+      if (content) {
+        nodes.push(
+          <strong key={key++} style={{ fontWeight: 600 }}>
+            {content}
+          </strong>
+        );
+      } else {
+        // Empty content, render as literal
+        nodes.push(matched);
+      }
+    } else if (matched.startsWith("*") && matched.endsWith("*") && !matched.startsWith("**") && matched.length > 2) {
       // Italic
-      nodes.push(
-        <em key={key++} style={{ fontStyle: "italic" }}>
-          {matched.slice(1, -1)}
-        </em>
-      );
+      const content = matched.slice(1, -1).trim();
+      if (content) {
+        nodes.push(
+          <em key={key++} style={{ fontStyle: "italic" }}>
+            {content}
+          </em>
+        );
+      } else {
+        // Empty content, render as literal
+        nodes.push(matched);
+      }
     } else if (matched.startsWith("[")) {
       // Link
       const linkMatch = matched.match(/\[([^\]]+)\]\(([^)]+)\)/);
@@ -65,15 +133,20 @@ function parseInlineMarkdown(text: string): React.ReactNode[] {
             {linkMatch[1]}
           </a>
         );
+      } else {
+        nodes.push(matched);
       }
+    } else {
+      // Malformed marker, render as literal text
+      nodes.push(matched);
     }
 
     lastIndex = match.index + matched.length;
   }
 
   // Add remaining text
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
+  if (lastIndex < processed.length) {
+    nodes.push(processed.slice(lastIndex));
   }
 
   return nodes.length > 0 ? nodes : [text];
@@ -169,12 +242,23 @@ function CalloutBlock({
 }
 
 /**
+ * Strip leading numbers from list item text (e.g., "1. Text" -> "Text")
+ * This handles cases where the LLM includes redundant numbers in list items
+ */
+function stripLeadingNumber(text: string): string {
+  return text.replace(/^\d+[\.\)]\s*/, "").trim() || text;
+}
+
+/**
  * Render a list item with optional sub-items
  */
 function ListItemRenderer({ item }: { item: ListItem }) {
+  // Strip any redundant leading number from the text
+  const cleanedText = stripLeadingNumber(item.text);
+  
   return (
     <>
-      <span>{parseInlineMarkdown(item.text)}</span>
+      <span>{parseInlineMarkdown(cleanedText)}</span>
       {item.subItems && item.subItems.length > 0 && (
         <ul className="list-disc pl-5 mt-1 space-y-0.5">
           {item.subItems.map((subItem, idx) => (
@@ -182,7 +266,7 @@ function ListItemRenderer({ item }: { item: ListItem }) {
               key={idx} 
               style={{ fontSize: "var(--text-body)", color: "var(--text)" }}
             >
-              {parseInlineMarkdown(subItem)}
+              {parseInlineMarkdown(stripLeadingNumber(subItem))}
             </li>
           ))}
         </ul>

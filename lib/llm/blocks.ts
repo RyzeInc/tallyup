@@ -94,10 +94,15 @@ export function parseBlockResponse(rawContent: string): BlockParseResult {
     };
   }
 
+  // First, try to fix severely malformed JSON before parsing
+  const fixedJson = fixMalformedJson(trimmed);
+
   // Try direct JSON parse
   try {
-    const parsed = JSON.parse(trimmed);
-    const validated = BlockResponseSchema.parse(parsed);
+    const parsed = JSON.parse(fixedJson);
+    // Clean up common LLM mistakes before validation
+    const cleaned = cleanupMalformedBlocks(parsed);
+    const validated = BlockResponseSchema.parse(cleaned);
     return {
       success: true,
       response: validated,
@@ -105,15 +110,34 @@ export function parseBlockResponse(rawContent: string): BlockParseResult {
       format: "blocks",
     };
   } catch {
-    // Not valid JSON or doesn't match schema
+    // Not valid JSON or doesn't match schema - try original
+  }
+  
+  // Try original content if fixed version failed
+  if (fixedJson !== trimmed) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const cleaned = cleanupMalformedBlocks(parsed);
+      const validated = BlockResponseSchema.parse(cleaned);
+      return {
+        success: true,
+        response: validated,
+        rawContent,
+        format: "blocks",
+      };
+    } catch {
+      // Not valid JSON or doesn't match schema
+    }
   }
 
   // Try extracting JSON from code block
   const jsonBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (jsonBlockMatch?.[1]) {
+    const codeBlockContent = fixMalformedJson(jsonBlockMatch[1].trim());
     try {
-      const parsed = JSON.parse(jsonBlockMatch[1].trim());
-      const validated = BlockResponseSchema.parse(parsed);
+      const parsed = JSON.parse(codeBlockContent);
+      const cleaned = cleanupMalformedBlocks(parsed);
+      const validated = BlockResponseSchema.parse(cleaned);
       return {
         success: true,
         response: validated,
@@ -122,6 +146,23 @@ export function parseBlockResponse(rawContent: string): BlockParseResult {
       };
     } catch {
       // Code block doesn't contain valid block response
+    }
+  }
+
+  // Last resort: try to extract blocks from the malformed structure
+  const extractedBlocks = extractBlocksFromMalformed(trimmed);
+  if (extractedBlocks && extractedBlocks.length > 0) {
+    try {
+      const response = { version: 1 as const, blocks: extractedBlocks };
+      const validated = BlockResponseSchema.parse(response);
+      return {
+        success: true,
+        response: validated,
+        rawContent,
+        format: "blocks",
+      };
+    } catch {
+      // Extraction didn't produce valid blocks
     }
   }
 
@@ -140,6 +181,324 @@ export function parseBlockResponse(rawContent: string): BlockParseResult {
     format: looksLikeMarkdown ? "markdown" : "unknown",
     error: "Content is not valid block format",
   };
+}
+
+// ============================================
+// MALFORMED JSON FIXER
+// ============================================
+
+/**
+ * Fix severely malformed JSON from LLM:
+ * 1. Duplicate "blocks" keys (JSON.parse takes last one, we need to merge)
+ * 2. Fix truncated/unclosed structures
+ */
+function fixMalformedJson(json: string): string {
+  let fixed = json;
+  
+  // Check for duplicate "blocks" keys - this is invalid JSON but LLMs do it
+  // We need to merge all blocks arrays into one
+  const blocksPattern = /"blocks"\s*:\s*\[/g;
+  const matches = [...fixed.matchAll(blocksPattern)];
+  
+  if (matches.length > 1) {
+    // Multiple blocks arrays - need to extract and merge them
+    // This is a complex fix, try to extract all block content
+    try {
+      const allBlocks: unknown[] = [];
+      
+      // Find each "blocks": [ ... ] section
+      let searchStart = 0;
+      for (const match of matches) {
+        const startIdx = match.index! + match[0].length;
+        // Find the matching closing bracket
+        let depth = 1;
+        let i = startIdx;
+        while (i < fixed.length && depth > 0) {
+          if (fixed[i] === '[') depth++;
+          else if (fixed[i] === ']') depth--;
+          i++;
+        }
+        
+        if (depth === 0) {
+          const blocksContent = fixed.slice(startIdx, i - 1);
+          try {
+            // Try to parse this blocks array content
+            const parsed = JSON.parse(`[${blocksContent}]`);
+            if (Array.isArray(parsed)) {
+              allBlocks.push(...parsed);
+            }
+          } catch {
+            // Failed to parse this section
+          }
+        }
+        searchStart = i;
+      }
+      
+      if (allBlocks.length > 0) {
+        // Extract version and title from original
+        const versionMatch = fixed.match(/"version"\s*:\s*(\d+)/);
+        const titleMatch = fixed.match(/"title"\s*:\s*"([^"]*)"/);
+        
+        const reconstructed: Record<string, unknown> = {
+          version: versionMatch ? parseInt(versionMatch[1]) : 1,
+          blocks: allBlocks,
+        };
+        if (titleMatch) {
+          reconstructed.title = titleMatch[1];
+        }
+        
+        return JSON.stringify(reconstructed);
+      }
+    } catch {
+      // Failed to fix duplicate blocks
+    }
+  }
+  
+  // Fix unclosed brackets/braces at end
+  let openBrackets = 0;
+  let openBraces = 0;
+  for (const char of fixed) {
+    if (char === '[') openBrackets++;
+    else if (char === ']') openBrackets--;
+    else if (char === '{') openBraces++;
+    else if (char === '}') openBraces--;
+  }
+  
+  // Add missing closings
+  while (openBrackets > 0) {
+    fixed += ']';
+    openBrackets--;
+  }
+  while (openBraces > 0) {
+    fixed += '}';
+    openBraces--;
+  }
+  
+  return fixed;
+}
+
+/**
+ * Extract blocks from severely malformed JSON by pattern matching
+ */
+function extractBlocksFromMalformed(content: string): Block[] | null {
+  const blocks: Block[] = [];
+  
+  // Extract headings: {"type":"heading","level":N,"text":"..."}
+  const headingPattern = /\{"type"\s*:\s*"heading"\s*,\s*"level"\s*:\s*(\d)\s*,\s*"text"\s*:\s*"([^"]+)"\s*\}/g;
+  let match;
+  while ((match = headingPattern.exec(content)) !== null) {
+    const level = parseInt(match[1]) as 1 | 2 | 3;
+    if (level >= 1 && level <= 3) {
+      blocks.push({ type: "heading", level, text: match[2] });
+    }
+  }
+  
+  // Extract paragraphs: {"type":"paragraph","text":"..."}
+  const paragraphPattern = /\{"type"\s*:\s*"paragraph"\s*,\s*"text"\s*:\s*"([^"]+)"\s*\}/g;
+  while ((match = paragraphPattern.exec(content)) !== null) {
+    blocks.push({ type: "paragraph", text: match[1] });
+  }
+  
+  // Extract list items from the malformed nested structure
+  // Look for {"text":"N. content"} patterns
+  const listItemPattern = /\{"text"\s*:\s*"(\d+)\.\s*([^"]+)"\s*\}/g;
+  const listItems: { num: number; text: string }[] = [];
+  while ((match = listItemPattern.exec(content)) !== null) {
+    listItems.push({ num: parseInt(match[1]), text: match[2] });
+  }
+  
+  // Also look for items without numbers
+  const plainItemPattern = /\{"text"\s*:\s*"([^"]+)"\s*\}/g;
+  while ((match = plainItemPattern.exec(content)) !== null) {
+    // Skip if this looks like it was already captured with a number
+    if (!/^\d+\./.test(match[1])) {
+      listItems.push({ num: listItems.length + 1, text: match[1] });
+    }
+  }
+  
+  // If we found list items, create an ordered list block
+  if (listItems.length > 0) {
+    // Sort by number and dedupe
+    const uniqueItems = new Map<string, { num: number; text: string }>();
+    for (const item of listItems) {
+      const key = item.text.toLowerCase();
+      if (!uniqueItems.has(key)) {
+        uniqueItems.set(key, item);
+      }
+    }
+    
+    const sortedItems = [...uniqueItems.values()].sort((a, b) => a.num - b.num);
+    
+    // Determine if this should be ordered or unordered
+    const hasOrderedType = content.includes('"ordered_list"');
+    const hasUnorderedType = content.includes('"unordered_list"');
+    
+    if (hasUnorderedType && !hasOrderedType) {
+      blocks.push({
+        type: "unordered_list",
+        items: sortedItems.map(item => ({ text: item.text })),
+      });
+    } else {
+      blocks.push({
+        type: "ordered_list",
+        start: 1,
+        items: sortedItems.map(item => ({ text: item.text })),
+      });
+    }
+  }
+  
+  return blocks.length > 0 ? blocks : null;
+}
+
+// ============================================
+// MALFORMED BLOCK CLEANUP
+// ============================================
+
+/**
+ * Clean up common LLM mistakes in block format responses:
+ * 1. List items with redundant numbers in text (e.g., "1. Track your income")
+ * 2. Malformed nested structures where ordered_list appears inside items
+ * 3. Missing version field
+ */
+function cleanupMalformedBlocks(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  
+  const obj = parsed as Record<string, unknown>;
+  
+  // Ensure version exists
+  if (!obj.version) {
+    obj.version = 1;
+  }
+  
+  // Fix blocks array
+  if (Array.isArray(obj.blocks)) {
+    obj.blocks = flattenAndCleanBlocks(obj.blocks);
+  }
+  
+  return obj;
+}
+
+/**
+ * Recursively flatten malformed nested structures and clean list items.
+ * When lists are deeply nested inside items arrays, we flatten everything
+ * into a single list with all items.
+ */
+function flattenAndCleanBlocks(blocks: unknown[]): unknown[] {
+  const result: unknown[] = [];
+  
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") continue;
+    
+    const b = block as Record<string, unknown>;
+    
+    if (b.type === "ordered_list" || b.type === "unordered_list") {
+      // Extract ALL items from this list and any nested lists
+      const allItems = extractAllListItems(b.items as unknown[]);
+      
+      if (allItems.length > 0) {
+        // Determine the correct list type - if any numbered items, use ordered
+        const hasNumberedItems = allItems.some(item => /^\d+\./.test(item.originalText));
+        const listType = b.type === "ordered_list" || hasNumberedItems ? "ordered_list" : "unordered_list";
+        
+        result.push({
+          type: listType,
+          ...(listType === "ordered_list" ? { start: 1 } : {}),
+          items: allItems.map(item => ({ text: item.cleanedText })),
+        });
+      }
+    } else {
+      result.push(block);
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Recursively extract all list items from a potentially deeply nested structure.
+ * Handles the LLM bug where list blocks are nested inside items arrays.
+ */
+function extractAllListItems(items: unknown[]): { originalText: string; cleanedText: string }[] {
+  const result: { originalText: string; cleanedText: string }[] = [];
+  
+  if (!Array.isArray(items)) {
+    return result;
+  }
+  
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    
+    const i = item as Record<string, unknown>;
+    
+    // Check if this "item" is actually a nested list block (malformed structure)
+    if (i.type === "ordered_list" || i.type === "unordered_list") {
+      // Recursively extract items from this nested list
+      const nestedItems = extractAllListItems(i.items as unknown[]);
+      result.push(...nestedItems);
+      continue;
+    }
+    
+    // Regular list item - extract and clean the text
+    if (typeof i.text === "string") {
+      const originalText = i.text;
+      // Strip leading number patterns like "1. ", "2) ", etc.
+      const cleanedText = originalText.replace(/^\d+[\.\)]\s*/, "").trim();
+      
+      if (cleanedText) {
+        result.push({ originalText, cleanedText });
+      }
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Clean list items by:
+ * 1. Stripping redundant leading numbers (e.g., "1. Text" -> "Text")
+ * 2. Extracting any nested ordered_list/unordered_list blocks
+ * @deprecated Use extractAllListItems instead for deeply nested structures
+ */
+function cleanListItems(items: unknown[]): { cleanedItems: unknown[]; nestedLists: unknown[] } {
+  const cleanedItems: unknown[] = [];
+  const nestedLists: unknown[] = [];
+  
+  if (!Array.isArray(items)) {
+    return { cleanedItems: [], nestedLists: [] };
+  }
+  
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    
+    const i = item as Record<string, unknown>;
+    
+    // Check if this "item" is actually a nested list block (malformed structure)
+    if (i.type === "ordered_list" || i.type === "unordered_list") {
+      // This is a nested list that should be a sibling, not a child
+      const { cleanedItems: nestedClean, nestedLists: deepNested } = cleanListItems(i.items as unknown[]);
+      nestedLists.push({
+        ...i,
+        items: nestedClean,
+      });
+      nestedLists.push(...deepNested);
+      continue;
+    }
+    
+    // Regular list item - clean the text
+    if (typeof i.text === "string") {
+      // Strip leading number patterns like "1. ", "2) ", etc.
+      const cleanedText = i.text.replace(/^\d+[\.\)]\s*/, "").trim();
+      
+      cleanedItems.push({
+        ...i,
+        text: cleanedText || i.text, // Fallback to original if cleaning leaves empty
+      });
+    } else {
+      cleanedItems.push(item);
+    }
+  }
+  
+  return { cleanedItems, nestedLists };
 }
 
 // ============================================
@@ -345,6 +704,30 @@ export function chunkBlocks(
     blocks: [{ type: "paragraph", text: "I'm here to help." }],
     isFinal: true,
   }];
+}
+
+// ============================================
+// LIST CONTINUATION UTILITIES
+// ============================================
+
+/**
+ * Recalculate ordered list start values for continuous numbering.
+ * Call this when merging blocks from multiple chunks.
+ */
+export function recalculateOrderedListStarts(blocks: Block[]): Block[] {
+  let nextStart = 1;
+  
+  return blocks.map(block => {
+    if (block.type === "ordered_list") {
+      const updatedBlock = {
+        ...block,
+        start: nextStart,
+      };
+      nextStart += block.items.length;
+      return updatedBlock;
+    }
+    return block;
+  });
 }
 
 // ============================================

@@ -14,6 +14,7 @@ import {
   markdownToBlocks,
   chunkBlocks,
   generateFormatTelemetry,
+  recalculateOrderedListStarts,
 } from "@/lib/llm/blocks";
 import { recordFormatTelemetry } from "@/lib/llm/telemetry";
 import { isBlockFormatEnabled } from "@/lib/constants";
@@ -24,6 +25,7 @@ import { isBlockFormatEnabled } from "@/lib/constants";
  * 2. Ensure numbered lists are properly formatted with double newlines
  * 3. Clean up stray asterisks
  * 4. Convert inline numbered lists to proper markdown lists
+ * 5. Renumber ordered lists to ensure continuous numbering
  */
 function preprocessMarkdown(content: string): string {
   let processed = content;
@@ -61,8 +63,62 @@ function preprocessMarkdown(content: string): string {
   processed = processed.replace(/([A-Za-z0-9])\*\*/g, '$1 **');
   // Ensure a space after closing bold if it's immediately followed by a letter/digit
   processed = processed.replace(/\*\*([A-Za-z0-9])/g, '** $1');
+  
+  // STEP 6: Fix spaces inside bold/italic markers (e.g., "** text **" -> "**text**")
+  processed = processed.replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**');
+  processed = processed.replace(/\*\s+([^*\n]+?)\s+\*/g, '*$1*');
+  
+  // STEP 7: Fix malformed triple asterisks (e.g., "** Additional tips: ***" -> "**Additional tips:**")
+  processed = processed.replace(/\*\*\s*([^*]+?):\s*\*\*\*/g, '**$1:**');
+  
+  // STEP 8: Renumber ordered lists to ensure continuous numbering
+  // This is important when chunks are merged - lists that were split will have wrong numbers
+  processed = renumberOrderedLists(processed);
 
   return processed;
+}
+
+/**
+ * Renumber all ordered lists in markdown to ensure continuous numbering.
+ * Handles cases where lists were split across chunks or have inconsistent numbering.
+ */
+function renumberOrderedLists(markdown: string): string {
+  const lines = markdown.split('\n');
+  const result: string[] = [];
+  let currentListNumber = 0;
+  let inList = false;
+  
+  for (const line of lines) {
+    const listMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+    
+    if (listMatch) {
+      const [, indent, , content] = listMatch;
+      
+      if (!inList) {
+        // Starting a new list
+        inList = true;
+        currentListNumber = 1;
+      } else {
+        // Continue existing list
+        currentListNumber++;
+      }
+      
+      result.push(`${indent}${currentListNumber}. ${content}`);
+    } else {
+      // Not a list item
+      if (line.trim() === '') {
+        // Empty line might end the list (if followed by non-list content)
+        // We'll keep inList true for now, but reset on non-list content
+      } else {
+        // Non-list content ends the list
+        inList = false;
+        currentListNumber = 0;
+      }
+      result.push(line);
+    }
+  }
+  
+  return result.join('\n');
 }
 
 /**
@@ -469,9 +525,11 @@ export function BlockChunkedResponse({
   const visibleIndex = showAll ? blockChunks.length - 1 : localIndex;
   const visibleChunks = showAll ? blockChunks : blockChunks.slice(0, visibleIndex + 1);
   
-  // Merge all visible blocks for rendering
+  // Merge all visible blocks and recalculate ordered list start numbers for continuity
   const visibleBlocks = useMemo(() => {
-    return visibleChunks.flatMap(chunk => chunk.blocks);
+    const merged = visibleChunks.flatMap(chunk => chunk.blocks);
+    // Recalculate start values so ordered lists continue properly across chunks
+    return recalculateOrderedListStarts(merged);
   }, [visibleChunks]);
 
   const handleContinue = useCallback(() => {

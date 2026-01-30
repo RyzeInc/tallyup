@@ -26,7 +26,9 @@
     "pwa:test": "npm run build && npm start"
   },
   "dependencies": {
+    "@ai-sdk/react": "^3.0.64",
     "@clerk/nextjs": "^6.36.10",
+    "ai": "^6.0.62",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "convex": "^1.31.6",

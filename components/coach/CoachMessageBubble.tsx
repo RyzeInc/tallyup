@@ -45,8 +45,53 @@ function preprocessMarkdown(content: string): string {
   processed = processed.replace(/([.!?;:,\)])\s*\*\*/g, '$1 **');
   processed = processed.replace(/([A-Za-z0-9])\*\*/g, '$1 **');
   processed = processed.replace(/\*\*([A-Za-z0-9])/g, '** $1');
+  
+  // STEP 6: Fix spaces inside bold/italic markers (e.g., "** text **" -> "**text**")
+  processed = processed.replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**');
+  processed = processed.replace(/\*\s+([^*\n]+?)\s+\*/g, '*$1*');
+  
+  // STEP 7: Fix malformed triple asterisks (e.g., "** Additional tips: ***" -> "**Additional tips:**")
+  processed = processed.replace(/\*\*\s*([^*]+?):\s*\*\*\*/g, '**$1:**');
+  
+  // STEP 8: Renumber ordered lists to ensure continuous numbering
+  processed = renumberOrderedLists(processed);
 
   return processed;
+}
+
+/**
+ * Renumber all ordered lists in markdown to ensure continuous numbering.
+ */
+function renumberOrderedLists(markdown: string): string {
+  const lines = markdown.split('\n');
+  const result: string[] = [];
+  let currentListNumber = 0;
+  let inList = false;
+  
+  for (const line of lines) {
+    const listMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+    
+    if (listMatch) {
+      const [, indent, , content] = listMatch;
+      
+      if (!inList) {
+        inList = true;
+        currentListNumber = 1;
+      } else {
+        currentListNumber++;
+      }
+      
+      result.push(`${indent}${currentListNumber}. ${content}`);
+    } else {
+      if (line.trim() !== '') {
+        inList = false;
+        currentListNumber = 0;
+      }
+      result.push(line);
+    }
+  }
+  
+  return result.join('\n');
 }
 
 /**
@@ -102,15 +147,15 @@ export default function CoachMessageBubble({
   }, [isUser, enableChunking, content.length]);
   
   // For short messages, parse blocks directly (no chunking)
-  const shortMessageBlocks = useMemo(() => {
+  const shortMessageParsed = useMemo(() => {
     if (isUser || shouldChunk || !useBlocks) return null;
     
     const parseResult = parseBlockResponse(content);
     if (parseResult.success && parseResult.response) {
-      return parseResult.response.blocks;
+      return parseResult.response; // Return full response including title
     }
     // Fallback to markdown conversion
-    return markdownToBlocks(content).blocks;
+    return markdownToBlocks(content);
   }, [isUser, shouldChunk, useBlocks, content]);
 
   return (
@@ -173,9 +218,30 @@ export default function CoachMessageBubble({
             onAdvance={onChunkAdvance}
             showAll={false}
           />
-        ) : useBlocks && shortMessageBlocks ? (
-          // Block-based rendering for short messages
-          <BlockRenderer blocks={shortMessageBlocks} />
+        ) : useBlocks && shortMessageParsed ? (
+          // Block-based rendering for short messages (includes title if present)
+          <>
+            {shortMessageParsed.title && (
+              <h3 
+                className="font-semibold mb-2"
+                style={{ 
+                  fontSize: "var(--text-body)", 
+                  color: "var(--text)",
+                  fontWeight: 600,
+                }}
+              >
+                {shortMessageParsed.title}
+              </h3>
+            )}
+            {shortMessageParsed.blocks.length > 0 ? (
+              <BlockRenderer blocks={shortMessageParsed.blocks} />
+            ) : (
+              // If we have a title but no blocks, show a fallback message
+              <p style={{ fontSize: "var(--text-body)", lineHeight: 1.6, color: "var(--text-secondary)" }}>
+                {shortMessageParsed.title ? "Let me know if you'd like me to explain more." : "I'm here to help."}
+              </p>
+            )}
+          </>
         ) : (
           // Legacy markdown rendering for short messages (when blocks disabled)
           <div className="coach-markdown">

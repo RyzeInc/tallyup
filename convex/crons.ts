@@ -1,5 +1,5 @@
 import { cronJobs } from "convex/server";
-import { internal } from "./_generated/api";
+import { internal, api } from "./_generated/api";
 
 const crons = cronJobs();
 
@@ -15,6 +15,14 @@ crons.interval(
   "purge_archived_accounts",
   { minutes: 60 * 24 },
   internal.accounts.purgeArchivedAccounts,
+  {}
+);
+
+// Clean up expired temporary chat conversations (runs hourly)
+crons.interval(
+  "cleanup_expired_chats",
+  { minutes: 60 },
+  api.chatConversations.cleanupExpiredConversations,
   {}
 );
 

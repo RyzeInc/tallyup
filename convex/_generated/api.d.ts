@@ -18,6 +18,7 @@ import type * as budgets from "../budgets.js";
 import type * as categories from "../categories.js";
 import type * as categoryCatalog from "../categoryCatalog.js";
 import type * as categoryResolver from "../categoryResolver.js";
+import type * as chatConversations from "../chatConversations.js";
 import type * as coach from "../coach.js";
 import type * as coachKnowledge from "../coachKnowledge.js";
 import type * as coach_aggregates from "../coach_aggregates.js";
@@ -56,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   categories: typeof categories;
   categoryCatalog: typeof categoryCatalog;
   categoryResolver: typeof categoryResolver;
+  chatConversations: typeof chatConversations;
   coach: typeof coach;
   coachKnowledge: typeof coachKnowledge;
   coach_aggregates: typeof coach_aggregates;
