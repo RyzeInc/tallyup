@@ -558,15 +558,31 @@ function MultiMonthView({
 // ─────────────────────────────────────────────────────────────
 // Main Component - Self-contained with data fetching (24 months)
 // ─────────────────────────────────────────────────────────────
-export function NetIncomeCalendar() {
+export interface NetIncomeCalendarProps {
+  /** Initial expanded state (for dashboard widget persistence) */
+  defaultExpanded?: boolean;
+  /** Initial view months (12 or 24) */
+  defaultViewMonths?: 12 | 24;
+  /** Callback when expanded state changes (for dashboard widget persistence) */
+  onExpandedChange?: (expanded: boolean) => void;
+  /** Callback when view months changes (for dashboard widget persistence) */
+  onViewMonthsChange?: (months: 12 | 24) => void;
+}
+
+export function NetIncomeCalendar({
+  defaultExpanded = false,
+  defaultViewMonths = 12,
+  onExpandedChange,
+  onViewMonthsChange,
+}: NetIncomeCalendarProps = {}) {
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   
   const [selectedMonth, setSelectedMonth] = React.useState(currentMonth);
   const [selectedYear, setSelectedYear] = React.useState(currentYear);
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const [viewMonths, setViewMonths] = React.useState<12 | 24>(12);
+  const [isExpanded, setIsExpanded] = React.useState(defaultExpanded);
+  const [viewMonths, setViewMonths] = React.useState<12 | 24>(defaultViewMonths);
 
   // Calculate date range for 24 months of data (2 years back from current date)
   const dataStartDate = React.useMemo(() => {
@@ -703,13 +719,22 @@ export function NetIncomeCalendar() {
         <MultiMonthView
           monthsData={expandedMonthsData}
           viewMonths={viewMonths}
-          onViewChange={setViewMonths}
-          onCollapse={() => setIsExpanded(false)}
+          onViewChange={(months) => {
+            setViewMonths(months);
+            onViewMonthsChange?.(months);
+          }}
+          onCollapse={() => {
+            setIsExpanded(false);
+            onExpandedChange?.(false);
+          }}
         />
       ) : (
         <SingleMonthCard
           data={selectedMonthData}
-          onExpand={() => setIsExpanded(true)}
+          onExpand={() => {
+            setIsExpanded(true);
+            onExpandedChange?.(true);
+          }}
         />
       )}
     </div>

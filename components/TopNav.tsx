@@ -138,10 +138,12 @@ export default function TopNav() {
         {/* Quick Log Button - white on gradient */}
         <button
           onClick={openQuickLog}
-          className="flex items-center justify-center rounded-full"
+          className="flex items-center justify-center rounded-full flex-shrink-0"
           style={{
-            width: 40,
-            height: 40,
+            width: 36,
+            height: 36,
+            minWidth: 36,
+            minHeight: 36,
             background: "rgba(255, 255, 255, 0.2)",
             backdropFilter: "blur(8px)",
             WebkitBackdropFilter: "blur(8px)",

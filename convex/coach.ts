@@ -61,6 +61,16 @@ export const chat: ReturnType<typeof action> = action({
   args: {
     message: v.string(),
     clientContextHash: v.optional(v.string()),
+    /** User-selected conversation mode (optional - defaults to auto-detect) */
+    conversationMode: v.optional(v.union(
+      v.literal("default"),
+      v.literal("learning"),
+      v.literal("learning:exploration"),
+      v.literal("learning:validation"),
+      v.literal("planning"),
+      v.literal("planning:action"),
+      v.literal("planning:crisis")
+    )),
   },
   handler: async (ctx, args): Promise<ChatResponse> => {
     const userId = await requireUserId(ctx);
@@ -89,21 +99,25 @@ export const chat: ReturnType<typeof action> = action({
       knowledgeSnippets,
       memorySnippets,
       intent,
+      // Conversation mode from args (user-selected) or default to auto-detect
+      conversationMode: args.conversationMode ?? "default",
     };
 
     const { provider, usesExternal, selected } = getCoachProvider();
     
-    // Dynamic system prompt based on user's health summary, context depth, AND intent
-    // Intent determines whether to give quick answers or thorough guidance
+    // Dynamic system prompt based on user's health summary, context depth, intent, AND conversation mode
+    // Mode determines how data is used (learning = minimal, planning = heavy)
     const systemPrompt = buildCoachSystemPrompt({
       healthSummary: packetWithKnowledge.healthSummary,
       contextDepth: packetWithKnowledge.contextDepth,
       intent: packetWithKnowledge.intent,
+      conversationMode: packetWithKnowledge.conversationMode,
+      dataFreshness: packetWithKnowledge.dataFreshness,
     });
     
     const rawMode = process.env.COACH_RAW_MODE === "true";
     if (process.env.COACH_DEBUG === "true") {
-      console.info(`[coach.chat] provider=${selected} external=${usesExternal} rawMode=${rawMode}`);
+      console.info(`[coach.chat] provider=${selected} external=${usesExternal} rawMode=${rawMode} mode=${packetWithKnowledge.conversationMode}`);
     }
 
     if (usesExternal) {

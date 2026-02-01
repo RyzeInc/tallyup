@@ -135,3 +135,167 @@ export const togglePreference = mutation({
     }
   },
 });
+
+// ============================================
+// DASHBOARD LAYOUT - Customizable widget arrangement
+// ============================================
+
+const widgetPlacementValidator = v.object({
+  widgetId: v.string(),
+  order: v.number(),
+  size: v.union(
+    v.literal("small"),
+    v.literal("medium"),
+    v.literal("large"),
+    v.literal("full")
+  ),
+  visible: v.boolean(),
+  settings: v.optional(v.any()),
+});
+
+const dashboardLayoutValidator = v.object({
+  version: v.number(),
+  widgets: v.array(widgetPlacementValidator),
+  updatedAt: v.number(),
+});
+
+/**
+ * Get user's dashboard layout
+ */
+export const getDashboardLayout = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const userId = identity.subject;
+
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    return prefs?.dashboardLayout ?? null;
+  },
+});
+
+/**
+ * Save the entire dashboard layout
+ */
+export const saveDashboardLayout = mutation({
+  args: {
+    layout: dashboardLayoutValidator,
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const existing = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const now = Date.now();
+    const layoutWithTimestamp = {
+      ...args.layout,
+      updatedAt: now,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        dashboardLayout: layoutWithTimestamp,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userPreferences", {
+        userId,
+        dashboardLayout: layoutWithTimestamp,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+/**
+ * Update a single widget's placement (for quick changes)
+ */
+export const updateWidgetPlacement = mutation({
+  args: {
+    widgetId: v.string(),
+    order: v.optional(v.number()),
+    size: v.optional(v.union(
+      v.literal("small"),
+      v.literal("medium"),
+      v.literal("large"),
+      v.literal("full")
+    )),
+    visible: v.optional(v.boolean()),
+    settings: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const now = Date.now();
+
+    if (!prefs?.dashboardLayout) {
+      // No layout exists, can't update individual widget
+      throw new Error("No dashboard layout exists");
+    }
+
+    const widgets = prefs.dashboardLayout.widgets.map((w) => {
+      if (w.widgetId === args.widgetId) {
+        return {
+          ...w,
+          ...(args.order !== undefined && { order: args.order }),
+          ...(args.size !== undefined && { size: args.size }),
+          ...(args.visible !== undefined && { visible: args.visible }),
+          ...(args.settings !== undefined && { settings: args.settings }),
+        };
+      }
+      return w;
+    });
+
+    await ctx.db.patch(prefs._id, {
+      dashboardLayout: {
+        ...prefs.dashboardLayout,
+        widgets,
+        updatedAt: now,
+      },
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Reset dashboard to default layout
+ */
+export const resetDashboardLayout = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = identity.subject;
+
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const now = Date.now();
+
+    if (prefs) {
+      await ctx.db.patch(prefs._id, {
+        dashboardLayout: undefined, // Remove to use default
+        updatedAt: now,
+      });
+    }
+  },
+});

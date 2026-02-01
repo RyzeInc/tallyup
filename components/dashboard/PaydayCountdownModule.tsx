@@ -17,6 +17,7 @@ export interface PaydayCountdownProps {
   nextPayday: PaydayInfo | null;
   upcomingIncome?: PaydayInfo[];
   isLoading?: boolean;
+  onAddIncome?: () => void; // Callback when user clicks "Add income"
 }
 
 /**
@@ -59,6 +60,7 @@ export function PaydayCountdownModule({
   nextPayday,
   upcomingIncome = [],
   isLoading = false,
+  onAddIncome,
 }: PaydayCountdownProps) {
   if (isLoading) {
     return (
@@ -79,8 +81,9 @@ export function PaydayCountdownModule({
 
   if (!nextPayday) {
     return (
-      <div
-        className="rounded-2xl p-4"
+      <button
+        onClick={onAddIncome}
+        className="w-full rounded-2xl p-4 text-left transition-colors hover:bg-[var(--surface-subtle)]"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
         <div className="flex items-center gap-3">
@@ -103,7 +106,7 @@ export function PaydayCountdownModule({
             style={{ color: "var(--text-tertiary)" }}
           />
         </div>
-      </div>
+      </button>
     );
   }
 

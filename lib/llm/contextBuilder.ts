@@ -8,6 +8,7 @@
  * - Extended financial context (A-G) for complete coach perspective
  * - Adaptive depth: minimal/standard/full based on user data completeness
  * - Health summary first: pre-computed signals before raw metrics
+ * - Conversation mode: learning modes minimize data, planning modes use data
  * 
  * Token budget targets (by depth):
  * - Minimal: ~100-150 tokens (new users, simple queries)
@@ -15,7 +16,7 @@
  * - Full: ~400-600 tokens (complex analysis, power users)
  */
 
-import type { CoachContextPacket, ContextDepth } from "./types";
+import type { CoachContextPacket, ContextDepth, ConversationMode, DataFreshnessInfo } from "./types";
 
 const MAX_STRING_LEN = 80;
 
@@ -95,17 +96,19 @@ function buildHealthContext(packet: CoachContextPacket): string[] {
 // CORE CONTEXT (always included)
 // ============================================
 
-function buildCoreContext(packet: CoachContextPacket): string[] {
+function buildCoreContext(packet: CoachContextPacket, skipCashflow = false): string[] {
   const lines: string[] = [];
 
-  // Cashflow (always useful)
-  const cf = packet.cashflow;
-  if (cf) {
-    const net = cf.netCents >= 0 ? `+${cents(cf.netCents)}` : cents(cf.netCents);
-    lines.push(`CF month=${packet.month?.label || "current"} inc=${cents(cf.incomeCents)} exp=${cents(cf.expenseCents)} net=${net}`);
+  // Cashflow (useful but skip in conceptual/learning mode)
+  if (!skipCashflow) {
+    const cf = packet.cashflow;
+    if (cf) {
+      const net = cf.netCents >= 0 ? `+${cents(cf.netCents)}` : cents(cf.netCents);
+      lines.push(`CF month=${packet.month?.label || "current"} inc=${cents(cf.incomeCents)} exp=${cents(cf.expenseCents)} net=${net}`);
+    }
   }
 
-  // Anti-loop signals (critical for behavior)
+  // Anti-loop signals (critical for behavior - always include)
   const facts = packet.establishedFacts;
   if (facts && facts.length > 0) {
     const truncatedFacts = facts.slice(0, 5).map(f => truncate(f, 60)).join("; ");
@@ -498,16 +501,125 @@ function buildMemoryContext(packet: CoachContextPacket): string[] {
 }
 
 // ============================================
+// DATA FRESHNESS CONTEXT
+// ============================================
+
+function buildDataFreshnessContext(packet: CoachContextPacket): string[] {
+  const lines: string[] = [];
+  const df = packet.dataFreshness;
+  
+  if (!df) return lines;
+  
+  // Only include freshness info if there's something notable
+  if (df.level === "stale" || df.level === "old") {
+    lines.push(`DATA_AGE level=${df.level} days=${df.daysSinceUpdate ?? "?"}`);
+    if (df.shouldConfirm) {
+      lines.push("DATA_NOTICE: Confirm accuracy with user before using specific numbers");
+    }
+  } else if (df.level === "unknown") {
+    lines.push("DATA_AGE: No financial data tracked yet");
+  }
+  // Fresh data: no need to mention (saves tokens)
+  
+  return lines;
+}
+
+// ============================================
+// CONVERSATION MODE HELPERS
+// ============================================
+
+/**
+ * Determine effective mode from user preference + auto-detection
+ * User-selected mode always takes precedence
+ */
+function getEffectiveMode(packet: CoachContextPacket): ConversationMode {
+  // User explicitly set a mode
+  if (packet.conversationMode && packet.conversationMode !== "default") {
+    return packet.conversationMode;
+  }
+  
+  // Use auto-detected mode if available
+  if (packet.intent?.autoDetectedMode) {
+    return packet.intent.autoDetectedMode;
+  }
+  
+  return "default";
+}
+
+/**
+ * Determine if financial data should be included based on conversation mode
+ * Learning modes minimize data, Planning modes use data heavily
+ */
+function shouldIncludeFinancialData(
+  mode: ConversationMode,
+  isConceptual: boolean | null | undefined,
+  dataFreshness: DataFreshnessInfo | null | undefined
+): { include: boolean; confirmFirst: boolean; reason?: string } {
+  // Learning modes: minimal data unless explicitly needed
+  if (mode === "learning" || mode === "learning:exploration" || mode === "learning:validation") {
+    if (isConceptual) {
+      return { 
+        include: false, 
+        confirmFirst: false,
+        reason: "Conceptual question - answer without anchoring to data",
+      };
+    }
+    // Even in learning mode, if they ask about "my" situation, we can offer data
+    return { 
+      include: true, 
+      confirmFirst: true,
+      reason: "Learning mode - offer to apply to their data after explaining concept",
+    };
+  }
+  
+  // Planning modes: use data, but check freshness
+  if (mode === "planning" || mode === "planning:action" || mode === "planning:crisis") {
+    if (dataFreshness?.shouldConfirm) {
+      return {
+        include: true,
+        confirmFirst: true,
+        reason: `Data is ${dataFreshness.daysSinceUpdate} days old - confirm accuracy first`,
+      };
+    }
+    return { include: true, confirmFirst: false };
+  }
+  
+  // Default mode: data relevant if not conceptual, respect freshness
+  if (isConceptual) {
+    return { 
+      include: false, 
+      confirmFirst: false,
+      reason: "Conceptual question detected - answer concept first",
+    };
+  }
+  
+  if (dataFreshness?.shouldConfirm) {
+    return {
+      include: true,
+      confirmFirst: true,
+      reason: `Data is ${dataFreshness.daysSinceUpdate} days old - confirm accuracy`,
+    };
+  }
+  
+  return { include: true, confirmFirst: false };
+}
+
+// ============================================
 // MAIN ENTRY POINT
 // ============================================
 
 /**
- * Main entry point - builds context based on intent and depth
+ * Main entry point - builds context based on intent, depth, and conversation mode
  * 
  * Adaptive depth:
  * - minimal: New users, simple queries, app help
  * - standard: Active users, most domain queries
  * - full: Power users, complex analysis, troubleshooting
+ * 
+ * Conversation mode gating:
+ * - learning modes: Minimal financial data, focus on concepts
+ * - planning modes: Full financial data with freshness awareness
+ * - default: Auto-detect based on conceptual vs personal signals
  * 
  * Intent gating (within depth):
  * - "debt": Full debt context + balance sheet + baseline
@@ -526,16 +638,59 @@ export function buildCompactContext(
   const intent = options?.intent || packet.intent;
   const domain = intent?.domain;
   
+  // Determine conversation mode (user-selected or auto-detected)
+  const effectiveMode = getEffectiveMode(packet);
+  const isConceptual = packet.intent?.isConceptual;
+  
+  // Determine if we should include financial data based on mode
+  const dataDecision = shouldIncludeFinancialData(
+    effectiveMode,
+    isConceptual,
+    packet.dataFreshness
+  );
+  
   // Determine depth from packet (computed by server) or default to minimal
   const contextDepth = packet.contextDepth || "minimal";
   const depth = DEPTH_CONFIG[contextDepth];
 
-  // HEALTH SUMMARY FIRST - pre-computed signals save tokens vs raw metrics
-  // This is the most efficient way to give the LLM actionable context
-  lines.push(...buildHealthContext(packet));
+  // MODE SIGNAL - tell the LLM what mode we're in
+  if (effectiveMode !== "default") {
+    lines.push(`MODE: ${effectiveMode}`);
+  }
+  
+  // DATA DECISION SIGNAL - tell LLM how to handle data
+  if (dataDecision.reason) {
+    lines.push(`DATA_MODE: ${dataDecision.reason}`);
+  }
+  if (dataDecision.confirmFirst) {
+    lines.push("DATA_CONFIRM: true");
+  }
 
-  // Always include core context (anti-loop, frustration, cashflow)
-  lines.push(...buildCoreContext(packet));
+  // HEALTH SUMMARY - only include if data is relevant
+  if (dataDecision.include) {
+    lines.push(...buildHealthContext(packet));
+  }
+
+  // Always include core context (anti-loop, frustration guards)
+  // But skip cashflow in core if we're not including financial data
+  lines.push(...buildCoreContext(packet, !dataDecision.include));
+  
+  // Data freshness context (when relevant)
+  if (dataDecision.include) {
+    lines.push(...buildDataFreshnessContext(packet));
+  }
+
+  // Skip extended financial context if we're not including data
+  // (e.g., learning mode with conceptual question)
+  if (!dataDecision.include) {
+    // In learning/conceptual mode, just include profile for personalization
+    lines.push(...buildProfileContext(packet));
+    
+    if (lines.length === 0) {
+      return "NO_DATA";
+    }
+    return lines.join("\n");
+  }
 
   // Gate extended context by domain (functions now respect depth)
   switch (domain) {

@@ -25,11 +25,23 @@ import {
   formatDayKey,
   GLOBAL_USAGE_USER_ID,
 } from "../lib/llm/budgetGuard";
-import type { CoachContextPacket, ContextDepth } from "../lib/llm/types";
+import type { 
+  CoachContextPacket, 
+  ContextDepth, 
+  DataFreshnessInfo, 
+  DataFreshnessLevel,
+} from "../lib/llm/types";
 import { cosineSimilarity, embedText } from "../lib/llm/embedding";
 
 const CONTEXT_TTL_MS = 2 * 60 * 1000;
 const KNOWLEDGE_TTL_MS = 2 * 60 * 1000;
+
+// Data freshness thresholds (in milliseconds)
+const FRESHNESS_THRESHOLDS = {
+  fresh: 24 * 60 * 60 * 1000,      // 24 hours
+  stale: 7 * 24 * 60 * 60 * 1000,  // 7 days
+  old: 30 * 24 * 60 * 60 * 1000,   // 30 days
+} as const;
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -78,6 +90,91 @@ function hashString(value: string): string {
 
 export function hashContextPacket(packet: CoachContextPacket): string {
   return hashString(JSON.stringify(packet));
+}
+
+/**
+ * Compute data freshness based on Plaid sync timestamps and manual entry activity
+ */
+async function computeDataFreshness(ctx: Ctx, userId: string): Promise<DataFreshnessInfo> {
+  const now = Date.now();
+  
+  // Get the most recent Plaid sync timestamp from linked accounts
+  const linkedAccounts = await ctx.db
+    .query("accounts")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .filter((q) => q.eq(q.field("isLinked"), true))
+    .collect();
+  
+  // Get most recent entry timestamp (for manual tracking users)
+  const recentEntry = await ctx.db
+    .query("entries")
+    .withIndex("by_user_date", (q) => q.eq("userId", userId))
+    .order("desc")
+    .first();
+  
+  // Determine the most recent data update
+  let lastUpdatedAt: number | null = null;
+  
+  // Use the most recent of: Plaid sync or manual entry
+  const plaidSyncTimes = linkedAccounts
+    .map((a) => a.lastPlaidSync)
+    .filter((t): t is number => t !== undefined && t !== null);
+  
+  const mostRecentPlaidSync = plaidSyncTimes.length > 0 
+    ? Math.max(...plaidSyncTimes) 
+    : null;
+  
+  const mostRecentEntry = recentEntry?.createdAt ?? null;
+  
+  if (mostRecentPlaidSync && mostRecentEntry) {
+    lastUpdatedAt = Math.max(mostRecentPlaidSync, mostRecentEntry);
+  } else {
+    lastUpdatedAt = mostRecentPlaidSync ?? mostRecentEntry;
+  }
+  
+  // If no data at all, return unknown
+  if (lastUpdatedAt === null) {
+    return {
+      level: "unknown",
+      lastUpdatedAt: null,
+      daysSinceUpdate: null,
+      shouldConfirm: false,
+      message: "No financial data available yet",
+    };
+  }
+  
+  const msSinceUpdate = now - lastUpdatedAt;
+  const daysSinceUpdate = Math.floor(msSinceUpdate / (24 * 60 * 60 * 1000));
+  
+  // Determine freshness level
+  let level: DataFreshnessLevel;
+  let shouldConfirm: boolean;
+  let message: string | undefined;
+  
+  if (msSinceUpdate < FRESHNESS_THRESHOLDS.fresh) {
+    level = "fresh";
+    shouldConfirm = false;
+  } else if (msSinceUpdate < FRESHNESS_THRESHOLDS.stale) {
+    level = "stale";
+    shouldConfirm = false;
+    message = `Data last updated ${daysSinceUpdate} days ago`;
+  } else if (msSinceUpdate < FRESHNESS_THRESHOLDS.old) {
+    level = "old";
+    shouldConfirm = true;
+    message = `Data is ${daysSinceUpdate} days old. I should confirm it's still accurate before using it.`;
+  } else {
+    level = "old";
+    shouldConfirm = true;
+    message = `Data is over a month old (${daysSinceUpdate} days). I'll need to confirm current accuracy.`;
+  }
+  
+  return {
+    level,
+    lastUpdatedAt,
+    daysSinceUpdate,
+    shouldConfirm,
+    message,
+  };
 }
 
 export async function buildContextPacket(ctx: Ctx, userId: string): Promise<CoachContextPacket> {
@@ -178,6 +275,9 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
   const establishedFacts = sessionState?.establishedFacts ?? null;
   const frustrationDetectedAt = sessionState?.frustrationDetectedAt ?? null;
 
+  // Compute data freshness for context decisions
+  const dataFreshness = await computeDataFreshness(ctx, userId);
+
   return {
     generatedAt: Date.now(),
     month: {
@@ -229,6 +329,9 @@ export async function buildContextPacket(ctx: Ctx, userId: string): Promise<Coac
     
     // Context depth for adaptive inclusion
     contextDepth: computeContextDepth(balanceSheet, goalSnapshot, conversation),
+    
+    // Data freshness for context decisions
+    dataFreshness,
   };
 }
 
@@ -270,6 +373,16 @@ export function summarizePacket(packet: CoachContextPacket) {
   };
 }
 
+// Conversation mode type imported from types
+type ConversationMode = 
+  | "default"
+  | "learning"
+  | "learning:exploration"
+  | "learning:validation"
+  | "planning"
+  | "planning:action"
+  | "planning:crisis";
+
 export function classifyIntent(message: string): { 
   domain?: string; 
   task?: string;
@@ -281,6 +394,10 @@ export function classifyIntent(message: string): {
   expressingFrustration?: boolean;
   /** User explicitly doesn't want to answer questions right now */
   resistingQuestions?: boolean;
+  /** Auto-detected conversation mode based on message content */
+  autoDetectedMode?: ConversationMode;
+  /** Whether the question is conceptual (not about user's specific situation) */
+  isConceptual?: boolean;
 } {
   const lower = message.toLowerCase();
   const hasAny = (terms: string[]) => terms.some((term) => lower.includes(term));
@@ -345,6 +462,57 @@ export function classifyIntent(message: string): {
   const resistingQuestions = hasAny(questionResistanceSignals);
 
   // ============================================
+  // CONCEPTUAL VS PERSONAL DETECTION
+  // ============================================
+  
+  // Signals that indicate a conceptual/learning question (not about their specific situation)
+  const conceptualSignals = [
+    // Generic "what is" questions
+    "what is a", "what is an", "what's a", "what's an",
+    "what are", "what does", "what do",
+    "how does", "how do", "how can someone",
+    // Hypotheticals
+    "what if someone", "if someone", "let's say", "hypothetically",
+    "in general", "generally speaking", "typically",
+    "on average", "most people", "the average person",
+    // Learning phrases
+    "can you explain", "tell me about", "teach me",
+    "i want to learn", "i want to understand",
+    "how does x work", "what's the difference between",
+    "pros and cons", "advantages and disadvantages",
+    // Generic advice seeking
+    "what should someone", "what would you recommend to someone",
+    "best practice", "rule of thumb", "common advice",
+    // FIRE, investing concepts
+    "what is fire", "what's fire", "fire movement",
+    "index fund", "compound interest", "dollar cost averaging",
+    "roth vs traditional", "401k vs ira",
+  ];
+  
+  // Signals that indicate a personal question (about their specific situation)
+  const personalSignals = [
+    // First person possessive
+    "my", "mine", "i have", "i've", "i am", "i'm",
+    "my debt", "my savings", "my budget", "my income",
+    "my spending", "my account", "my balance",
+    // Direct questions about their situation
+    "how much do i", "how much have i", "how much can i",
+    "what's my", "what is my", "where did my",
+    "should i", "can i afford", "am i on track",
+    "based on my", "looking at my", "given my",
+    // Action-oriented
+    "help me", "show me", "tell me my",
+  ];
+  
+  const hasConceptualSignals = hasAny(conceptualSignals);
+  const hasPersonalSignals = hasAny(personalSignals);
+  
+  // Determine if conceptual (learning-focused, not data-anchored)
+  // Conceptual if: has conceptual signals AND doesn't have strong personal signals
+  // OR if message is very generic without any personal context
+  const isConceptual = hasConceptualSignals && !hasPersonalSignals;
+
+  // ============================================
   // RESPONSE DEPTH DETERMINATION
   // ============================================
   
@@ -405,6 +573,63 @@ export function classifyIntent(message: string): {
     depth = "deep";
   }
 
+  // ============================================
+  // AUTO-DETECT CONVERSATION MODE
+  // ============================================
+  
+  let autoDetectedMode: ConversationMode = "default";
+  
+  // Crisis signals - urgent financial distress
+  const crisisSignals = [
+    "emergency", "urgent", "asap", "right now", "immediately",
+    "can't pay", "cant pay", "behind on", "overdue", "collections",
+    "eviction", "foreclosure", "repossession",
+    "lost my job", "laid off", "fired", "unemployed",
+    "medical bills", "unexpected expense", "car broke",
+    "don't know what to do", "desperate", "scared", "panicking",
+  ];
+  
+  // Exploration signals - hypotheticals and curiosity
+  const explorationSignals = [
+    "what if", "hypothetically", "let's say", "imagine",
+    "curious about", "wondering about", "interested in",
+    "how would", "what would happen if",
+    "just curious", "out of curiosity",
+  ];
+  
+  // Validation signals - checking understanding
+  const validationSignals = [
+    "am i understanding", "is that right", "is that correct",
+    "did i get that", "so basically", "in other words",
+    "let me make sure", "just to confirm", "to clarify",
+    "does that mean", "so what you're saying",
+  ];
+  
+  // Action signals - ready to take steps
+  const actionSignals = [
+    "let's do it", "i'm ready", "im ready", "ready to",
+    "what's the first step", "where do i start",
+    "how do i actually", "practically",
+    "set up", "open", "transfer", "pay off", "start",
+    "this week", "today", "right now", "asap",
+  ];
+  
+  // Determine auto-detected mode based on signals
+  if (hasAny(crisisSignals)) {
+    autoDetectedMode = "planning:crisis";
+  } else if (hasAny(validationSignals)) {
+    autoDetectedMode = "learning:validation";
+  } else if (hasAny(explorationSignals)) {
+    autoDetectedMode = "learning:exploration";
+  } else if (hasAny(actionSignals) && !isConceptual) {
+    autoDetectedMode = "planning:action";
+  } else if (isConceptual || needsEducation) {
+    autoDetectedMode = "learning";
+  } else if (needsStructuredPlan || (depth === "deep" && !isConceptual)) {
+    autoDetectedMode = "planning";
+  }
+  // Otherwise stays "default"
+
   return { 
     domain, 
     task, 
@@ -413,6 +638,8 @@ export function classifyIntent(message: string): {
     needsEducation,
     expressingFrustration,
     resistingQuestions,
+    autoDetectedMode,
+    isConceptual,
   };
 }
 

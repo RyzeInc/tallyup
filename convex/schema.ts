@@ -866,6 +866,25 @@ export default defineSchema({
     pinnedIncomeCategories: v.optional(v.array(v.string())),
     pinnedContextTags: v.optional(v.array(v.string())),
     
+    // Dashboard layout - customizable widget arrangement
+    // Stores array of widget placements with order, size, and visibility
+    dashboardLayout: v.optional(v.object({
+      version: v.number(),
+      widgets: v.array(v.object({
+        widgetId: v.string(),
+        order: v.number(),
+        size: v.union(
+          v.literal("small"),
+          v.literal("medium"),
+          v.literal("large"),
+          v.literal("full")
+        ),
+        visible: v.boolean(),
+        settings: v.optional(v.any()),
+      })),
+      updatedAt: v.number(),
+    })),
+    
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -18,12 +18,14 @@ import CoachMessageBubble from "@/components/coach/CoachMessageBubble";
 import FollowUpSuggestions from "@/components/coach/FollowUpSuggestions";
 import ActionOptions from "@/components/coach/ActionOptions";
 import ChatSidebar, { SidebarToggle } from "@/components/coach/ChatSidebar";
+import ConversationModeSelector from "@/components/coach/ConversationModeSelector";
 
 // Utils
 import { formatProfileUpdate } from "@/lib/coach/formatProfile";
 import { formatFoundationUpdate } from "@/lib/coach/formatFoundation";
 import type { CoachProfileUpdate } from "@/lib/coach/profile";
 import type { CoachFoundationUpdate } from "@/lib/coach/foundation";
+import type { ConversationMode } from "@/lib/llm/types";
 
 /**
  * CoachAskPage - Full AI chat interface
@@ -126,6 +128,9 @@ function CoachAskContent() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [avatarState, setAvatarState] = useState<"idle" | "listening" | "thinking">("idle");
+  
+  // Conversation mode state (user-selected mode)
+  const [conversationMode, setConversationMode] = useState<ConversationMode>("default");
   
   // Snapshot state
   const [_snapshot, setSnapshot] = useState<CoachSnapshot | null>(null);
@@ -249,6 +254,7 @@ function CoachAskContent() {
       const result = await sendMessage({
         message: trimmed,
         clientContextHash: contextHash ?? undefined,
+        conversationMode: conversationMode,
       });
 
       const assistantMessage: ChatMessage = {
@@ -292,7 +298,7 @@ function CoachAskContent() {
       setSending(false);
       setAvatarState("idle");
     }
-  }, [input, sending, contextHash, sendMessage, activeConversationId, isTemporaryMode, createConversation, addMessage]);
+  }, [input, sending, contextHash, sendMessage, activeConversationId, isTemporaryMode, createConversation, addMessage, conversationMode]);
 
   // Handle profile update application
   const handleApplyProfile = async () => {
@@ -403,7 +409,7 @@ function CoachAskContent() {
   }, [conversationMessages, activeConversationId]);
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative overflow-hidden">
       {/* Sidebar */}
       <ChatSidebar
         activeConversationId={activeConversationId}
@@ -417,8 +423,8 @@ function CoachAskContent() {
       <div className="flex flex-col flex-1 min-w-0 h-full">
         {/* Header */}
         <div 
-          className="flex items-center justify-between px-4 py-3 border-b shrink-0"
-          style={{ borderColor: "var(--border)" }}
+          className="flex items-center justify-between px-4 border-b shrink-0"
+          style={{ borderColor: "var(--border)", height: "48px" }}
         >
           <div className="flex items-center gap-3">
             {/* Sidebar toggle */}
@@ -434,19 +440,17 @@ function CoachAskContent() {
             </button>
             <CoachAvatar state={avatarState} size="sm" />
             <div>
-              <h1
-                style={{
-                  fontSize: "var(--text-body)",
-                  fontWeight: 600,
-                  color: "var(--text)",
-                }}
-              >
-                Financial Coach
-              </h1>
+              {/* Coach name with mode selector (ChatGPT style) */}
+              <ConversationModeSelector
+                value={conversationMode}
+                onChange={setConversationMode}
+                variant="header"
+              />
               <p
                 style={{
                   fontSize: "var(--text-micro)",
                   color: "var(--text-secondary)",
+                  marginTop: "-8px",
                 }}
               >
                 {sending ? "Thinking..." : isTemporaryMode ? "Temporary chat (won't be saved)" : "Ask anything about your finances"}
@@ -696,21 +700,22 @@ function CoachAskContent() {
           backgroundColor: "var(--surface)",
         }}
       >
-        {/* Typing suggestions */}
+        {/* Typing suggestions row */}
         {typingSuggestions.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
-            {typingSuggestions.map((suggestion) => (
+            {typingSuggestions.slice(0, 3).map((suggestion) => (
               <button
                 key={suggestion}
                 onClick={() => {
                   setInput(suggestion);
                   inputRef.current?.focus();
                 }}
-                className="px-2 py-1 rounded-lg text-xs transition-colors"
+                className="px-2 py-1 rounded-lg text-xs transition-colors truncate max-w-[180px]"
                 style={{
                   backgroundColor: "var(--surface-2)",
                   color: "var(--text-secondary)",
                 }}
+                title={suggestion}
               >
                 {suggestion}
               </button>

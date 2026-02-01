@@ -3,6 +3,121 @@ import type { CoachFoundation } from "../coach/foundation";
 import type { SlotLedger } from "../coach/slotLedger";
 
 // ============================================
+// CONVERSATION MODE TYPES
+// ============================================
+
+/**
+ * Coach conversation modes - controls how the coach responds
+ * 
+ * Hierarchy:
+ * - default: Auto-detects based on message content (no visible notation)
+ * - learning: Education/concept-focused (minimal data anchoring)
+ *   - learning:exploration: "What if" / curiosity / hypotheticals
+ *   - learning:validation: "Am I understanding this correctly?"
+ * - planning: Action/outcome-focused (uses data when relevant + fresh)
+ *   - planning:action: Ready to take steps now
+ *   - planning:crisis: Urgent financial situation
+ */
+export type ConversationMode = 
+  | "default"
+  | "learning"
+  | "learning:exploration"
+  | "learning:validation"
+  | "planning"
+  | "planning:action"
+  | "planning:crisis";
+
+/** Mode metadata for UI display */
+export type ConversationModeInfo = {
+  id: ConversationMode;
+  label: string;
+  shortLabel: string;
+  description: string;
+  parent?: ConversationMode;
+  dataUsage: "auto" | "minimal" | "when-relevant" | "heavy";
+};
+
+export const CONVERSATION_MODES: Record<ConversationMode, ConversationModeInfo> = {
+  default: {
+    id: "default",
+    label: "Default",
+    shortLabel: "Auto",
+    description: "Automatically adapts based on your questions",
+    dataUsage: "auto",
+  },
+  learning: {
+    id: "learning",
+    label: "Learning",
+    shortLabel: "Learn",
+    description: "Focus on concepts and education, less data-driven",
+    dataUsage: "minimal",
+  },
+  "learning:exploration": {
+    id: "learning:exploration",
+    label: "Exploration",
+    shortLabel: "Explore",
+    description: "What-if scenarios and hypotheticals",
+    parent: "learning",
+    dataUsage: "minimal",
+  },
+  "learning:validation": {
+    id: "learning:validation",
+    label: "Validation",
+    shortLabel: "Validate",
+    description: "Check your understanding of concepts",
+    parent: "learning",
+    dataUsage: "minimal",
+  },
+  planning: {
+    id: "planning",
+    label: "Planning",
+    shortLabel: "Plan",
+    description: "Action-focused guidance using your data",
+    dataUsage: "when-relevant",
+  },
+  "planning:action": {
+    id: "planning:action",
+    label: "Action",
+    shortLabel: "Action",
+    description: "Ready to take specific steps now",
+    parent: "planning",
+    dataUsage: "heavy",
+  },
+  "planning:crisis": {
+    id: "planning:crisis",
+    label: "Crisis",
+    shortLabel: "Crisis",
+    description: "Urgent financial situation needing immediate help",
+    parent: "planning",
+    dataUsage: "heavy",
+  },
+};
+
+// ============================================
+// DATA FRESHNESS TYPES
+// ============================================
+
+/** Thresholds for data freshness (in milliseconds) */
+export const DATA_FRESHNESS_THRESHOLDS = {
+  /** Data updated within last 24 hours - considered fresh */
+  fresh: 24 * 60 * 60 * 1000,
+  /** Data updated within last 7 days - usable but should note */
+  stale: 7 * 24 * 60 * 60 * 1000,
+  /** Data older than 7 days - should confirm with user */
+  old: 30 * 24 * 60 * 60 * 1000,
+} as const;
+
+export type DataFreshnessLevel = "fresh" | "stale" | "old" | "unknown";
+
+export type DataFreshnessInfo = {
+  level: DataFreshnessLevel;
+  lastUpdatedAt: number | null;
+  daysSinceUpdate: number | null;
+  shouldConfirm: boolean;
+  message?: string;
+};
+
+// ============================================
 // EXTENDED FINANCIAL SNAPSHOTS
 // ============================================
 
@@ -180,7 +295,28 @@ export type CoachContextPacket = {
     expressingFrustration?: boolean | null;
     /** User explicitly doesn't want to answer questions right now */
     resistingQuestions?: boolean | null;
+    /** 
+     * Auto-detected conversation mode based on message content
+     * Only used when user hasn't explicitly set a mode
+     */
+    autoDetectedMode?: ConversationMode | null;
+    /**
+     * Whether the question is primarily conceptual (not about user's specific situation)
+     * Used to determine if data anchoring is appropriate
+     */
+    isConceptual?: boolean | null;
   } | null;
+  
+  // ============================================
+  // CONVERSATION MODE & DATA FRESHNESS
+  // ============================================
+  
+  /** User-selected conversation mode (overrides auto-detection) */
+  conversationMode?: ConversationMode | null;
+  
+  /** Data freshness information for context decisions */
+  dataFreshness?: DataFreshnessInfo | null;
+  
   knowledgeSnippets?: Array<{
     docId: string;
     chunkIndex: number;

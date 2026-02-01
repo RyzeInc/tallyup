@@ -13,6 +13,7 @@ export { default as InteractiveAnalysisCard } from "./InteractiveAnalysisCard";
 export { default as FollowUpSuggestions } from "./FollowUpSuggestions";
 export { default as CoachDashboard } from "./CoachDashboard";
 export { default as ChatSidebar, SidebarToggle } from "./ChatSidebar";
+export { default as ConversationModeSelector } from "./ConversationModeSelector";
 
 // Chunked response & progressive disclosure components
 export { default as ChunkedResponse, parseIntoChunks } from "./ChunkedResponse";

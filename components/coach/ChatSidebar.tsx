@@ -57,16 +57,16 @@ export default function ChatSidebar({
 
   return (
     <>
-      {/* Mobile overlay */}
+      {/* Mobile overlay - only on small screens */}
       <div
-        className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+        className="fixed inset-0 bg-black/50 z-40 md:hidden"
         onClick={onToggle}
         aria-hidden="true"
       />
 
       {/* Sidebar */}
       <aside
-        className="fixed top-0 left-0 z-50 h-full lg:relative lg:z-auto flex-shrink-0"
+        className="absolute md:relative inset-y-0 left-0 z-50 md:z-auto flex-shrink-0 h-full"
         style={{
           width: "280px",
           backgroundColor: "var(--surface)",
@@ -76,8 +76,8 @@ export default function ChatSidebar({
         <div className="flex flex-col h-full">
           {/* Header - matches main chat header height */}
           <div
-            className="flex items-center justify-between px-4 py-3 shrink-0"
-            style={{ borderBottom: "1px solid var(--border)" }}
+            className="flex items-center px-4 shrink-0"
+            style={{ borderBottom: "1px solid var(--border)", height: "48px" }}
           >
             <span
               className="text-base font-semibold"
@@ -85,20 +85,13 @@ export default function ChatSidebar({
             >
               Conversations
             </span>
-            <button
-              onClick={onToggle}
-              className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-              aria-label="Close sidebar"
-            >
-              <Lucide.PanelLeftClose size={20} style={{ color: "var(--text-secondary)" }} />
-            </button>
           </div>
 
           {/* New Chat Button */}
-          <div className="p-3" style={{ borderBottom: "1px solid var(--border)" }}>
+          <div className="px-3 py-2">
             <button
               onClick={() => onNewChat(false)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg transition-colors font-medium"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors font-medium"
               style={{
                 backgroundColor: "var(--primary)",
                 color: "#FFFFFF",
