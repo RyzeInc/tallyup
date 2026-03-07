@@ -152,12 +152,6 @@ export default function AccountsPage() {
     });
   }, [rawAccounts, accountsOverview]);
 
-  // Plaid queries
-  const plaidItems = useQuery(api.plaid.listPlaidItems);
-  const pendingTransactions = useQuery(api.plaid.listPendingTransactions, { limit: 100 });
-  const linkedCount = plaidItems?.length ?? 0;
-  const pendingCount = pendingTransactions?.length ?? 0;
-
   // Mutations
   const createAccount = useMutation(api.accounts.createAccount);
   const updateAccount = useMutation(api.accounts.updateAccount);
@@ -206,14 +200,6 @@ export default function AccountsPage() {
       warnings.push({
         label: "Investments tracked",
         value: accountDeletionImpact.investmentsCount,
-      });
-    }
-    
-    if (accountDeletionImpact.isLinked) {
-      warnings.push({
-        label: "Plaid connection",
-        value: "Account is linked to Plaid",
-        isCritical: true,
       });
     }
     
@@ -433,51 +419,6 @@ export default function AccountsPage() {
             </div>
           </div>
         </div>
-
-        {/* Plaid Link Banner */}
-        <Link
-          href="/accounts/link"
-          className="block rounded-2xl p-4 transition-colors hover:opacity-95"
-          style={{ 
-            backgroundColor: linkedCount > 0 ? "var(--surface)" : "var(--primary-subtle)", 
-            border: "1px solid var(--border)" 
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div 
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{ backgroundColor: linkedCount > 0 ? "var(--primary-subtle)" : "var(--primary)", opacity: linkedCount > 0 ? 1 : 0.9 }}
-              >
-                <Lucide.Link2 className="h-5 w-5" style={{ color: linkedCount > 0 ? "var(--primary)" : "var(--on-primary)" }} />
-              </div>
-              <div>
-                <p className="font-medium" style={{ color: "var(--text)" }}>
-                  {linkedCount > 0 ? `${linkedCount} Connected Institution${linkedCount !== 1 ? "s" : ""}` : "Connect Your Bank"}
-                </p>
-                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-                  {linkedCount > 0 
-                    ? pendingCount > 0 
-                      ? `${pendingCount} pending transaction${pendingCount !== 1 ? "s" : ""} to review`
-                      : "Accounts synced automatically"
-                    : "Link accounts to auto-import transactions"
-                  }
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {pendingCount > 0 && (
-                <span 
-                  className="px-2 py-1 text-xs font-medium rounded-full"
-                  style={{ backgroundColor: "var(--warning)", color: "var(--on-warning, #000)" }}
-                >
-                  {pendingCount}
-                </span>
-              )}
-              <Lucide.ChevronRight className="h-5 w-5" style={{ color: "var(--text-tertiary)" }} />
-            </div>
-          </div>
-        </Link>
 
         {/* Filter toggles */}
         <div className="flex gap-2 flex-wrap">

@@ -16,11 +16,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Doc, Id } from "convex/_generated/dataModel";
 
 type EntryDoc = Doc<"entries">;
-type PlaidTransaction = Doc<"plaidTransactions">;
 type EditableEntry = EntryDoc & { type: "expense" | "income" };
 type EntriesPage = { rows: EntryDoc[]; nextCursor?: number };
 type SortBy = "newest" | "oldest" | "highest" | "lowest";
-type ViewMode = "cards" | "table" | "extended" | "plaid";
+type ViewMode = "cards" | "table" | "extended";
 
 function isEditableEntry(entry: EntryDoc): entry is EditableEntry {
   return entry.type === "expense" || entry.type === "income";
@@ -64,11 +63,10 @@ export default function ActivityPage() {
     } catch {}
   }, [viewMode]);
   
-  // Cycle through view modes: cards -> table -> extended -> plaid -> cards
+  // Cycle through view modes: cards -> table -> extended -> cards
   const cycleViewMode = () => {
     if (viewMode === "cards") setViewMode("table");
     else if (viewMode === "table") setViewMode("extended");
-    else if (viewMode === "extended") setViewMode("plaid");
     else setViewMode("cards");
   };
 
@@ -100,19 +98,6 @@ export default function ActivityPage() {
     const d = new Date(endDate);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, [endDate]);
-
-  // Get raw Plaid transactions when in plaid view mode
-  const plaidTransactions = useQuery(
-    api.plaid.listAllPlaidTransactions,
-    viewMode === "plaid" ? { limit: 100, startDate: startDateStr, endDate: endDateStr } : "skip"
-  ) as PlaidTransaction[] | undefined;
-  
-  // Check if user has linked Plaid accounts
-  const plaidAccounts = useQuery(
-    api.plaid.listPlaidAccounts,
-    viewMode === "plaid" ? {} : "skip"
-  );
-  const hasLinkedAccounts = plaidAccounts && plaidAccounts.length > 0;
 
   // Get user's accounts for filtering
   const accounts = useQuery(api.accounts.listAccounts, {}) as Doc<"accounts">[] | undefined;
@@ -233,10 +218,8 @@ export default function ActivityPage() {
   }, [type, q, selectedCategories, selectedTags, router, reviewOnly, searchParams]);
 
   const deleteEntry = useMutation(api.entries.deleteEntry);
-  const deletePlaidTransaction = useMutation(api.plaid.deletePlaidTransaction);
-  const deletePlaidTransactionsBulk = useMutation(api.plaid.deletePlaidTransactionsBulk);
   
-  // Selection state for Plaid transactions
+  // Selection state
   const [selectedPlaidIds, setSelectedPlaidIds] = useState<Set<string>>(new Set());
   const [plaidSelectMode, setPlaidSelectMode] = useState(false);
 
@@ -871,14 +854,13 @@ export default function ActivityPage() {
               fontSize: "var(--text-meta)",
               fontWeight: 500,
               cursor: "pointer",
-              backgroundColor: viewMode === "plaid" ? "var(--accent-subtle)" : "transparent",
-              color: viewMode === "plaid" ? "var(--primary)" : "var(--text)",
+              backgroundColor: "transparent",
+              color: "var(--text)",
               border: "1px solid var(--border)",
             }}
             title={
               viewMode === "cards" ? "Switch to table view" : 
               viewMode === "table" ? "Switch to extended view" : 
-              viewMode === "extended" ? "Switch to Plaid raw view" :
               "Switch to card view"
             }
           >
@@ -886,10 +868,8 @@ export default function ActivityPage() {
               <Lucide.LayoutList className="h-4 w-4" />
             ) : viewMode === "table" ? (
               <Lucide.Table className="h-4 w-4" />
-            ) : viewMode === "extended" ? (
-              <Lucide.LayoutGrid className="h-4 w-4" />
             ) : (
-              <Lucide.Database className="h-4 w-4" />
+              <Lucide.LayoutGrid className="h-4 w-4" />
             )}
           </button>
 
@@ -1085,400 +1065,7 @@ export default function ActivityPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", flex: 1, minHeight: 0, overflow: "hidden", padding: "0 var(--space-4) var(--space-4) var(--space-4)" }}>
         
         {/* Plaid Raw Transactions View */}
-        {viewMode === "plaid" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", overflow: "auto" }}>
-            {/* Header explaining this view */}
-            <div
-              style={{
-                backgroundColor: "var(--accent-subtle)",
-                borderRadius: "var(--card-radius)",
-                border: "1px solid var(--primary)",
-                padding: "var(--space-4)",
-                marginBottom: "var(--space-2)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
-                <Lucide.Database className="h-5 w-5" style={{ color: "var(--primary)" }} />
-                <h3 style={{ fontSize: "var(--text-base)", fontWeight: 600, color: "var(--text)" }}>Raw Plaid Transactions</h3>
-              </div>
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", margin: 0 }}>
-                This view shows raw transaction data from Plaid before it&apos;s imported into TallyUp. 
-                Use this to debug sync issues or see exactly what your bank sends.
-              </p>
-            </div>
-            
-            {/* Status legend */}
-            <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap", marginBottom: "var(--space-2)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--warning)" }} />
-                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Pending</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--success)" }} />
-                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Imported</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--text-tertiary)" }} />
-                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Skipped</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
-                <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "var(--destructive)" }} />
-                <span style={{ fontSize: "var(--text-micro)", color: "var(--text-secondary)" }}>Duplicate</span>
-              </div>
-            </div>
-            
-            {!plaidTransactions ? (
-              <div
-                style={{
-                  backgroundColor: "var(--surface)",
-                  borderRadius: "var(--card-radius)",
-                  border: "1px solid var(--border)",
-                  padding: "var(--space-8)",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--space-2)" }}>
-                  <Lucide.Loader2 className="h-4 w-4 animate-spin" style={{ color: "var(--text-tertiary)" }} />
-                  <span style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>Loading Plaid transactions…</span>
-                </div>
-              </div>
-            ) : plaidTransactions.length === 0 ? (
-              <div
-                style={{
-                  backgroundColor: "var(--surface)",
-                  borderRadius: "var(--card-radius)",
-                  border: "1px solid var(--border)",
-                  padding: "var(--space-8)",
-                  textAlign: "center",
-                }}
-              >
-                {!hasLinkedAccounts ? (
-                  <>
-                    <Lucide.Link2 className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--text-tertiary)" }} />
-                    <div style={{ fontWeight: 600, marginBottom: "var(--space-2)", color: "var(--text)" }}>
-                      No Linked Accounts
-                    </div>
-                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)", marginBottom: "var(--space-4)" }}>
-                      This view shows raw transaction data from bank accounts connected via Plaid. 
-                      You&apos;re currently using manual entry mode.
-                    </div>
-                    <div style={{ 
-                      padding: "var(--space-3)", 
-                      borderRadius: "var(--card-radius)", 
-                      backgroundColor: "var(--surface-2)",
-                      textAlign: "left",
-                    }}>
-                      <div style={{ fontSize: "var(--text-sm)", fontWeight: 500, color: "var(--text)", marginBottom: "var(--space-2)" }}>
-                        💡 Manual mode works great!
-                      </div>
-                      <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                        All TallyUp features work without linking accounts. Your manually entered transactions 
-                        appear in the Cards, Table, and Extended views.
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <Lucide.Database className="h-12 w-12 mx-auto mb-3" style={{ color: "var(--text-tertiary)" }} />
-                    <div style={{ fontWeight: 600, marginBottom: "var(--space-2)", color: "var(--text)" }}>
-                      No transactions in this date range
-                    </div>
-                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                      Try expanding your date range or syncing your accounts to fetch recent transactions.
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                {/* Action bar for Plaid transactions */}
-                <div style={{ 
-                  display: "flex", 
-                  alignItems: "center", 
-                  justifyContent: "space-between",
-                  marginBottom: "var(--space-1)",
-                }}>
-                  <div style={{ fontSize: "var(--text-meta)", color: "var(--text-secondary)" }}>
-                    {plaidSelectMode && selectedPlaidIds.size > 0 
-                      ? `${selectedPlaidIds.size} selected`
-                      : `Showing ${plaidTransactions.length} raw transactions`
-                    }
-                  </div>
-                  <div style={{ display: "flex", gap: "var(--space-2)" }}>
-                    {plaidSelectMode ? (
-                      <>
-                        <button
-                          onClick={() => {
-                            // Select all
-                            if (selectedPlaidIds.size === plaidTransactions.length) {
-                              setSelectedPlaidIds(new Set());
-                            } else {
-                              setSelectedPlaidIds(new Set(plaidTransactions.map(t => t._id)));
-                            }
-                          }}
-                          style={{
-                            padding: "4px 12px",
-                            fontSize: "var(--text-sm)",
-                            fontWeight: 500,
-                            color: "var(--text-secondary)",
-                            backgroundColor: "var(--surface-2)",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--radius-md)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {selectedPlaidIds.size === plaidTransactions.length ? "Deselect All" : "Select All"}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (selectedPlaidIds.size === 0) return;
-                            if (!confirm(`Delete ${selectedPlaidIds.size} raw Plaid transactions? This cannot be undone.`)) return;
-                            try {
-                              await deletePlaidTransactionsBulk({ 
-                                ids: Array.from(selectedPlaidIds) as Id<"plaidTransactions">[]
-                              });
-                              setSelectedPlaidIds(new Set());
-                              setPlaidSelectMode(false);
-                            } catch (err) {
-                              console.error("Failed to delete:", err);
-                              alert("Failed to delete some transactions");
-                            }
-                          }}
-                          disabled={selectedPlaidIds.size === 0}
-                          style={{
-                            padding: "4px 12px",
-                            fontSize: "var(--text-sm)",
-                            fontWeight: 500,
-                            color: selectedPlaidIds.size > 0 ? "#fff" : "var(--text-tertiary)",
-                            backgroundColor: selectedPlaidIds.size > 0 ? "var(--destructive)" : "var(--surface-2)",
-                            border: "none",
-                            borderRadius: "var(--radius-md)",
-                            cursor: selectedPlaidIds.size > 0 ? "pointer" : "not-allowed",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "var(--space-1)",
-                          }}
-                        >
-                          <Lucide.Trash2 size={14} />
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPlaidSelectMode(false);
-                            setSelectedPlaidIds(new Set());
-                          }}
-                          style={{
-                            padding: "4px 12px",
-                            fontSize: "var(--text-sm)",
-                            fontWeight: 500,
-                            color: "var(--text-secondary)",
-                            backgroundColor: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: "var(--radius-md)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        onClick={() => setPlaidSelectMode(true)}
-                        style={{
-                          padding: "4px 12px",
-                          fontSize: "var(--text-sm)",
-                          fontWeight: 500,
-                          color: "var(--text-secondary)",
-                          backgroundColor: "transparent",
-                          border: "1px solid var(--border)",
-                          borderRadius: "var(--radius-md)",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "var(--space-1)",
-                        }}
-                      >
-                        <Lucide.CheckSquare size={14} />
-                        Select
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {plaidTransactions.map((tx) => {
-                  const statusColor = 
-                    tx.importStatus === "pending" ? "var(--warning)" :
-                    tx.importStatus === "imported" ? "var(--success)" :
-                    tx.importStatus === "duplicate" ? "var(--destructive)" :
-                    "var(--text-tertiary)";
-                  const isSelected = selectedPlaidIds.has(tx._id);
-                  
-                  return (
-                    <div
-                      key={tx._id}
-                      onClick={() => {
-                        if (plaidSelectMode) {
-                          setSelectedPlaidIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(tx._id)) {
-                              next.delete(tx._id);
-                            } else {
-                              next.add(tx._id);
-                            }
-                            return next;
-                          });
-                        }
-                      }}
-                      style={{
-                        backgroundColor: isSelected ? "var(--accent-subtle)" : "var(--surface)",
-                        borderRadius: "var(--card-radius)",
-                        border: `1px solid ${isSelected ? "var(--primary)" : "var(--border)"}`,
-                        padding: "var(--space-3)",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "var(--space-2)",
-                        cursor: plaidSelectMode ? "pointer" : "default",
-                        transition: "all 0.15s ease-out",
-                      }}
-                    >
-                      {/* Top row: checkbox (if select mode), name, amount, status, delete */}
-                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "var(--space-2)" }}>
-                        {plaidSelectMode && (
-                          <div style={{ paddingTop: 2 }}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {}}
-                              style={{ 
-                                width: 18, 
-                                height: 18, 
-                                cursor: "pointer",
-                                accentColor: "var(--primary)",
-                              }}
-                            />
-                          </div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: "var(--text-base)", color: "var(--text)", marginBottom: 2 }}>
-                            {tx.merchantName || tx.name || "Unknown"}
-                          </div>
-                          {tx.merchantName && tx.name && tx.merchantName !== tx.name && (
-                            <div style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                              Original: {tx.name}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
-                          <div style={{ textAlign: "right" }}>
-                            <div style={{ 
-                              fontWeight: 600, 
-                              fontSize: "var(--text-base)", 
-                              color: tx.amount < 0 ? "var(--income)" : "var(--expense)"
-                            }}>
-                              {tx.amount < 0 ? "+" : "-"}${Math.abs(tx.amount).toFixed(2)}
-                            </div>
-                            <div style={{ 
-                              display: "inline-flex", 
-                              alignItems: "center", 
-                              gap: 4, 
-                              fontSize: "var(--text-micro)",
-                              color: statusColor,
-                              fontWeight: 500,
-                            }}>
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: statusColor }} />
-                              {tx.importStatus}
-                            </div>
-                          </div>
-                          {!plaidSelectMode && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (!confirm("Delete this raw Plaid transaction? This cannot be undone.")) return;
-                                try {
-                                  await deletePlaidTransaction({ id: tx._id });
-                                } catch (err) {
-                                  console.error("Failed to delete:", err);
-                                  alert("Failed to delete transaction");
-                                }
-                              }}
-                              style={{
-                                padding: "4px",
-                                backgroundColor: "transparent",
-                                border: "none",
-                                borderRadius: "var(--radius-sm)",
-                                cursor: "pointer",
-                                color: "var(--text-tertiary)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
-                              title="Delete transaction"
-                            >
-                              <Lucide.Trash2 size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Middle row: date, account */}
-                      <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap", fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                        <span>{tx.date}</span>
-                        {tx.isoCurrencyCode && <span>• {tx.isoCurrencyCode}</span>}
-                      </div>
-                      
-                      {/* Categories from Plaid */}
-                      {(tx.category || tx.categoryDetailed) && (
-                        <div style={{ display: "flex", gap: "var(--space-1)", flexWrap: "wrap" }}>
-                          {tx.category && (
-                            <span
-                              style={{
-                                fontSize: "var(--text-micro)",
-                                padding: "2px 8px",
-                                borderRadius: "var(--radius-full)",
-                                backgroundColor: "var(--surface-2)",
-                                color: "var(--text-secondary)",
-                              }}
-                            >
-                              {tx.category}
-                            </span>
-                          )}
-                          {tx.categoryDetailed && tx.categoryDetailed !== tx.category && (
-                            <span
-                              style={{
-                                fontSize: "var(--text-micro)",
-                                padding: "2px 8px",
-                                borderRadius: "var(--radius-full)",
-                                backgroundColor: "var(--surface-2)",
-                                color: "var(--text-tertiary)",
-                              }}
-                            >
-                              {tx.categoryDetailed}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Plaid IDs and technical details - collapsible */}
-                      <details style={{ fontSize: "var(--text-micro)", color: "var(--text-tertiary)" }}>
-                        <summary style={{ cursor: "pointer", userSelect: "none" }}>Technical Details</summary>
-                        <div style={{ marginTop: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-1)", paddingLeft: "var(--space-2)" }}>
-                          <div><strong>Plaid TX ID:</strong> {tx.plaidTransactionId}</div>
-                          <div><strong>Payment Channel:</strong> {tx.paymentChannel || "N/A"}</div>
-                          <div><strong>Pending:</strong> {tx.pending ? "Yes" : "No"}</div>
-                          {tx.categoryConfidence && (
-                            <div><strong>Category Confidence:</strong> {tx.categoryConfidence}</div>
-                          )}
-                          {tx.entryId && (
-                            <div><strong>Linked Entry:</strong> {tx.entryId}</div>
-                          )}
-                        </div>
-                      </details>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ) : pages.length === 0 && !pageResult ? (
+        {pages.length === 0 && !pageResult ? (
           <div
             style={{
               backgroundColor: "var(--surface)",

@@ -137,7 +137,6 @@ export default function BudgetingPage() {
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
-  const plaidBudgetSuggestions = useQuery(api.plaid.getPlaidBudgetSuggestions, {});
   const manualBudgetSuggestions = useQuery(api.entries.getManualBudgetSuggestions, {});
   const budgetDeletionImpact = useQuery(
     api.budgets.getBudgetCategoryDeletionImpact,
@@ -193,38 +192,23 @@ export default function BudgetingPage() {
     return [...categorySpending.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [categorySpending]);
 
-  // Map budget suggestions (Plaid + Manual) to category IDs for quick lookup
+  // Map budget suggestions (Manual) to category IDs for quick lookup
   const smartSuggestedAmounts = useMemo(() => {
-    const map = new Map<string, { amount: number; source: "plaid" | "manual"; details?: string }>();
+    const map = new Map<string, { amount: number; source: "manual"; details?: string }>();
     
-    // Add Plaid suggestions first (higher priority)
-    if (plaidBudgetSuggestions) {
-      for (const suggestion of plaidBudgetSuggestions) {
-        const current = map.get(suggestion.budgetCategory);
-        const newAmount = (current?.amount || 0) + suggestion.suggestedMonthlyCents;
-        map.set(suggestion.budgetCategory, {
-          amount: newAmount,
-          source: "plaid",
-          details: `Based on ${suggestion.streamCount || 0} recurring streams`,
+    // Add manual suggestions
+    if (manualBudgetSuggestions) {
+      for (const [category, data] of Object.entries(manualBudgetSuggestions)) {
+        map.set(category, {
+          amount: data.suggestedAmountCents,
+          source: "manual",
+          details: `Based on ${data.transactionCount} transactions`,
         });
       }
     }
     
-    // Add manual suggestions for categories not covered by Plaid
-    if (manualBudgetSuggestions) {
-      for (const [category, data] of Object.entries(manualBudgetSuggestions)) {
-        if (!map.has(category)) {
-          map.set(category, {
-            amount: data.suggestedAmountCents,
-            source: "manual",
-            details: `Based on ${data.transactionCount} transactions`,
-          });
-        }
-      }
-    }
-    
     return map;
-  }, [plaidBudgetSuggestions, manualBudgetSuggestions]);
+  }, [manualBudgetSuggestions]);
 
   const budgetHealth = useMemo(() => {
     if (!budgetCategories || budgetCategories.length === 0) return { onTrack: 0, warning: 0, overspent: 0 };
@@ -557,7 +541,7 @@ export default function BudgetingPage() {
                         <span className="text-xs font-medium" style={{ color: "var(--success)" }}>Smart Budget Suggestions</span>
                       </div>
                       <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                        Based on your {[...smartSuggestedAmounts.values()].some(s => s.source === "plaid") ? "connected accounts and " : ""}spending patterns. Tap below to auto-fill.
+                        Based on your spending patterns. Tap below to auto-fill.
                       </p>
                       <button 
                         onClick={() => {

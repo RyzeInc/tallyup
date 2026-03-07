@@ -44,6 +44,24 @@ export const upsertUserPreferences = mutation({
     defaultTab: v.optional(v.string()),
     compactMode: v.optional(v.boolean()),
     
+    // Onboarding state
+    onboardingCompleted: v.optional(v.boolean()),
+    onboardingState: v.optional(v.object({
+      currentScreen: v.union(
+        v.literal("income-sources"),
+        v.literal("first-income"),
+        v.literal("first-budget"),
+        v.literal("dashboard")
+      ),
+      numIncomeSources: v.optional(v.number()),
+      firstIncomeData: v.optional(v.object({
+        type: v.string(),
+        amountCents: v.number(),
+        category: v.optional(v.string()),
+        date: v.number(),
+      })),
+    })),
+    
     // Category customization
     hiddenExpenseCategories: v.optional(v.array(v.string())),
     hiddenIncomeCategories: v.optional(v.array(v.string())),
@@ -71,7 +89,7 @@ export const upsertUserPreferences = mutation({
     const updates: Record<string, unknown> = { updatedAt: now };
     const fields = [
       "reviewReminderEnabled", "reviewReminderDay", "reviewReminderTime", "reviewReminderFrequency",
-      "defaultTab", "compactMode",
+      "defaultTab", "compactMode", "onboardingCompleted", "onboardingState",
       "hiddenExpenseCategories", "hiddenIncomeCategories", "hiddenContextTags",
       "expenseCategoryOrder", "incomeCategoryOrder", "contextTagOrder",
       "pinnedExpenseCategories", "pinnedIncomeCategories", "pinnedContextTags",

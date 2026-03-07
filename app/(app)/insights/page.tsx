@@ -231,7 +231,6 @@ export default function InsightsPage() {
   const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
   const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
-  const plaidRecurringStreams = useQuery(api.recurring.listPlaidRecurringStreams, { onlyUnlinked: false });
   
   // Fetch custom categories for display name resolution
   const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
@@ -745,38 +744,9 @@ export default function InsightsPage() {
       }
     }
     
-    // Add Plaid recurring streams that aren't already linked to rules
-    if (plaidRecurringStreams && patterns.length < 5) {
-      const unlinkedStreams = plaidRecurringStreams.filter(s => !s.recurringRuleId && s.isActive);
-      
-      const cadenceMap: Record<string, string> = {
-        WEEKLY: "Weekly",
-        BIWEEKLY: "Bi-weekly",
-        SEMI_MONTHLY: "Semi-monthly",
-        MONTHLY: "Monthly",
-        ANNUALLY: "Yearly",
-        UNKNOWN: "—",
-      };
-      
-      for (const stream of unlinkedStreams) {
-        if (patterns.length >= 5) break;
-        
-        patterns.push({
-          id: `plaid-${stream._id}`,
-          name: stream.merchantName || stream.description || "Unknown",
-          type: stream.streamType === "outflow" ? "expense" : "income",
-          amount: centsToDollars(Math.abs(stream.averageAmountCents)),
-          cadence: cadenceMap[stream.frequency] || "—",
-          matchCount: stream.transactionIds?.length || 0,
-          sparklineData: [0, 0, 0, 0, Math.abs(stream.lastAmountCents), Math.abs(stream.averageAmountCents)],
-          lastSeen: stream.lastDate ? `${stream.lastDate}` : "—",
-        });
-      }
-    }
-
     // Sort by match count (more matches first), take top 5
     return patterns.sort((a, b) => b.matchCount - a.matchCount).slice(0, 5);
-  }, [recurringRules, entries, endDate, plaidRecurringStreams]);
+  }, [recurringRules, entries, endDate]);
 
   // ─────────────────────────────────────────────────────────────
   // Toggle tag selection

@@ -48,9 +48,45 @@ const DEFAULT_SUGGESTIONS = [
 
 // Mock learning modules (will be replaced with real data)
 const MOCK_MODULES = [
-  { id: "1", name: "Budget Basics", progress: 100, completed: true },
-  { id: "2", name: "Debt Payoff Strategy", progress: 60, completed: false },
-  { id: "3", name: "Emergency Fund", progress: 25, completed: false },
+  {
+    id: "tax-deductions",
+    name: "Tax Deductions for Gig Workers",
+    progress: 0,
+    completed: false,
+    description: "Learn how to track and maximize tax deductions for 1099 income",
+    objectives: [
+      "Understand what expenses are tax-deductible for gig work",
+      "Learn how to track business expenses throughout the year",
+      "Discover common deductions gig workers miss"
+    ],
+    coachPrompt: "What's the difference between Schedule C and my regular tax form, and how can I use it to save money?"
+  },
+  {
+    id: "emergency-fund",
+    name: "Building Your Emergency Fund",
+    progress: 0,
+    completed: false,
+    description: "Create a financial safety net that works for variable income",
+    objectives: [
+      "Determine the right emergency fund size for irregular income",
+      "Learn strategies to save consistently despite variable income",
+      "Understand where to keep your emergency fund for best returns"
+    ],
+    coachPrompt: "I have variable income - what's a realistic emergency fund goal for me?"
+  },
+  {
+    id: "subscriptions",
+    name: "Subscriptions You're Forgetting About",
+    progress: 0,
+    completed: false,
+    description: "Find hidden subscriptions draining your account and cut the ones you don't use",
+    objectives: [
+      "Identify all recurring subscriptions and memberships you're paying for",
+      "Calculate the true annual cost of your subscriptions",
+      "Decide which subscriptions provide real value and which to cancel"
+    ],
+    coachPrompt: "How can I find all my subscriptions in one place and see which ones I'm actually using?"
+  },
 ];
 
 export default function CoachDashboard() {

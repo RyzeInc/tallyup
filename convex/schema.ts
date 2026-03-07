@@ -851,6 +851,24 @@ export default defineSchema({
     defaultTab: v.optional(v.string()),
     compactMode: v.optional(v.boolean()),
     
+    // Onboarding state
+    onboardingCompleted: v.optional(v.boolean()),
+    onboardingState: v.optional(v.object({
+      currentScreen: v.union(
+        v.literal("income-sources"),
+        v.literal("first-income"),
+        v.literal("first-budget"),
+        v.literal("dashboard")
+      ),
+      numIncomeSources: v.optional(v.number()),
+      firstIncomeData: v.optional(v.object({
+        type: v.string(),
+        amountCents: v.number(),
+        category: v.optional(v.string()),
+        date: v.number(),
+      })),
+    })),
+    
     // Category customization - hide default categories
     hiddenExpenseCategories: v.optional(v.array(v.string())),
     hiddenIncomeCategories: v.optional(v.array(v.string())),

@@ -80,7 +80,6 @@ export default function GoalsPage() {
 
   // Queries
   const goals = useQuery(api.goals.listGoals, { includeCompleted: true }) as Goal[] | undefined;
-  const plaidSuggestedGoals = useQuery(api.plaid.getPlaidSuggestedGoals, {});
   const manualSuggestedGoals = useQuery(api.entries.getManualGoalSuggestions, {});
   const goalDeletionImpact = useQuery(
     api.goals.getGoalDeletionImpact,
@@ -112,7 +111,7 @@ export default function GoalsPage() {
   const activeGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "active"), [goals]);
   const completedGoals = useMemo(() => (goals ?? []).filter((g) => g.status === "completed"), [goals]);
 
-  // Combine Plaid and manual suggestions, filtering out existing goals
+  // Combine manual suggestions, filtering out existing goals
   const smartSuggestions = useMemo(() => {
     const activeNames = new Set(activeGoals.map(g => g.name.toLowerCase()));
     const suggestions: Array<{
@@ -121,30 +120,13 @@ export default function GoalsPage() {
       icon: string;
       suggestedAmountCents: number;
       description: string;
-      source: "plaid" | "manual";
+      source: "manual";
     }> = [];
     
-    // Add Plaid suggestions first (higher priority since they have more data)
-    if (plaidSuggestedGoals && plaidSuggestedGoals.length > 0) {
-      for (const s of plaidSuggestedGoals) {
-        if (!activeNames.has(s.name.toLowerCase())) {
-          suggestions.push({
-            type: s.type,
-            name: s.name,
-            icon: s.icon,
-            suggestedAmountCents: s.suggestedAmountCents,
-            description: s.description,
-            source: "plaid",
-          });
-        }
-      }
-    }
-    
-    // Add manual suggestions (only if we don't have Plaid data for same type)
+    // Add manual suggestions
     if (manualSuggestedGoals && manualSuggestedGoals.length > 0) {
-      const plaidTypes = new Set(suggestions.map(s => s.type));
       for (const s of manualSuggestedGoals) {
-        if (!activeNames.has(s.name.toLowerCase()) && !plaidTypes.has(s.type)) {
+        if (!activeNames.has(s.name.toLowerCase())) {
           const iconMap: Record<string, string> = {
             "Emergency Fund": "🆘",
             "General Savings": "💰",
@@ -164,7 +146,7 @@ export default function GoalsPage() {
     }
     
     return suggestions;
-  }, [plaidSuggestedGoals, manualSuggestedGoals, activeGoals]);
+  }, [manualSuggestedGoals, activeGoals]);
 
   const totalProgress = useMemo(() => {
     return activeGoals.reduce(
@@ -400,7 +382,7 @@ export default function GoalsPage() {
               </span>
             </div>
             <p className="text-xs mb-3" style={{ color: "var(--text-tertiary)" }}>
-              Based on your {smartSuggestions.some(s => s.source === "plaid") ? "connected accounts and " : ""}spending patterns
+              Based on your spending patterns
             </p>
             <div className="space-y-2">
               {smartSuggestions.map((suggestion, idx) => (

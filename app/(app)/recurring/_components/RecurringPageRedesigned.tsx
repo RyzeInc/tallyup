@@ -9,7 +9,6 @@ import ObligationsTabs, { type ObligationsTabId } from "./ObligationsTabs";
 import ObligationsTab from "./obligations/ObligationsTab";
 import RulesTabRedesigned from "./rules/RulesTabRedesigned";
 import InboxTabRedesigned from "./inbox/InboxTabRedesigned";
-import PlaidStreamsTab from "./PlaidStreamsTab";
 import InsightsTab from "./insights/InsightsTab";
 import RuleEditorDialog from "./rules/RuleEditorDialog";
 
@@ -30,11 +29,6 @@ export default function RecurringPageRedesigned() {
   const rules = useQuery(api.recurring.listRecurringRulesAll, { limit: 500 });
   const expectedCharges = useQuery(api.recurring.listExpectedCharges, queryArgs);
   const inboxItems = useQuery(api.recurring.listRecurringInbox, { status: "open", limit: 200 });
-  // Query for unlinked Plaid streams
-  const plaidStreams = useQuery(api.recurring.listPlaidRecurringStreams, {
-    onlyUnlinked: true,
-    limit: 100,
-  });
 
   // Auto-run reconciliation on mount
   const runRecurringAutopost = useMutation(api.recurring.runRecurringAutopost);
@@ -79,7 +73,6 @@ export default function RecurringPageRedesigned() {
         activeTab={activeTab}
         onChange={setActiveTab}
         inboxCount={inboxItems?.length ?? 0}
-        plaidStreamsCount={plaidStreams?.length ?? 0}
       />
 
       {/* Tab content */}
@@ -103,9 +96,6 @@ export default function RecurringPageRedesigned() {
           rules={rules}
           onViewRule={(ruleId) => handleOpenRuleEditor(ruleId)}
         />
-      )}
-      {activeTab === "plaid_streams" && (
-        <PlaidStreamsTab />
       )}
       {activeTab === "insights" && (
         <InsightsTab rules={rules} expectedCharges={expectedCharges} />

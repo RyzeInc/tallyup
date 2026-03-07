@@ -24,9 +24,6 @@ export default function RulesPage() {
   const merchantRules = useQuery(api.rules.listMerchantRules, {});
   const createMerchantRule = useMutation(api.rules.createMerchantRule);
   
-  // Plaid-suggested rules
-  const plaidSuggestions = useQuery(api.plaid.getPlaidMerchantRuleSuggestions, {});
-  
   // Manual-entry-suggested rules
   const manualSuggestions = useQuery(api.entries.getManualRuleSuggestions, {});
   
@@ -38,44 +35,26 @@ export default function RulesPage() {
       transactionCount: number;
       totalSpent: number;
       confidence: "high" | "medium";
-      source: "plaid" | "manual";
+      source: "manual";
     }> = [];
     
-    // Add Plaid suggestions first
-    if (plaidSuggestions && plaidSuggestions.length > 0) {
-      for (const s of plaidSuggestions) {
+    // Add manual suggestions
+    if (manualSuggestions && manualSuggestions.length > 0) {
+      for (const s of manualSuggestions) {
         suggestions.push({
-          merchant: s.merchantName,
+          merchant: s.merchant,
           suggestedCategory: s.suggestedCategory,
           transactionCount: s.transactionCount,
-          totalSpent: s.totalAmountCents,
-          // Plaid suggestions are high confidence since they come from actual bank data
-          confidence: "high",
-          source: "plaid",
+          totalSpent: s.totalSpent,
+          confidence: s.confidence,
+          source: "manual",
         });
-      }
-    }
-    
-    // Add manual suggestions (avoid duplicates by merchant name)
-    if (manualSuggestions && manualSuggestions.length > 0) {
-      const existingMerchants = new Set(suggestions.map(s => s.merchant.toLowerCase()));
-      for (const s of manualSuggestions) {
-        if (!existingMerchants.has(s.merchant.toLowerCase())) {
-          suggestions.push({
-            merchant: s.merchant,
-            suggestedCategory: s.suggestedCategory,
-            transactionCount: s.transactionCount,
-            totalSpent: s.totalSpent,
-            confidence: s.confidence,
-            source: "manual",
-          });
-        }
       }
     }
     
     // Sort by transaction count
     return suggestions.sort((a, b) => b.transactionCount - a.transactionCount);
-  }, [plaidSuggestions, manualSuggestions]);
+  }, [manualSuggestions]);
 
   // Create Category Rule Modal
   const [showCreateCategory, setShowCreateCategory] = useState(false);
@@ -391,7 +370,7 @@ export default function RulesPage() {
           {activeTab === "suggestions" && (
             <>
               {/* Smart Suggested Rules */}
-              {(plaidSuggestions === undefined && manualSuggestions === undefined) ? (
+              {manualSuggestions === undefined ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="h-20 rounded-xl animate-pulse" style={{ backgroundColor: "var(--surface-2)" }} />

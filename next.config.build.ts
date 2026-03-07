@@ -1,0 +1,23 @@
+import type { NextConfig } from "next";
+import path from "path";
+
+const nextConfig: NextConfig = {
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
+
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        "localhost:3000",
+        "*.app.github.dev",
+        "*.githubpreview.dev",
+      ],
+    },
+  },
+  
+  // Skip static generation for testing
+  output: "standalone",
+};
+
+export default nextConfig;
