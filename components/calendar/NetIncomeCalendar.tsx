@@ -1,4 +1,6 @@
 "use client";
+import { usePeriodEntries } from "@/components/usePeriodEntries";
+import { countsInCashflow, reportingAmount } from "@/lib/finance/semantics";
 
 import * as React from "react";
 import { useQuery } from "convex/react";
@@ -592,16 +594,12 @@ export function NetIncomeCalendar({
   
   const dataEndDate = React.useMemo(() => {
     // End of current month
-    const d = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+    const d = new Date(currentYear, currentMonth + 1, 1);
     return d.getTime();
   }, [currentYear, currentMonth]);
   
   // Fetch entries for the full 24-month range
-  const entries = useQuery(api.entries.listEntries, {
-    startDate: dataStartDate,
-    endDate: dataEndDate,
-    limit: 20000,
-  });
+  const entries = usePeriodEntries(dataStartDate, dataEndDate);
 
   // Build a map of all months with data
   const monthDataMap = React.useMemo(() => {
@@ -611,7 +609,7 @@ export function NetIncomeCalendar({
     
     // Aggregate entries by month
     for (const e of entries) {
-      if (e.excludeFromTotals) continue;
+      if (!countsInCashflow(e)) continue;
       if (e.type === "transfer") continue;
       
       const d = new Date(e.date);
@@ -625,9 +623,9 @@ export function NetIncomeCalendar({
       
       const data = map.get(key)!;
       if (e.type === "income") {
-        data.income += e.amountCents;
+        data.income += reportingAmount(e);
       } else if (e.type === "expense") {
-        data.expense += e.amountCents;
+        data.expense += reportingAmount(e);
       }
     }
     

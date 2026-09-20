@@ -1,4 +1,6 @@
 "use client";
+import { countsInBudget } from "@/lib/finance/semantics";
+import { usePeriodEntries } from "@/components/usePeriodEntries";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
@@ -136,7 +138,8 @@ export default function BudgetingPage() {
   const [showArchiveWarning, setShowArchiveWarning] = useState(false);
 
   const budgetCategories = useQuery(api.budgets.listBudgetCategories, {}) as BudgetCategory[] | undefined;
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000, type: "expense" }) as EntryDoc[] | undefined;
+  const periodEntries = usePeriodEntries(startDate, endDate);
+  const entries = useMemo(() => periodEntries?.filter(countsInBudget), [periodEntries]);
   const manualBudgetSuggestions = useQuery(api.entries.getManualBudgetSuggestions, {});
   const budgetDeletionImpact = useQuery(
     api.budgets.getBudgetCategoryDeletionImpact,

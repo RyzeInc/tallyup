@@ -1,4 +1,6 @@
 "use client";
+import { countsInCashflow, reportingAmount } from "@/lib/finance/semantics";
+import { usePeriodEntries } from "@/components/usePeriodEntries";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
@@ -228,8 +230,8 @@ export default function InsightsPage() {
   }, [router, setActiveTab]);
 
   // Data
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 2000 }) as Entry[] | undefined;
-  const prevEntries = useQuery(api.entries.listEntries, { startDate: prevStartDate, endDate: prevEndDate, limit: 2000 }) as Entry[] | undefined;
+  const entries = usePeriodEntries(startDate, endDate);
+  const prevEntries = usePeriodEntries(prevStartDate, prevEndDate);
   const recurringRules = useQuery(api.recurring.listRecurringRules, { limit: 50 }) as RecurringRule[] | undefined;
   
   // Fetch custom categories for display name resolution
@@ -249,10 +251,10 @@ export default function InsightsPage() {
   const filteredEntries = useMemo(() => {
     if (!entries) return [];
     return entries.filter((e) => {
-      if (e.excludeFromTotals) return false;
+      if (!countsInCashflow(e) || e.ignoredForInsights) return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
-        const entryTags = e.tags ?? [];
+        const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
         // OR logic: entry has at least one selected tag
         if (!selectedTags.some((t) => entryTags.includes(t))) return false;
       }
@@ -263,10 +265,10 @@ export default function InsightsPage() {
   const filteredPrevEntries = useMemo(() => {
     if (!prevEntries) return [];
     return prevEntries.filter((e) => {
-      if (e.excludeFromTotals) return false;
+      if (!countsInCashflow(e) || e.ignoredForInsights) return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
-        const entryTags = e.tags ?? [];
+        const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
         if (!selectedTags.some((t) => entryTags.includes(t))) return false;
       }
       return true;
@@ -293,14 +295,14 @@ export default function InsightsPage() {
 
     for (const e of all) {
       if (e.type === "income") {
-        income += e.amountCents;
+        income += reportingAmount(e);
       } else {
-        expense += e.amountCents;
+        expense += reportingAmount(e);
         const c = getCategoryDisplayName(
           e.categoryId ?? e.category,
           allCustomCategories
         );
-        categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
+        categorySpend.set(c, (categorySpend.get(c) ?? 0) + reportingAmount(e));
         categoryCount.set(c, (categoryCount.get(c) ?? 0) + 1);
 
         if (e.amountCents > largestExpense.amount) {
@@ -310,29 +312,29 @@ export default function InsightsPage() {
         // Tag breakdown
         if (e.tags?.length) {
           for (const tag of e.tags) {
-            tagSpend.set(tag, (tagSpend.get(tag) ?? 0) + e.amountCents);
+            tagSpend.set(tag, (tagSpend.get(tag) ?? 0) + reportingAmount(e));
           }
         } else {
-          tagSpend.set("Untagged", (tagSpend.get("Untagged") ?? 0) + e.amountCents);
+          tagSpend.set("Untagged", (tagSpend.get("Untagged") ?? 0) + reportingAmount(e));
         }
 
         // Reimbursable
         if (e.tags?.includes("Reimbursable")) {
-          reimbursableOutstanding += e.amountCents;
+          reimbursableOutstanding += reportingAmount(e);
         }
 
         // Payment method
         const method = (e.methodOrAccount ?? "Unknown").trim() || "Unknown";
-        paymentMethodSpend.set(method, (paymentMethodSpend.get(method) ?? 0) + e.amountCents);
+        paymentMethodSpend.set(method, (paymentMethodSpend.get(method) ?? 0) + reportingAmount(e));
 
         // Day of week
         const d = new Date(e.date);
         const dow = d.getDay();
-        dayOfWeekSpend.set(dow, (dayOfWeekSpend.get(dow) ?? 0) + e.amountCents);
+        dayOfWeekSpend.set(dow, (dayOfWeekSpend.get(dow) ?? 0) + reportingAmount(e));
 
         // Day of month
         const dom = d.getDate();
-        dayOfMonthSpend.set(dom, (dayOfMonthSpend.get(dom) ?? 0) + e.amountCents);
+        dayOfMonthSpend.set(dom, (dayOfMonthSpend.get(dom) ?? 0) + reportingAmount(e));
       }
 
       // Counts
@@ -407,14 +409,14 @@ export default function InsightsPage() {
 
     for (const e of all) {
       if (e.type === "income") {
-        income += e.amountCents;
+        income += reportingAmount(e);
       } else {
-        expense += e.amountCents;
+        expense += reportingAmount(e);
         const c = getCategoryDisplayName(
           e.categoryId ?? e.category,
           allCustomCategories
         );
-        categorySpend.set(c, (categorySpend.get(c) ?? 0) + e.amountCents);
+        categorySpend.set(c, (categorySpend.get(c) ?? 0) + reportingAmount(e));
       }
     }
 
@@ -466,9 +468,9 @@ export default function InsightsPage() {
       }
       const bucket = buckets.get(key)!;
       if (e.type === "income") {
-        bucket.income += e.amountCents;
+        bucket.income += reportingAmount(e);
       } else {
-        bucket.expense += e.amountCents;
+        bucket.expense += reportingAmount(e);
       }
     }
 
@@ -547,7 +549,7 @@ export default function InsightsPage() {
       let spentBeforeMid = 0;
       for (const e of filteredEntries) {
         if (e.type === "expense" && e.date < midDate) {
-          spentBeforeMid += e.amountCents;
+          spentBeforeMid += reportingAmount(e);
         }
       }
       const pctBeforeMid = computed.expense > 0 ? (spentBeforeMid / computed.expense) * 100 : 0;

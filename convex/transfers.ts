@@ -1,3 +1,4 @@
+import { applyEntryCreated, syncEntryBalance, validateEntryLinks } from "./entryEffects";
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { resolveCategoryId } from "./categoryResolver";
@@ -83,6 +84,12 @@ export const createTransfer = mutation({
     if (!Number.isFinite(amountCents) || amountCents <= 0) {
       throw new Error("Amount must be greater than 0");
     }
+
+    if (!Number.isFinite(args.date)) throw new Error("Invalid transfer date");
+    if (!args.fromAccountId && !args.toAccountId) throw new Error("Choose at least one transfer account");
+    if (args.fromAccountId && args.fromAccountId === args.toAccountId) throw new Error("Choose two different accounts");
+    await validateEntryLinks(ctx, userId, { accountId: args.fromAccountId });
+    await validateEntryLinks(ctx, userId, { accountId: args.toAccountId });
 
     const now = Date.now();
 
@@ -171,6 +178,8 @@ export const createTransfer = mutation({
         updatedAt: now,
       });
 
+      const entry = await ctx.db.get(fromEntryId);
+      if (entry) await applyEntryCreated(ctx, entry);
       // Link entry back to transfer
       await ctx.db.patch(transferId, { fromEntryId: fromEntryId });
     }
@@ -206,6 +215,8 @@ export const createTransfer = mutation({
         updatedAt: now,
       });
 
+      const entry = await ctx.db.get(toEntryId);
+      if (entry) await applyEntryCreated(ctx, entry);
       // Link entry back to transfer
       await ctx.db.patch(transferId, { toEntryId: toEntryId });
     }
@@ -237,6 +248,17 @@ export const updateTransferStatus = mutation({
       throw new Error("Transfer not found");
     }
 
+    if (transfer.status === args.status) return;
+    for (const id of [transfer.fromEntryId, transfer.toEntryId]) {
+      if (!id) continue;
+      const entry = await ctx.db.get(id);
+      if (!entry || entry.userId !== userId) continue;
+      const status = args.status === "completed" ? "posted" as const : "pending" as const;
+      const isArchived = args.status === "failed" || args.status === "cancelled";
+      const next = { ...entry, status, isArchived };
+      await syncEntryBalance(ctx, entry, next);
+      await ctx.db.patch(id, { status, isArchived, updatedAt: Date.now() });
+    }
     await ctx.db.patch(args.id, {
       status: args.status,
       updatedAt: Date.now(),

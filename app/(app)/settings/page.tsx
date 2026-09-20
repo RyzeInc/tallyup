@@ -1,4 +1,5 @@
 "use client";
+import { usePeriodEntries } from "@/components/usePeriodEntries";
 
 import { SignedIn, SignedOut, useUser, SignOutButton, SignInButton } from "@clerk/nextjs";
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -455,7 +456,7 @@ export default function SettingsPage() {
     return `${start.toLocaleDateString()} – ${end.toLocaleDateString()}`;
   }, [exportStartDate, exportEndDate]);
   
-  const entries = useQuery(api.entries.listEntries, { startDate: exportStartDate, endDate: exportEndDate, limit: 5000 }) as Doc<"entries">[] | undefined;
+  const entries = usePeriodEntries(exportStartDate, exportEndDate);
   const [exporting, setExporting] = useState(false);
   async function exportCSV() {
     if (!entries) return;

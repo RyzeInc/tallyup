@@ -1,3 +1,6 @@
+import { applyEntryCreated, removeEntry } from "./entryEffects";
+import { resolveCategoryId } from "./categoryResolver";
+import { resolveBudgetCategoryId } from "./budgetMatcher";
 import { mutation, query, action, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
@@ -479,46 +482,7 @@ export const deleteRecurringRule = mutation({
 
     // Handle linked entries based on user choice
     if (args.deleteLinkedEntries) {
-      // Delete all linked entries (with proper cleanup)
-      for (const entry of linkedEntries) {
-        // Reverse balance effects for manual accounts
-        if (entry.accountId) {
-          const delta = entry.type === "income" ? entry.amountCents : -entry.amountCents;
-          const account = await ctx.db.get(entry.accountId);
-          if (account && !account.isLinked) {
-            const latestSnapshots = await ctx.db
-              .query("accountSnapshots")
-              .withIndex("by_account_asOf", (q) => q.eq("accountId", entry.accountId!))
-              .order("desc")
-              .take(1);
-            if (latestSnapshots[0]) {
-              await ctx.db.patch(latestSnapshots[0]._id, { 
-                balance: latestSnapshots[0].balance - delta 
-              });
-            }
-          }
-        }
-        
-        // Remove goal contributions if linked
-        if (entry.goalId) {
-          const contribution = await ctx.db
-            .query("goalContributions")
-            .withIndex("by_entry", (q) => q.eq("entryId", entry._id))
-            .first();
-          if (contribution) {
-            const goal = await ctx.db.get(entry.goalId);
-            if (goal) {
-              await ctx.db.patch(entry.goalId, {
-                currentAmountCents: Math.max(0, goal.currentAmountCents - entry.amountCents),
-                updatedAt: now,
-              });
-            }
-            await ctx.db.delete(contribution._id);
-          }
-        }
-
-        await ctx.db.delete(entry._id);
-      }
+      for (const entry of linkedEntries) await removeEntry(ctx, userId, entry._id);
     } else if (args.unlinkEntries !== false) {
       // Default: unlink entries (keep them but remove recurring link)
       for (const entry of linkedEntries) {
@@ -795,7 +759,7 @@ export const backfillRecurringRules = action({
     const minConfidence = args.minConfidence ?? 70;
     const dryRun = !!args.dryRun;
 
-    // collect a sample of recent entries to discover users (use a query via ctx.runQuery)
+    // Backfill only the authenticated caller's history.
     const recent = await ctx.runQuery(api.entries.listRecentEntries, { limit: 5000 });
     const userSet = new Set<string>();
     for (const r of recent) userSet.add(r.userId);
@@ -1466,8 +1430,16 @@ export const materializeDueExpectedCharges = internalMutation({
         rule.amountCents;
       if (!amountCents) continue;
 
+      if (!rule.active || rule.userId !== args.userId) continue;
+      const categoryId = await resolveCategoryId(ctx, args.userId, rule.category ?? rule.bucket, rule.type, { createIfMissing: false });
+      const accountId = rule.accountScope?.kind === "only" && rule.accountScope.accountIds?.length === 1
+        ? rule.accountScope.accountIds[0] : undefined;
+      const account = accountId ? await ctx.db.get(accountId) : null;
+      if (accountId && (!account || account.userId !== args.userId || account.isArchived)) continue;
+      const budgetCategoryId = await resolveBudgetCategoryId(ctx, args.userId, { categoryId, category: rule.category ?? rule.bucket });
       const entryId = await ctx.db.insert("entries", {
         userId: args.userId,
+        categoryId, accountId, budgetCategoryId,
         type: rule.type,
         transactionType: rule.type === "income" ? "RECEIVED" : "SPENT",
         category: rule.category,
@@ -1492,6 +1464,9 @@ export const materializeDueExpectedCharges = internalMutation({
         createdAt: now,
         updatedAt: now,
       });
+
+      const createdEntry = await ctx.db.get(entryId);
+      if (createdEntry) await applyEntryCreated(ctx, createdEntry);
 
       await ctx.db.patch(charge._id, {
         matchedEntryId: entryId,

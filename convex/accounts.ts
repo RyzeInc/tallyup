@@ -1,3 +1,4 @@
+import { removeEntry } from "./entryEffects";
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
@@ -216,7 +217,14 @@ export const updateAccount = mutation({
     if (args.showInTransactionSelector !== undefined) {
       patch.showInTransactionSelector = args.showInTransactionSelector;
     }
-    if (args.isArchived !== undefined) patch.isArchived = args.isArchived;
+    if (args.isArchived !== undefined) {
+      patch.isArchived = args.isArchived;
+      patch.archivedAt = args.isArchived ? Date.now() : undefined;
+      if (!!account.isArchived !== args.isArchived) {
+        if (args.isArchived) await ctx.runMutation(internal.entries.archiveEntriesForAccount, { userId, accountId: args.id, archivedAt: Date.now() });
+        else await ctx.runMutation(internal.entries.restoreEntriesForAccount, { userId, accountId: args.id });
+      }
+    }
 
     await ctx.db.patch(args.id, patch);
   },
@@ -582,7 +590,7 @@ export const deleteAccount = mutation({
     const now = Date.now();
 
     // If permanent deletion is requested (or account is already archived), do hard delete
-    if (args.permanent || account.isArchived) {
+    if (args.permanent) {
       // Delete all linked entries (including handling transfers)
       const linkedEntries = await ctx.db
         .query("entries")
@@ -590,26 +598,9 @@ export const deleteAccount = mutation({
         .collect();
       
       for (const entry of linkedEntries) {
-        // If entry is linked to a transfer, delete the transfer and paired entry
-        if (entry.transferId) {
-          const transfer = await ctx.db.get(entry.transferId);
-          if (transfer) {
-            // Delete both linked entries
-            if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
-              const pairedEntry = await ctx.db.get(transfer.fromEntryId);
-              if (pairedEntry) await ctx.db.delete(transfer.fromEntryId);
-            }
-            if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
-              const pairedEntry = await ctx.db.get(transfer.toEntryId);
-              if (pairedEntry) await ctx.db.delete(transfer.toEntryId);
-            }
-            // Delete the transfer record
-            await ctx.db.delete(transfer._id);
-          }
-        }
-        await ctx.db.delete(entry._id);
+        await removeEntry(ctx, userId, entry._id);
       }
-      
+
       // Delete snapshots
       const snapshots = await ctx.db
         .query("accountSnapshots")
@@ -685,64 +676,8 @@ export const deleteAccount = mutation({
     // Otherwise, archive the account (soft delete with 14-day retention)
     await ctx.db.patch(args.id, { isArchived: true, archivedAt: now, updatedAt: now });
 
-    // Also clear foreign key references when archiving (so these features remain functional)
-    // Clear fundingAccountId on any goals
-    const goalsWithAccount = await ctx.db
-      .query("goals")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const goal of goalsWithAccount) {
-      if (goal.fundingAccountId === args.id) {
-        await ctx.db.patch(goal._id, { fundingAccountId: undefined, updatedAt: now });
-      }
-    }
-
-    // Clear accountId on investments
-    const investments = await ctx.db
-      .query("investments")
-      .withIndex("by_account", (q) => q.eq("accountId", args.id))
-      .collect();
-    for (const inv of investments) {
-      await ctx.db.patch(inv._id, { accountId: undefined, updatedAt: now });
-    }
-
-    // Clear matchAccountId on category rules
-    const categoryRules = await ctx.db
-      .query("categoryRules")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    for (const rule of categoryRules) {
-      if (rule.matchAccountId === args.id) {
-        await ctx.db.patch(rule._id, { matchAccountId: undefined, updatedAt: now });
-      }
-    }
-
-    // Remove this account from accountScope on recurring rules
-    const recurringRules = await ctx.db
-      .query("recurringRules")
-      .withIndex("by_user_active", (q) => q.eq("userId", userId))
-      .collect();
-    for (const rule of recurringRules) {
-      if (rule.accountScope?.accountIds?.includes(args.id)) {
-        const newAccountIds = rule.accountScope.accountIds.filter(id => id !== args.id);
-        await ctx.db.patch(rule._id, { 
-          accountScope: newAccountIds.length > 0 
-            ? { kind: rule.accountScope.kind, accountIds: newAccountIds }
-            : undefined,
-          updatedAt: now 
-        });
-      }
-    }
-    // Archive linked transactions and reverse their balance effects using internal helper.
-    try {
-      await ctx.runMutation(internal.entries.archiveEntriesForAccount, {
-        userId,
-        accountId: args.id,
-        archivedAt: now,
-      });
-    } catch (e) {
-      // Swallow errors here to avoid failing the archive operation; log for diagnostics.
-      console.error("archiveEntriesForAccount error:", e);
+    if (args.deleteTransactions !== false) {
+      await ctx.runMutation(internal.entries.archiveEntriesForAccount, { userId, accountId: args.id, archivedAt: now });
     }
 
     return { ok: true, archived: true };
@@ -758,12 +693,7 @@ export const restoreAccount = mutation({
     if (!account.isArchived) return { ok: true, restored: false };
     const now = Date.now();
     await ctx.db.patch(args.id, { isArchived: false, archivedAt: undefined, updatedAt: now });
-    // Restore entries via internal helper
-    try {
-      await ctx.runMutation(internal.entries.restoreEntriesForAccount, { userId, accountId: args.id });
-    } catch (e) {
-      console.error("restoreEntriesForAccount error:", e);
-    }
+    await ctx.runMutation(internal.entries.restoreEntriesForAccount, { userId, accountId: args.id });
     return { ok: true, restored: true };
   },
 });
@@ -789,7 +719,7 @@ export const purgeArchivedAccounts = internalMutation({
         .withIndex("by_user_account", (q) => q.eq("userId", account.userId).eq("accountId", account._id))
         .collect();
       for (const e of linkedEntries) {
-        await ctx.db.delete(e._id);
+        await removeEntry(ctx, account.userId, e._id);
       }
 
       // Delete snapshots
@@ -842,26 +772,9 @@ export const permanentDeleteAccount = mutation({
       .collect();
     
     for (const entry of linkedEntries) {
-      // If entry is linked to a transfer, delete the transfer and paired entry
-      if (entry.transferId) {
-        const transfer = await ctx.db.get(entry.transferId);
-        if (transfer) {
-          // Delete both linked entries
-          if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
-            const pairedEntry = await ctx.db.get(transfer.fromEntryId);
-            if (pairedEntry) await ctx.db.delete(transfer.fromEntryId);
-          }
-          if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
-            const pairedEntry = await ctx.db.get(transfer.toEntryId);
-            if (pairedEntry) await ctx.db.delete(transfer.toEntryId);
-          }
-          // Delete the transfer record
-          await ctx.db.delete(transfer._id);
-        }
-      }
-      await ctx.db.delete(entry._id);
+      await removeEntry(ctx, userId, entry._id);
     }
-    
+
     // Delete snapshots
     const snapshots = await ctx.db
       .query("accountSnapshots")
@@ -964,21 +877,9 @@ export const bulkDeleteArchivedAccounts = mutation({
         .collect();
       
       for (const entry of linkedEntries) {
-        if (entry.transferId) {
-          const transfer = await ctx.db.get(entry.transferId);
-          if (transfer) {
-            if (transfer.fromEntryId && transfer.fromEntryId !== entry._id) {
-              await ctx.db.delete(transfer.fromEntryId);
-            }
-            if (transfer.toEntryId && transfer.toEntryId !== entry._id) {
-              await ctx.db.delete(transfer.toEntryId);
-            }
-            await ctx.db.delete(transfer._id);
-          }
-        }
-        await ctx.db.delete(entry._id);
+        await removeEntry(ctx, userId, entry._id);
       }
-      
+
       // Delete snapshots
       const snapshots = await ctx.db
         .query("accountSnapshots")

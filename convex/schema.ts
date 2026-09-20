@@ -124,6 +124,9 @@ export default defineSchema({
 
     needsReview: v.boolean(),
 
+    // Amount actually applied to a manual account snapshot (supports safe legacy reversal).
+    balanceImpactCents: v.optional(v.number()),
+
     // Soft-delete fields for entries
     isArchived: v.optional(v.boolean()),
     archivedAt: v.optional(v.number()),

@@ -226,14 +226,6 @@ export default function EditEntryModal({
 
   // Map the existing entry into the QuickLog TxDraft shape - memoized to avoid re-creating on every render
   const existingDraft = useMemo<TxDraft>(() => {
-    // Debug: log the raw entry data being mapped
-    console.log("[EditEntryModal] Mapping entry to draft:", {
-      id: entry._id,
-      title: entry.title,
-      merchant: entry.merchant,
-      subcategoryId: entry.subcategoryId,
-      categoryId: entry.categoryId,
-    });
     const d = new Date(entry.date);
     const dateISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
       d.getDate()
@@ -285,7 +277,7 @@ export default function EditEntryModal({
       recurring: undefined,
       needsReview: entry.needsReview ?? false,
     };
-  }, [entry._id, entry.type, entry.amountCents, entry.date, entry.title, entry.merchant, entry.note, entry.category, entry.bucket, entry.tags, entry.methodOrAccount, entry.needsReview, entry.accountId, entry.goalId, entry.contextTags, entry.intentTags, entry.categoryId, entry.subcategoryId]);
+  }, [entry._id, entry.type, entry.amountCents, entry.date, entry.title, entry.merchant, entry.note, entry.tags, entry.methodOrAccount, entry.needsReview, entry.accountId, entry.goalId, entry.contextTags, entry.intentTags, entry.categoryId, entry.subcategoryId]);
 
   // Memoize the date for QuickLogForm to avoid triggering re-renders
   const nowDateISO = useMemo(() => todayISO(), []);
@@ -319,25 +311,25 @@ export default function EditEntryModal({
 
       await updateEntry({
         id: entry._id as Id<"entries">,
-        categoryId: (draft.categoryId || undefined) as Id<"categories"> | undefined,
-        subcategoryId: (draft.subcategoryId || undefined) as Id<"categories"> | undefined,
-        title: draft.title?.trim() || undefined,
-        merchant: draft.merchant?.trim() || undefined,
+        categoryId: (draft.categoryId || (entry.categoryId ? null : undefined)) as Id<"categories"> | null | undefined,
+        subcategoryId: (draft.subcategoryId || null) as Id<"categories"> | null,
+        title: draft.title?.trim() ?? "",
+        merchant: draft.merchant?.trim() ?? "",
         amountCents,
         date: dateTs,
-        note: draft.note?.trim() || undefined,
-        methodOrAccount: draft.account?.method?.trim() || undefined,
+        note: draft.note?.trim() ?? "",
+        methodOrAccount: draft.account?.method?.trim() ?? "",
         // Keep regular tags separate
-        tags: draft.tags.length > 0 ? draft.tags : undefined,
+        tags: draft.tags,
         // Pass context and intent as separate fields
         contextTags: contextTags.length > 0 ? contextTags : [],
         intentTags: intentTags.length > 0 ? intentTags : [],
         needsReview: draft.needsReview,
         // Keep shape consistent with entries update signature
         goalId: draft.goalId ?? null,
-        recurringRuleId: null,
-        // set accountId if provided
-        accountId: draft.account?.accountId ?? undefined,
+        // Omitted fields mean "leave unchanged" to Convex; null explicitly unlinks.
+        // Preserve recurringRuleId: editing a transaction must not detach its rule.
+        accountId: draft.account?.accountId ?? null,
       });
 
       toast.success("Entry updated");
@@ -347,7 +339,7 @@ export default function EditEntryModal({
       const message = e instanceof Error ? e.message : "Failed to save";
       return { ok: false, error: message };
     }
-  }, [entry._id, updateEntry, toast, onSaved]);
+  }, [entry._id, entry.categoryId, updateEntry, toast, onSaved]);
 
   // Old tag/context/intent helpers removed in favor of QuickLogForm handlers
 

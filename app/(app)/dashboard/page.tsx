@@ -1,15 +1,18 @@
 "use client";
+import { usePeriodEntries } from "@/components/usePeriodEntries";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Doc } from "convex/_generated/dataModel";
-import { centsToDollars, getCategoryDisplayName, getDateRangeFromPreset, DateRangePreset } from "@/components/utils";
+import { centsToDollars, getCategoryDisplayName } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
 import { useTabs } from "@/components/PersistentTabs";
-import LocalDateRangePicker from "@/components/LocalDateRangePicker";
+import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
+import { useTimeRange } from "@/components/TimeRangeProvider";
+import { countsInCashflow, reportingAmount } from "@/lib/finance/semantics";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -147,46 +150,14 @@ export default function DashboardPage() {
     return [...currentLayout.widgets].sort((a, b) => a.order - b.order);
   }, [currentLayout]);
   
-  // Dashboard has its own independent time range (not linked to global)
-  // Default to "This Month" for a snapshot of current financial situation
-  const [dashboardPreset, setDashboardPreset] = useState<DateRangePreset>(() => {
-    if (typeof window === "undefined") return "month";
-    try {
-      const stored = localStorage.getItem("tallyup.dashboardTimeRange");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const preset = parsed?.preset as DateRangePreset | undefined;
-        if (
-          preset === "today" ||
-          preset === "yesterday" ||
-          preset === "week" ||
-          preset === "last-week" ||
-          preset === "month" ||
-          preset === "last-month"
-        ) {
-          return preset;
-        }
-      }
-    } catch {}
-    return "month";
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      localStorage.setItem("tallyup.dashboardTimeRange", JSON.stringify({ preset: dashboardPreset }));
-    } catch {}
-  }, [dashboardPreset]);
-  
-  // Compute date range from dashboard's own preset
-  const { startDate, endDate, label } = useMemo(() => {
-    return getDateRangeFromPreset(dashboardPreset);
-  }, [dashboardPreset]);
+  const { startDate, endDate, label, prevStartDate, prevEndDate } = useTimeRange();
 
   // Fetch dashboard module data (upcoming bills, payday, budgets, safe-to-spend)
   const dashboardData = useQuery(api.dashboard.getDashboardData, {
     periodStart: startDate,
     periodEnd: endDate,
+    prevPeriodStart: prevStartDate,
+    prevPeriodEnd: prevEndDate,
     upcomingDays: 30,
   });
 
@@ -196,7 +167,7 @@ export default function DashboardPage() {
     periodEnd: endDate,
   });
 
-  const entries = useQuery(api.entries.listEntries, { startDate, endDate, limit: 1200 }) as Entry[] | undefined;
+  const entries = usePeriodEntries(startDate, endDate);
   const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Entry[] | undefined;
   const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
   const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
@@ -222,18 +193,18 @@ export default function DashboardPage() {
     const categorySpend = new Map<string, number>();
 
     for (const e of all) {
-      if (e.excludeFromTotals) continue;
+      if (!countsInCashflow(e)) continue;
       if (e.type === "income") {
-        income += e.amountCents;
+        income += reportingAmount(e);
       } else if (e.type === "expense") {
-        expense += e.amountCents;
+        expense += reportingAmount(e);
       }
       if (e.type === "expense") {
         const b = (e.bucket ?? "Other").trim() || "Other";
-        bucketSpend.set(b, (bucketSpend.get(b) ?? 0) + e.amountCents);
+        bucketSpend.set(b, (bucketSpend.get(b) ?? 0) + reportingAmount(e));
         const categoryKey = e.categoryId ?? e.category ?? e.bucket;
         const categoryLabel = getCategoryDisplayName(categoryKey, allCustomCategories);
-        categorySpend.set(categoryLabel, (categorySpend.get(categoryLabel) ?? 0) + e.amountCents);
+        categorySpend.set(categoryLabel, (categorySpend.get(categoryLabel) ?? 0) + reportingAmount(e));
       }
     }
 
@@ -395,20 +366,7 @@ export default function DashboardPage() {
             <div /> {/* Spacer */}
           </SignedOut>
           
-          {/* Dashboard-specific time range picker (independent from global) */}
-          <LocalDateRangePicker
-            preset={dashboardPreset}
-            label={label}
-            onChange={setDashboardPreset}
-            options={[
-              { value: "today", label: "Today" },
-              { value: "yesterday", label: "Yesterday" },
-              { value: "week", label: "This Week" },
-              { value: "last-week", label: "Last Week" },
-              { value: "month", label: "This Month" },
-              { value: "last-month", label: "Last Month" },
-            ]}
-          />
+          <GlobalDateRangePicker showAllPresets />
         </div>
 
         <SignedOut>

@@ -8,7 +8,7 @@ import * as Lucide from "lucide-react";
 import { centsToDollars, CONTEXT_TAGS, getCategoryDisplayName } from "@/components/utils";
 import { useToast } from "@/components/ToastProvider";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // Swipe threshold in px
 const SWIPE_THRESHOLD = 80;
@@ -59,6 +59,7 @@ const STORAGE_KEY_EXTENDED = "tallyup.activityTable.extendedColumns";
 
 export default function ActivityTable({
   entries = [],
+  displayLimit,
   viewMode = "cards",
   typeFilter = "all",
   onDelete,
@@ -71,6 +72,7 @@ export default function ActivityTable({
   onSortChange,
 }: {
   entries?: Doc<"entries">[];
+  displayLimit?: number;
   viewMode?: "cards" | "table" | "extended";
   typeFilter?: "all" | "expense" | "income";
   onDelete?: (id: Id<"entries">) => void;
@@ -84,6 +86,12 @@ export default function ActivityTable({
 }) {
   const toast = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editHref = useCallback((id: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("edit", id);
+    return `/activity?${params}`;
+  }, [searchParams]);
   
   // Fetch user preferences for hidden categories/tags
   const userPrefs = useQuery(api.preferences.getUserPreferences, {});
@@ -95,8 +103,8 @@ export default function ActivityTable({
   }, [userPrefs?.hiddenContextTags]);
   
   // Fetch categories to resolve IDs to names
-  const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
-  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
+  const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense", includeArchived: true });
+  const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income", includeArchived: true });
   const allCustomCategories = useMemo(() => {
     const expense = (expenseCategories ?? []) as { _id: string; name: string }[];
     const income = (incomeCategories ?? []) as { _id: string; name: string }[];
@@ -106,14 +114,16 @@ export default function ActivityTable({
   // Get filtered expense/income categories
   const filteredExpenseCategories = useMemo(() => {
     const hiddenSet = new Set((userPrefs?.hiddenExpenseCategories ?? []).map((c) => c.toLowerCase()));
-    return ((expenseCategories ?? []) as { _id: string; name: string }[])
+    return ((expenseCategories ?? []) as { _id: string; name: string; archived?: boolean }[])
+      .filter(c => !c.archived)
       .map((c) => c.name)
       .filter((name) => !hiddenSet.has(name.toLowerCase()));
   }, [expenseCategories, userPrefs?.hiddenExpenseCategories]);
   
   const filteredIncomeCategories = useMemo(() => {
     const hiddenSet = new Set((userPrefs?.hiddenIncomeCategories ?? []).map((c) => c.toLowerCase()));
-    return ((incomeCategories ?? []) as { _id: string; name: string }[])
+    return ((incomeCategories ?? []) as { _id: string; name: string; archived?: boolean }[])
+      .filter(c => !c.archived)
       .map((c) => c.name)
       .filter((name) => !hiddenSet.has(name.toLowerCase()));
   }, [incomeCategories, userPrefs?.hiddenIncomeCategories]);
@@ -127,11 +137,11 @@ export default function ActivityTable({
   }, [goals]);
   
   // Fetch accounts for account column
-  const accounts = useQuery(api.accounts.listAccounts, {}) as { _id: string; name: string }[] | undefined;
+  const accounts = useQuery(api.accounts.listAccounts, { includeArchived: true }) as { _id: string; name: string; last4?: string }[] | undefined;
   const getAccountName = useCallback((accountId: string | undefined) => {
     if (!accountId || !accounts) return null;
     const account = accounts.find((a) => a._id === accountId);
-    return account?.name ?? null;
+    return account ? `${account.name}${account.last4 ? ` ••${account.last4}` : ""}` : null;
   }, [accounts]);
 
   // Column order state with localStorage persistence
@@ -442,12 +452,12 @@ export default function ActivityTable({
     } else if (offset <= -SWIPE_THRESHOLD) {
       // Swipe left = edit (navigate using Next.js router)
       e.preventDefault();
-      router.push(`/activity?edit=${id}`);
+      router.push(editHref(id));
     }
     // For small/no swipes, don't prevent default - allow Link to work
     setSwipeOffset((o) => ({ ...o, [id]: 0 }));
     delete touchStart.current[id];
-  }, [swipeOffset, updateEntry, onBulkComplete, router]);
+  }, [swipeOffset, updateEntry, onBulkComplete, router, editHref]);
 
   // Get category options based on selected entries
   const categoryOptions = useMemo(() => {
@@ -587,7 +597,7 @@ export default function ActivityTable({
               );
             })}
           </div>
-          {sortedEntries.map((r, i) => {
+          {sortedEntries.slice(0, displayLimit).map((r, i) => {
             const isTransfer = r.type === "transfer";
             const isIncome = r.type === "income";
             const isTransferIn = isTransfer && r.isTransferSource === false;
@@ -718,7 +728,7 @@ export default function ActivityTable({
                   if (selectMode) {
                     toggle(r._id);
                   } else {
-                    router.push(`/activity?edit=${r._id}`);
+                    router.push(editHref(r._id));
                   }
                 }}
               >
@@ -772,7 +782,7 @@ export default function ActivityTable({
         className="rounded-xl overflow-y-auto min-h-0"
         style={{ backgroundColor: "var(--surface)", border: "1px solid var(--border)" }}
       >
-        {entries.map((r, i) => {
+        {sortedEntries.slice(0, displayLimit).map((r, i) => {
           const isTransfer = r.type === "transfer";
           const isIncome = r.type === "income";
           const isTransferIn = isTransfer && r.isTransferSource === false;
@@ -842,7 +852,7 @@ export default function ActivityTable({
                     return;
                   }
                   // Navigate to edit using Next.js router (prevents full page reload)
-                  router.push(`/activity?edit=${r._id}`);
+                  router.push(editHref(r._id));
                 }}
                 onTouchStart={(e) => {
                   handleTouchStart(r._id, e);
@@ -895,14 +905,14 @@ export default function ActivityTable({
               </div>
 
               {/* Main Content */}
-              <Link href={`/activity?edit=${r._id}`} className="flex-1 min-w-0">
+              <Link href={editHref(r._id)} className="flex-1 min-w-0">
                 {/* Primary: Title - Merchant/Name takes priority, note is separate */}
                 <div className="flex items-center gap-2">
                   <span
                     className="text-body font-semibold truncate"
                     style={{ color: "var(--text)" }}
                   >
-                    {r.merchant || categoryLabel}
+                    {r.merchant || r.title || categoryLabel}
                   </span>
                   {r.needsReview && (
                     <span
@@ -915,9 +925,9 @@ export default function ActivityTable({
                 </div>
                 
                 {/* Note - shown separately below title if present */}
-                {r.note && (
+                {((r.merchant && r.title && r.title !== r.merchant) || r.note) && (
                   <div className="text-[11px] truncate" style={{ color: "var(--text-secondary)" }}>
-                    {r.note}
+                    {[r.merchant && r.title !== r.merchant ? r.title : undefined, r.note].filter(Boolean).join(" · ")}
                   </div>
                 )}
                 
@@ -949,9 +959,9 @@ export default function ActivityTable({
                 </div>
                 
                 {/* Tertiary: Method/account if present */}
-                {r.methodOrAccount && (
-                  <div className="text-[10px] truncate" style={{ color: "var(--text-tertiary)" }}>
-                    {r.methodOrAccount}
+                {(r.accountId || r.methodOrAccount) && (
+                  <div className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>
+                    {getAccountName(r.accountId) || r.methodOrAccount || "Account unavailable"}
                   </div>
                 )}
               </Link>
