@@ -204,12 +204,7 @@ export const getBudgetCategoryDeletionImpact = query({
     // Count linked entries
     const linkedEntries = await ctx.db
       .query("entries")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("userId"), userId),
-          q.eq(q.field("budgetCategoryId"), args.id)
-        )
-      )
+      .withIndex("by_user_budget", (q) => q.eq("userId", userId).eq("budgetCategoryId", args.id))
       .collect();
 
     // Count budget group memberships
@@ -269,12 +264,7 @@ export const archiveBudgetCategory = mutation({
     if (clearEntryLinks) {
       const linkedEntries = await ctx.db
         .query("entries")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("userId"), userId),
-            q.eq(q.field("budgetCategoryId"), args.id)
-          )
-        )
+        .withIndex("by_user_budget", (q) => q.eq("userId", userId).eq("budgetCategoryId", args.id))
         .collect();
 
       for (const entry of linkedEntries) {
@@ -320,12 +310,7 @@ export const deleteBudgetCategory = mutation({
     // Clear budgetCategoryId on linked entries
     const linkedEntries = await ctx.db
       .query("entries")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("userId"), userId),
-          q.eq(q.field("budgetCategoryId"), args.id)
-        )
-      )
+      .withIndex("by_user_budget", (q) => q.eq("userId", userId).eq("budgetCategoryId", args.id))
       .collect();
 
     for (const entry of linkedEntries) {
@@ -415,12 +400,7 @@ export const bulkDeleteArchivedBudgetCategories = mutation({
       // Clear budgetCategoryId on linked entries
       const linkedEntries = await ctx.db
         .query("entries")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("userId"), userId),
-            q.eq(q.field("budgetCategoryId"), category._id)
-          )
-        )
+        .withIndex("by_user_budget", (q) => q.eq("userId", userId).eq("budgetCategoryId", category._id))
         .collect();
 
       for (const entry of linkedEntries) {

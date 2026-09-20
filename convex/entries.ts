@@ -204,6 +204,7 @@ export const addEntry = mutation({
       intentTags,
       amountCents,
       methodOrAccount,
+      accountId: args.accountId,
     });
     const missingCanonicalCategory = !!category && !(categoryIdInput ?? categoryId);
     const effectiveReviewReason = missingCanonicalCategory ? REVIEW_REASONS.NEEDS_CATEGORY : reviewReason;
@@ -636,6 +637,7 @@ export const updateEntry = mutation({
         intentTags: next.intentTags,
         amountCents: next.amountCents,
         methodOrAccount: next.methodOrAccount,
+        accountId: next.accountId,
       });
       const missingCanonicalCategory = !!next.category && !next.categoryId;
       const effectiveReviewReason = missingCanonicalCategory ? REVIEW_REASONS.NEEDS_CATEGORY : reviewReason;

@@ -1,6 +1,7 @@
 import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
+import { cashflowTotals, pendingTotals } from "../lib/finance/semantics";
 
 type RecurringRuleDoc = Doc<"recurringRules">;
 
@@ -36,6 +37,10 @@ export const getDashboardData = query({
   args: {
     periodStart: v.number(),
     periodEnd: v.number(),
+    // Comparison window. Callers pass the same previous period the rest of the app
+    // shows so Dashboard deltas match Insights instead of assuming equal-length periods.
+    prevPeriodStart: v.optional(v.number()),
+    prevPeriodEnd: v.optional(v.number()),
     upcomingDays: v.optional(v.number()), // How many days ahead to look for upcoming bills (default 30)
   },
   handler: async (ctx, args) => {
@@ -317,16 +322,9 @@ export const getDashboardData = query({
       .filter((q) => q.eq(q.field("status"), "pending"))
       .collect();
 
-    let pendingExpensesCents = 0;
-    let pendingIncomeCents = 0;
-    for (const entry of pendingEntries) {
-      if (entry.excludeFromTotals) continue;
-      if (entry.type === "expense") {
-        pendingExpensesCents += entry.amountCents;
-      } else if (entry.type === "income") {
-        pendingIncomeCents += entry.amountCents;
-      }
-    }
+    const pending = pendingTotals(pendingEntries);
+    const pendingExpensesCents = pending.expenseCents;
+    const pendingIncomeCents = pending.incomeCents;
 
     // 4f. Budget-based calculation (existing)
     const totalBudgeted = budgetStatus.reduce((sum, b) => sum + b.budgetedCents, 0);
@@ -372,9 +370,10 @@ export const getDashboardData = query({
     const reviewEntries = await ctx.db
       .query("entries")
       .withIndex("by_user_needsReview_date", (q) => q.eq("userId", userId).eq("needsReview", true))
+      .filter((q) => q.neq(q.field("isArchived"), true))
       .collect();
     const reviewCount = reviewEntries.length;
-    
+
     // Calculate review totals by type
     let reviewTotalCents = 0;
     for (const entry of reviewEntries) {
@@ -385,8 +384,8 @@ export const getDashboardData = query({
 
     // 6. Period comparison - get previous period totals
     const periodLength = args.periodEnd - args.periodStart;
-    const prevPeriodStart = args.periodStart - periodLength;
-    const prevPeriodEnd = args.periodStart - 1;
+    const prevPeriodStart = args.prevPeriodStart ?? args.periodStart - periodLength;
+    const prevPeriodEnd = args.prevPeriodEnd ?? args.periodStart - 1;
 
     const prevPeriodEntries = await ctx.db
       .query("entries")
@@ -395,16 +394,9 @@ export const getDashboardData = query({
       )
       .collect();
 
-    let prevIncomeCents = 0;
-    let prevExpenseCents = 0;
-    for (const entry of prevPeriodEntries) {
-      if (entry.excludeFromTotals) continue;
-      if (entry.type === "income") {
-        prevIncomeCents += entry.amountCents;
-      } else if (entry.type === "expense") {
-        prevExpenseCents += entry.amountCents;
-      }
-    }
+    const prev = cashflowTotals(prevPeriodEntries);
+    const prevIncomeCents = prev.incomeCents;
+    const prevExpenseCents = prev.expenseCents;
 
     // 7. Current period totals (for comparison)
     const currentPeriodEntries = await ctx.db
@@ -414,16 +406,9 @@ export const getDashboardData = query({
       )
       .collect();
 
-    let currentIncomeCents = 0;
-    let currentExpenseCents = 0;
-    for (const entry of currentPeriodEntries) {
-      if (entry.excludeFromTotals) continue;
-      if (entry.type === "income") {
-        currentIncomeCents += entry.amountCents;
-      } else if (entry.type === "expense") {
-        currentExpenseCents += entry.amountCents;
-      }
-    }
+    const current = cashflowTotals(currentPeriodEntries);
+    const currentIncomeCents = current.incomeCents;
+    const currentExpenseCents = current.expenseCents;
 
     return {
       upcomingBills,

@@ -140,6 +140,7 @@ export default defineSchema({
     .index("by_user_stableId", ["userId", "stableId"])
     .index("by_user_recurring", ["userId", "recurringRuleId"])
     .index("by_user_goal", ["userId", "goalId"])
+    .index("by_user_category", ["userId", "categoryId"])
     .index("by_user_budget", ["userId", "budgetCategoryId"])
     .index("by_user_budget_date", ["userId", "budgetCategoryId", "date"])
     .index("by_user_account", ["userId", "accountId"])
@@ -621,7 +622,15 @@ export default defineSchema({
     periodStart: v.optional(v.number()),
     periodEnd: v.optional(v.number()),
     reason: v.string(),
-    status: v.union(v.literal("pending"), v.literal("processing"), v.literal("done")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("done"),
+      // A row that keeps throwing is parked instead of retried every minute forever.
+      v.literal("failed")
+    ),
+    attempts: v.optional(v.number()),
+    lastError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1000,6 +1009,10 @@ export default defineSchema({
     accountId: v.id("accounts"),
     asOf: v.number(),
     balance: v.number(),
+    // "manual" is a balance the user or their bank reported at a point in time and
+    // is kept as history. "entry" is the running balance derived from transactions;
+    // it is updated in place so editing a transaction does not append a row.
+    source: v.optional(v.union(v.literal("manual"), v.literal("entry"))),
     createdAt: v.number(),
   })
     .index("by_account_asOf", ["accountId", "asOf"])

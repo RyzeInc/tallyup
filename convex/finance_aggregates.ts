@@ -1,5 +1,6 @@
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { countsInCashflow, isActive, reportingAmount } from "../lib/finance/semantics";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -51,20 +52,8 @@ function resolveCategory(entry: { category?: string | null; bucket?: string | nu
   return (entry.category ?? entry.bucket ?? "Uncategorized").trim() || "Uncategorized";
 }
 
-function shouldCountCashflow(entry: {
-  type: "expense" | "income" | "transfer";
-  excludeFromTotals?: boolean;
-  excludeFromCashFlow?: boolean;
-  entryType?: string | null;
-  status?: string | null;
-}): boolean {
-  if (entry.excludeFromTotals) return false;
-  if (entry.excludeFromCashFlow) return false;
-  if (entry.type === "transfer") return false;
-  if (entry.entryType === "transfer" || entry.entryType === "payment") return false;
-  if (entry.status && entry.status !== "posted") return false;
-  return true;
-}
+/** Kept as a named wrapper so callers read the same rule the rest of the app uses. */
+const shouldCountCashflow = countsInCashflow;
 
 export async function computeMonthlyCashflow(
   ctx: Ctx,
@@ -83,8 +72,8 @@ export async function computeMonthlyCashflow(
 
   for (const entry of rows) {
     if (!shouldCountCashflow(entry)) continue;
-    if (entry.type === "income") incomeCents += entry.amountCents;
-    if (entry.type === "expense") expenseCents += entry.amountCents;
+    if (entry.type === "income") incomeCents += reportingAmount(entry);
+    if (entry.type === "expense") expenseCents += reportingAmount(entry);
   }
 
   return {
@@ -113,7 +102,7 @@ export async function computeSpendByCategory(
   for (const entry of rows) {
     if (!shouldCountCashflow(entry)) continue;
     const category = resolveCategory(entry);
-    totals.set(category, (totals.get(category) ?? 0) + entry.amountCents);
+    totals.set(category, (totals.get(category) ?? 0) + reportingAmount(entry));
   }
 
   return [...totals.entries()]
@@ -250,6 +239,7 @@ export async function computeTransactionDrilldown(
     .take(500);
 
   const flagged = rows.filter((entry) => {
+    if (!isActive(entry)) return false;
     if (entry.type !== "expense" && entry.type !== "income" && entry.type !== "transfer") return false;
     if (isTransferLike(entry)) return true;
     if (isFeeLike(entry)) return true;
@@ -259,7 +249,7 @@ export async function computeTransactionDrilldown(
   });
 
   const largestExpenses = rows
-    .filter((entry) => entry.type === "expense" && !isTransferLike(entry))
+    .filter((entry) => isActive(entry) && entry.type === "expense" && !isTransferLike(entry))
     .sort((a, b) => b.amountCents - a.amountCents)
     .slice(0, 12);
 

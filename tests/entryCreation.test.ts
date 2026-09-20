@@ -63,7 +63,11 @@ class MockDB {
   accounts: Map<string, Account> = new Map();
   rules: Map<string, CategoryRule> = new Map();
   goals: Map<string, Goal> = new Map();
-  snapshots: Map<string, { accountId: string; balance: number }> = new Map();
+  // `seq` orders snapshots. Keying on Date.now() collided within a millisecond and
+  // the rows carried no timestamp, so "latest" was whichever the Map happened to
+  // yield first — the source of an intermittent failure in this file.
+  snapshots: Map<string, { accountId: string; balance: number; seq: number }> = new Map();
+  private snapshotSeq = 0;
   budgetDirtyQueue: any[] = [];
   
   insertEntry(entry: Omit<Entry, '_id'>): string {
@@ -112,12 +116,12 @@ class MockDB {
   getLatestSnapshot(accountId: string): { accountId: string; balance: number } | undefined {
     return Array.from(this.snapshots.values())
       .filter(s => s.accountId === accountId)
-      .sort((a, b) => (b as any).timestamp - (a as any).timestamp)[0];
+      .sort((a, b) => b.seq - a.seq)[0];
   }
 
   updateSnapshot(accountId: string, newBalance: number): void {
-    const id = `snapshot_${accountId}_${Date.now()}`;
-    this.snapshots.set(id, { accountId, balance: newBalance });
+    const seq = ++this.snapshotSeq;
+    this.snapshots.set(`snapshot_${accountId}_${seq}`, { accountId, balance: newBalance, seq });
   }
 
   insertGoal(goal: Omit<Goal, '_id'>): string {

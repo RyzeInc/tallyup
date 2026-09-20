@@ -1,6 +1,7 @@
 import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { cashflowTotals } from "../lib/finance/semantics";
 
 async function requireUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }): Promise<string> {
   const identity = await ctx.auth.getUserIdentity();
@@ -138,16 +139,9 @@ export const getAccountabilityCheck = query({
       )
       .collect();
     
-    let actualIncomeCents = 0;
-    let actualExpenseCents = 0;
-    for (const entry of periodEntries) {
-      if (entry.excludeFromTotals) continue;
-      if (entry.type === "income") {
-        actualIncomeCents += entry.amountCents;
-      } else if (entry.type === "expense") {
-        actualExpenseCents += entry.amountCents;
-      }
-    }
+    const actuals = cashflowTotals(periodEntries);
+    const actualIncomeCents = actuals.incomeCents;
+    const actualExpenseCents = actuals.expenseCents;
     
     // 1b. Get recurring income rules and calculate projected income
     const incomeRules = await ctx.db

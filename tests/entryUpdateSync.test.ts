@@ -23,8 +23,17 @@ function context(extra = {}) {
     date: 100,
     ...extra,
   };
-  const chain = { withIndex: vi.fn(), first: vi.fn().mockResolvedValue(null) };
+  const chain = {
+    withIndex: vi.fn(),
+    filter: vi.fn(),
+    order: vi.fn(),
+    first: vi.fn().mockResolvedValue(null),
+    collect: vi.fn().mockResolvedValue([]),
+    take: vi.fn().mockResolvedValue([]),
+  };
   chain.withIndex.mockReturnValue(chain);
+  chain.filter.mockReturnValue(chain);
+  chain.order.mockReturnValue(chain);
   const db = {
     get: vi.fn().mockResolvedValue(existing),
     query: vi.fn().mockReturnValue(chain),

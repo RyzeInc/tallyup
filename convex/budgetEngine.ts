@@ -2,6 +2,7 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { countsInBudget, reportingAmount } from "../lib/finance/semantics";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -449,15 +450,11 @@ export const recomputeBudgetPeriod = internalMutation({
         .collect();
 
       for (const entry of entries) {
-        if (entry.excludeFromBudgets || entry.excludeFromTotals) continue;
-        if (entry.type !== "expense") continue;
-        if (entry.status && entry.status !== "posted") continue;
-        if (entry.entryType && (entry.entryType === "transfer" || entry.entryType === "payment")) continue;
+        // Archived, pending, transfer and excluded rows are settled in one place so
+        // budget spend always agrees with Activity, Dashboard, and Insights.
+        if (!countsInBudget(entry)) continue;
 
-        const isRefund = entry.entryType === "refund";
-        const sign = isRefund ? -1 : 1;
-
-        let entryAmount = entry.amountCents;
+        let entryAmount = Math.abs(entry.amountCents);
         if (entry.splitParts && entry.splitParts.length > 0) {
           entryAmount = 0;
           for (const part of entry.splitParts) {
@@ -467,7 +464,7 @@ export const recomputeBudgetPeriod = internalMutation({
         }
 
         if (!entryAmount) continue;
-        const impactAmount = entryAmount * sign;
+        const impactAmount = reportingAmount(entry) < 0 ? -entryAmount : entryAmount;
         spentCents += impactAmount;
         await ctx.db.insert("budgetEntryImpacts", {
           userId: period.userId,

@@ -296,12 +296,7 @@ export const getGoalDeletionImpact = query({
     // Count linked entries
     const linkedEntries = await ctx.db
       .query("entries")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("userId"), userId),
-          q.eq(q.field("goalId"), args.id)
-        )
-      )
+      .withIndex("by_user_goal", (q) => q.eq("userId", userId).eq("goalId", args.id))
       .collect();
 
     const totalContributedCents = contributions.reduce((sum, c) => sum + c.amountCents, 0);
@@ -343,12 +338,7 @@ export const deleteGoal = mutation({
     // Find all linked entries
     const linkedEntries = await ctx.db
       .query("entries")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("userId"), userId),
-          q.eq(q.field("goalId"), args.id)
-        )
-      )
+      .withIndex("by_user_goal", (q) => q.eq("userId", userId).eq("goalId", args.id))
       .collect();
 
     if (linkedEntries.length > 0 && !unlinkEntries) {

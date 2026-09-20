@@ -255,6 +255,7 @@ export async function computeIncomeProfile(
     .withIndex("by_user_type_date", (q) =>
       q.eq("userId", userId).eq("type", "income").gte("date", start90)
     )
+    .filter((q) => q.neq(q.field("isArchived"), true))
     .collect();
   
   if (incomeEntries.length === 0) {
@@ -358,6 +359,7 @@ export async function computeBaselineObligations(
     .withIndex("by_user_type_date", (q) =>
       q.eq("userId", userId).eq("type", "expense").gte("date", start90)
     )
+    .filter((q) => q.neq(q.field("isArchived"), true))
     .collect();
   
   // Categorize fixed expenses
@@ -659,6 +661,7 @@ export async function computeTransactionDiagnostics(
   const entries = await ctx.db
     .query("entries")
     .withIndex("by_user_date", (q) => q.eq("userId", userId).gte("date", start90))
+    .filter((q) => q.neq(q.field("isArchived"), true))
     .collect();
   
   let cashWithdrawals = 0;

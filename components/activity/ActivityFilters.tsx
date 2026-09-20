@@ -164,7 +164,7 @@ export default function ActivityFilters({
   accountOptions.push({
     value: "__unlinked__",
     label: "No account assigned",
-    detail: "Includes entries with only a payment method",
+    detail: "Payment methods that match no account of yours",
   });
   const categoryOptions = useMemo(() => {
     const byId = new Map(

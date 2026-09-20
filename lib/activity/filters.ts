@@ -107,17 +107,50 @@ type Category = Pick<
   Doc<"categories">,
   "_id" | "name" | "parentId" | "slug" | "categoryType"
 >;
+type Account = Pick<Doc<"accounts">, "_id" | "name">;
 const normalized = (value?: string) => value?.trim().toLowerCase() ?? "";
+
+/**
+ * Older transactions, and anything saved from the review flow, carry the account
+ * name in `methodOrAccount` with no `accountId`. Filtering by the account has to
+ * find those too, or real spending disappears from a filtered view.
+ *
+ * A name shared by two accounts is left out: guessing between them would file
+ * money against the wrong account, which is worse than showing it as unassigned.
+ */
+export function accountLabelIndex(accounts: Account[]): Map<string, string> {
+  const counts = new Map<string, number>();
+  for (const account of accounts) {
+    const key = normalized(account.name);
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const index = new Map<string, string>();
+  for (const account of accounts) {
+    const key = normalized(account.name);
+    if (key && counts.get(key) === 1) index.set(key, String(account._id));
+  }
+  return index;
+}
+
+/** The account an entry belongs to, by link first and unambiguous label second. */
+export function resolveEntryAccount(
+  entry: Pick<Doc<"entries">, "accountId" | "methodOrAccount">,
+  labels: Map<string, string>,
+): string | undefined {
+  if (entry.accountId) return String(entry.accountId);
+  return labels.get(normalized(entry.methodOrAccount));
+}
 
 /** Resolve canonical IDs and legacy labels without guessing an account from its name. */
 export function filterActivityEntries(
   entries: Doc<"entries">[],
   filters: ActivityFilters,
   categories: Category[],
-  accounts: Pick<Doc<"accounts">, "_id" | "name">[] = [],
+  accounts: Account[] = [],
 ): Doc<"entries">[] {
   const byId = new Map(categories.map((c) => [String(c._id), c]));
   const accountNames = new Map(accounts.map((a) => [String(a._id), a.name]));
+  const accountLabels = accountLabelIndex(accounts);
   const requested = new Set(filters.categories.map(normalized));
   const selectedIds = new Set(
     categories
@@ -152,7 +185,9 @@ export function filterActivityEntries(
     if (filters.review && !entry.needsReview) return false;
     if (
       filters.accounts.length &&
-      !filters.accounts.includes(entry.accountId ?? "__unlinked__")
+      !filters.accounts.includes(
+        resolveEntryAccount(entry, accountLabels) ?? "__unlinked__",
+      )
     )
       return false;
     if (

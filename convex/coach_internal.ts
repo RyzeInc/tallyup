@@ -109,6 +109,7 @@ async function computeDataFreshness(ctx: Ctx, userId: string): Promise<DataFresh
   const recentEntry = await ctx.db
     .query("entries")
     .withIndex("by_user_date", (q) => q.eq("userId", userId))
+    .filter((q) => q.neq(q.field("isArchived"), true))
     .order("desc")
     .first();
   

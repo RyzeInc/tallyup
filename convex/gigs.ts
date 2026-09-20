@@ -65,6 +65,7 @@ export const getGigHourlySummary = query({
     let entries = await ctx.db
       .query("entries")
       .withIndex("by_user_date", (q) => q.eq("userId", userId))
+      .filter((q) => q.neq(q.field("isArchived"), true))
       .collect();
 
     // Filter by date range if provided
@@ -191,6 +192,7 @@ export const suggestGigProfiles = query({
       .withIndex("by_user_type_date", (q) => 
         q.eq("userId", userId).eq("type", "income")
       )
+      .filter((q) => q.neq(q.field("isArchived"), true))
       .order("desc")
       .take(100);
 

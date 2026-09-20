@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { SYSTEM_CATEGORIES } from "./categoryCatalog";
 import { Id } from "./_generated/dataModel";
+import { dirtyEntryBudgets } from "./entryEffects";
 
 // ============================================
 // CATEGORIES QUERIES & MUTATIONS
@@ -715,12 +716,7 @@ export const getCategoryDeletionImpact = query({
     // Count entries with this categoryId
     const linkedEntries = await ctx.db
       .query("entries")
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("userId"), userId),
-          q.eq(q.field("categoryId"), args.id)
-        )
-      )
+      .withIndex("by_user_category", (q) => q.eq("userId", userId).eq("categoryId", args.id))
       .collect();
 
     // Count child categories
@@ -808,16 +804,30 @@ export const archiveCategory = mutation({
     if (clearEntryLinks) {
       const linkedEntries = await ctx.db
         .query("entries")
-        .filter((q) =>
-          q.and(
-            q.eq(q.field("userId"), userId),
-            q.eq(q.field("categoryId"), args.id)
-          )
-        )
+        .withIndex("by_user_category", (q) => q.eq("userId", userId).eq("categoryId", args.id))
         .collect();
 
       for (const entry of linkedEntries) {
-        await ctx.db.patch(entry._id, { categoryId: undefined, updatedAt: now });
+        // Drop the stale legacy labels with the link. Leaving them behind makes the
+        // entry filterable under a category that no longer exists.
+        await ctx.db.patch(entry._id, {
+          categoryId: undefined,
+          category: undefined,
+          bucket: undefined,
+          updatedAt: now,
+        });
+        await dirtyEntryBudgets(ctx, entry, "category_archived");
+      }
+
+      // A subcategory pointer to this category is just as stale.
+      const linkedSubcategories = await ctx.db
+        .query("entries")
+        .withIndex("by_user_date", (q) => q.eq("userId", userId))
+        .filter((q) => q.eq(q.field("subcategoryId"), args.id))
+        .collect();
+
+      for (const entry of linkedSubcategories) {
+        await ctx.db.patch(entry._id, { subcategoryId: undefined, updatedAt: now });
       }
     }
 

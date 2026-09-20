@@ -197,6 +197,7 @@ export default function TransactionSheet({
     intentTags,
     amountCents: Math.abs(amountCents || 0),
     methodOrAccount,
+    accountId,
   });
   const isResolved = !reviewReason;
   const headerLabel = isResolved ? "Reviewed" : "Needs meaning";

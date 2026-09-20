@@ -159,6 +159,7 @@ export const createAccount = mutation({
       accountId,
       asOf: args.asOf ?? now,
       balance: initialBalance,
+      source: "manual",
       createdAt: now,
     });
 
@@ -253,6 +254,7 @@ export const addAccountSnapshot = mutation({
       accountId: args.accountId,
       asOf: args.asOf ?? now,
       balance,
+      source: "manual",
       createdAt: now,
     });
   },
@@ -276,6 +278,7 @@ export const addAccountSnapshotInternal = internalMutation({
       accountId: args.accountId,
       asOf: args.asOf ?? now,
       balance: Math.round(args.balanceCents),
+      source: "manual",
       createdAt: now,
     });
     return { ok: true };
@@ -311,6 +314,7 @@ export const addAccountSnapshots = mutation({
         accountId: update.accountId,
         asOf,
         balance,
+        source: "manual",
         createdAt: now,
       });
     }

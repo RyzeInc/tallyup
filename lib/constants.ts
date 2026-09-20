@@ -114,6 +114,9 @@ export function getReviewReason(entry: {
   amountCents: number;
   note?: string | null;
   methodOrAccount?: string | null;
+  // A linked account is the stronger signal. Without it, logging flows that only
+  // set accountId produced entries permanently marked "Needs account".
+  accountId?: string | null;
 }): ReviewReason | null {
   if (!entry.category || entry.category.trim() === "") {
     return REVIEW_REASONS.NEEDS_CATEGORY;
@@ -125,7 +128,9 @@ export function getReviewReason(entry: {
     }
   }
 
-  if (!entry.methodOrAccount || entry.methodOrAccount.trim() === "") {
+  const hasAccount =
+    !!entry.accountId || !!(entry.methodOrAccount && entry.methodOrAccount.trim() !== "");
+  if (!hasAccount) {
     return REVIEW_REASONS.NEEDS_ACCOUNT;
   }
 

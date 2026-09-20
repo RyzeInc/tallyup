@@ -30,8 +30,15 @@ async function adjustBalance(ctx: MutationCtx, userId: string, accountId: Id<"ac
   const snapshot = await ctx.db.query("accountSnapshots")
     .withIndex("by_account_asOf", q => q.eq("accountId", accountId)).order("desc").first();
   const now = Date.now();
-  // Never rewrite a historical snapshot when today's transaction changes.
-  await ctx.db.insert("accountSnapshots", { userId, accountId, balance: (snapshot?.balance ?? 0) + delta,
+  const balance = (snapshot?.balance ?? 0) + delta;
+  // A balance the user reported is history and is never rewritten. The running
+  // balance derived from transactions is a single moving row, so editing a
+  // transaction corrects it instead of appending another point to the chart.
+  if (snapshot?.source === "entry") {
+    await ctx.db.patch(snapshot._id, { balance, asOf: Math.max(now, snapshot.asOf) });
+    return;
+  }
+  await ctx.db.insert("accountSnapshots", { userId, accountId, balance, source: "entry",
     asOf: Math.max(now, snapshot?.asOf ?? now), createdAt: now });
 }
 

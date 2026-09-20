@@ -1,5 +1,5 @@
 "use client";
-import { countsInCashflow, reportingAmount } from "@/lib/finance/semantics";
+import { countsInInsights, reportingAmount } from "@/lib/finance/semantics";
 import { usePeriodEntries } from "@/components/usePeriodEntries";
 
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
@@ -251,7 +251,7 @@ export default function InsightsPage() {
   const filteredEntries = useMemo(() => {
     if (!entries) return [];
     return entries.filter((e) => {
-      if (!countsInCashflow(e) || e.ignoredForInsights) return false;
+      if (!countsInInsights(e)) return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
         const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
@@ -265,7 +265,7 @@ export default function InsightsPage() {
   const filteredPrevEntries = useMemo(() => {
     if (!prevEntries) return [];
     return prevEntries.filter((e) => {
-      if (!countsInCashflow(e) || e.ignoredForInsights) return false;
+      if (!countsInInsights(e)) return false;
       if (typeFilter !== "all" && e.type !== typeFilter) return false;
       if (selectedTags.length > 0) {
         const entryTags = [...(e.tags ?? []), ...(e.contextTags ?? []), ...(e.intentTags ?? [])];
