@@ -200,7 +200,7 @@ export default function Screen2FirstIncome({
         <div className="flex gap-2">
           <Lucide.Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "var(--text-secondary)" }} />
           <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-            We're just getting started. You can update this anytime and add more income sources.
+            We&apos;re just getting started. You can update this anytime and add more income sources.
           </div>
         </div>
       </div>

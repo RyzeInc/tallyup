@@ -57,6 +57,17 @@ export default function OnboardingPage() {
   const addEntry = useMutation(api.entries.addEntry);
   const createBudget = useMutation(api.budgets.createBudgetCategory);
   const upsertPrefs = useMutation(api.preferences.upsertUserPreferences);
+  const dismissOnboarding = useMutation(api.preferences.dismissOnboarding);
+
+  // Setup is a helpful default, not a toll gate. Skipping marks it done so
+  // the user is never asked again.
+  const handleSkip = useCallback(async () => {
+    try {
+      await dismissOnboarding({});
+    } finally {
+      router.push("/dashboard");
+    }
+  }, [dismissOnboarding, router]);
 
   // Screen 1: Get income source count
   const handleScreen1Next = useCallback((numSources: number) => {
@@ -148,7 +159,16 @@ export default function OnboardingPage() {
   const progress = ((currentIndex + 1) / screens.length) * 100;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "var(--bg)" }}>
+    <div
+      className="flex flex-col"
+      style={{
+        // Exactly the viewport (dvh accounts for mobile browser chrome), so the
+        // scroll region below is bounded and the buttons inside it are always
+        // reachable instead of overflowing off-screen.
+        height: "100dvh",
+        backgroundColor: "var(--bg)",
+      }}
+    >
       {/* Header with back button and progress */}
       <div className="px-4 pt-4 pb-6 border-b" style={{ borderColor: "var(--border)" }}>
         <div className="flex items-center justify-between mb-4">
@@ -160,8 +180,17 @@ export default function OnboardingPage() {
             <Lucide.ChevronLeft className="h-6 w-6" style={{ color: "var(--text)" }} />
           </button>
           
-          <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
-            {currentIndex + 1} of {screens.length}
+          <div className="flex items-center gap-3">
+            <div className="text-meta" style={{ color: "var(--text-secondary)" }}>
+              {currentIndex + 1} of {screens.length}
+            </div>
+            <button
+              onClick={handleSkip}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium transition-colors hover:bg-[var(--surface-subtle)]"
+              style={{ color: "var(--text-secondary)", background: "none", border: "none", cursor: "pointer", minHeight: 36 }}
+            >
+              Skip for now
+            </button>
           </div>
         </div>
 
@@ -182,7 +211,10 @@ export default function OnboardingPage() {
       </div>
 
       {/* Screen content */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="flex-1 overflow-y-auto"
+        style={{ minHeight: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
+      >
         {currentScreen === "income-sources" && (
           <Screen1IncomeSources
             onNext={handleScreen1Next}

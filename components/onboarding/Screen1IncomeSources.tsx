@@ -54,7 +54,7 @@ export default function Screen1IncomeSources({ onNext, defaultValue = 1 }: Scree
           className="text-meta mb-6"
           style={{ color: "var(--text-secondary)" }}
         >
-          Whether you're juggling side hustles, contract work, or a traditional job, we've got you covered. This helps us tailor your experience.
+          Whether you&apos;re juggling side hustles, contract work, or a traditional job, we&apos;ve got you covered. This helps us tailor your experience.
         </p>
 
         {/* Options */}

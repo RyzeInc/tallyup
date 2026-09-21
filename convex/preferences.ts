@@ -317,3 +317,73 @@ export const resetDashboardLayout = mutation({
     }
   },
 });
+
+/**
+ * Whether the onboarding flow should run for the current user.
+ *
+ * Onboarding is for people starting from an empty app. It used to gate the
+ * whole app on `onboardingCompleted`, which is undefined for every account
+ * created before the flag existed — so established users with months of data
+ * were pushed back through a four-screen setup wizard.
+ *
+ * Anyone who already has data is treated as done, regardless of the flag.
+ */
+export const getOnboardingStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { shouldOnboard: false, reason: "signed-out" as const };
+    const userId = identity.subject;
+
+    const prefs = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    if (prefs?.onboardingCompleted) {
+      return { shouldOnboard: false, reason: "completed" as const };
+    }
+
+    // Cheap existence probes: each is a single indexed row read.
+    const [entry, account, budget, goal] = await Promise.all([
+      ctx.db.query("entries").withIndex("by_user_date", (q) => q.eq("userId", userId)).first(),
+      ctx.db.query("accounts").withIndex("by_user", (q) => q.eq("userId", userId)).first(),
+      ctx.db.query("budgetCategories").withIndex("by_user", (q) => q.eq("userId", userId)).first(),
+      ctx.db.query("goals").withIndex("by_user", (q) => q.eq("userId", userId)).first(),
+    ]);
+
+    if (entry || account || budget || goal) {
+      return { shouldOnboard: false, reason: "has-data" as const };
+    }
+
+    return { shouldOnboard: true, reason: "new-user" as const };
+  },
+});
+
+/** Marks onboarding done. Used by both "finish" and "skip". */
+export const dismissOnboarding = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+    const userId = identity.subject;
+
+    const existing = await ctx.db
+      .query("userPreferences")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, { onboardingCompleted: true, updatedAt: now });
+    } else {
+      await ctx.db.insert("userPreferences", {
+        userId,
+        onboardingCompleted: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true };
+  },
+});

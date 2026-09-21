@@ -1,5 +1,7 @@
 "use client";
 
+
+import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
 import * as Lucide from "lucide-react";
@@ -19,18 +21,26 @@ interface Screen4Props {
  * Screen 4: Dashboard preview with real data
  * 
  * Shows the dashboard now populated with their actual data,
- * not empty widgets. This gets them excited about what's possible.
+ * not empty widgets. This gets them excited about what&apos;s possible.
  */
 export default function Screen4Dashboard({
   onComplete,
   isLoading = false,
   incomeData,
 }: Screen4Props) {
-  const dashboardData = useQuery(api.dashboard.getDashboardData, {
-    periodStart: new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime(),
-    periodEnd: Date.now(),
-    upcomingDays: 30,
-  });
+  // Computed once per mount. Building these inline meant new argument values on
+  // every render, so the Convex subscription was torn down and recreated
+  // continuously instead of staying live.
+  const period = useMemo(() => {
+    const now = new Date();
+    return {
+      periodStart: new Date(now.getFullYear(), now.getMonth(), 1).getTime(),
+      periodEnd: now.getTime(),
+      upcomingDays: 30,
+    };
+  }, []);
+
+  const dashboardData = useQuery(api.dashboard.getDashboardData, period);
 
   // Format money
   const formatMoney = (cents: number) => {
@@ -49,13 +59,13 @@ export default function Screen4Dashboard({
           className="text-h1 mb-2"
           style={{ color: "var(--text)" }}
         >
-          You're all set!
+          You&apos;re all set!
         </h1>
         <p
           className="text-body"
           style={{ color: "var(--text-secondary)" }}
         >
-          Here's a preview of your dashboard with real data.
+          Here&apos;s a preview of your dashboard with real data.
         </p>
       </div>
 
@@ -74,7 +84,7 @@ export default function Screen4Dashboard({
               <div className="flex items-center gap-2">
                 <Lucide.ArrowDownLeft className="h-5 w-5" style={{ color: "var(--success)" }} />
                 <span className="text-meta font-semibold" style={{ color: "var(--text-secondary)" }}>
-                  This Month's Income
+                  This Month&apos;s Income
                 </span>
               </div>
             </div>
@@ -134,7 +144,7 @@ export default function Screen4Dashboard({
           <div className="flex items-center gap-2 mb-4">
             <Lucide.Sparkles className="h-5 w-5" style={{ color: "var(--accent)" }} />
             <span className="text-body font-semibold" style={{ color: "var(--text)" }}>
-              What's Next
+              What&apos;s Next
             </span>
           </div>
           <div className="space-y-2">
@@ -204,7 +214,7 @@ export default function Screen4Dashboard({
         }}
       >
         <div className="text-meta font-semibold" style={{ color: "var(--success)" }}>
-          ✨ You're ready to go!
+          ✨ You&apos;re ready to go!
         </div>
         <div className="text-meta mt-1" style={{ color: "var(--text-secondary)" }}>
           Start logging transactions and build your financial picture.
