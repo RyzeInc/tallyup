@@ -390,4 +390,13 @@ export type CoachProviderInput = {
 export type CoachProvider = {
   id: "mock" | "groq" | "cloudflare" | "openai";
   generate: (input: CoachProviderInput) => Promise<CoachOutput>;
+  /**
+   * Yields raw text deltas as the model produces them. The caller accumulates
+   * the deltas and parses the completed text with `parseCoachOutput`, so the
+   * structured result is identical to `generate`.
+   *
+   * Optional: providers without a streaming endpoint simply omit it and
+   * callers fall back to `generate`.
+   */
+  generateStream?: (input: CoachProviderInput) => AsyncIterable<string>;
 };

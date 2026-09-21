@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useAction, useMutation, useConvex } from "convex/react";
 import { api } from "convex/_generated/api";
+import { useCoachStream } from "@/components/coach/useCoachStream";
 import { useRouter } from "next/navigation";
 import type { Id } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
@@ -114,7 +115,9 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Convex operations
-  const sendMessage = useAction(api.coach.chat);
+  // Streams tokens as they arrive, falling back to the plain coach.chat action
+  // if the streaming endpoint is unavailable.
+  const { send: sendMessage, streamingText, isStreaming } = useCoachStream();
   const updateCoachState = useMutation(api.coach.updateCoachState);
   const updateCoachFoundation = useMutation(api.coach.updateCoachFoundation);
   const resetSession = useMutation(api.coach.resetSession);
@@ -265,9 +268,8 @@ export default function ChatPage() {
         setSaveError({ messageIndex, content: trimmed });
       }
 
-      // Get AI response
-      const result = await sendMessage({
-        message: trimmed,
+      // Get AI response (streams into `streamingText` while in flight)
+      const result = await sendMessage(trimmed, {
         clientContextHash: contextHash ?? undefined,
       });
 
@@ -543,12 +545,14 @@ export default function ChatPage() {
                 />
               ))}
 
-              {/* Thinking indicator */}
+              {/* Live response: shows tokens as they stream, and falls back to
+                  a thinking indicator before the first token arrives. */}
               {sending && (
                 <CoachMessageBubble
                   role="assistant"
-                  content=""
-                  isLoading={true}
+                  content={streamingText}
+                  isLoading={!streamingText}
+                  enableChunking={false}
                 />
               )}
             </div>

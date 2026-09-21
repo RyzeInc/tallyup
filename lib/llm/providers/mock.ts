@@ -616,18 +616,21 @@ function shouldUseBlockFormat(): boolean {
   return true; // Default to blocks
 }
 
+function buildMockAssistantMessage(input: Parameters<typeof buildMockResponse>[0]) {
+  const payload = buildMockResponse(input);
+  const useBlocks = shouldUseBlockFormat();
+  const assistantMessage = useBlocks
+    ? convertToBlockFormat(payload)
+    : (payload.assistantMessage ?? "I'm ready to help. What would you like to focus on?");
+  return { payload, assistantMessage };
+}
+
 export function createMockProvider(): CoachProvider {
   return {
     id: "mock",
     generate: async (input) => {
-      const payload = buildMockResponse(input);
-      const useBlocks = shouldUseBlockFormat();
-      
-      // If block format is enabled, convert the response
-      const assistantMessage = useBlocks 
-        ? convertToBlockFormat(payload)
-        : (payload.assistantMessage ?? "I'm ready to help. What would you like to focus on?");
-      
+      const { payload, assistantMessage } = buildMockAssistantMessage(input);
+
       return CoachOutputSchema.parse({
         assistantMessage,
         summaryBullets: payload.summaryBullets ?? [],
@@ -637,6 +640,18 @@ export function createMockProvider(): CoachProvider {
         foundationUpdates: payload.foundationUpdates,
         transactionDrilldownRequest: payload.transactionDrilldownRequest,
       });
+    },
+    /**
+     * Emits the canned response in small chunks so the streaming transport can
+     * be exercised end to end without provider credentials.
+     */
+    generateStream: async function* (input) {
+      const { assistantMessage } = buildMockAssistantMessage(input);
+      const tokens = assistantMessage.match(/\S+\s*/g) ?? [assistantMessage];
+      for (const token of tokens) {
+        await new Promise((resolve) => setTimeout(resolve, 8));
+        yield token;
+      }
     },
   };
 }

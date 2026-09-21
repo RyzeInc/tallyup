@@ -1,6 +1,7 @@
 import type { CoachProvider, CoachProviderInput } from "../types";
 import { parseCoachOutput } from "../parseOutput";
 import { buildCompactContext, buildConversationMessages, estimateTokens } from "../contextBuilder";
+import { iterateChatCompletionStream } from "./sse";
 
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_MODEL = "gpt-4o";
@@ -14,7 +15,8 @@ function parseNumber(value: string | undefined, fallback: number): number {
   return parsed;
 }
 
-async function callOpenAI(input: CoachProviderInput) {
+/** Shared request construction for the streaming and non-streaming calls. */
+function buildRequest(input: CoachProviderInput, stream: boolean) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY.");
 
@@ -25,7 +27,7 @@ async function callOpenAI(input: CoachProviderInput) {
   // Build compact context with intent gating
   const intent = input.contextPacket.intent ?? undefined;
   const compactContext = buildCompactContext(input.contextPacket, { intent });
-  
+
   // Only last 4 messages (summarize-and-replace)
   const conversation = buildConversationMessages(input.contextPacket, 4);
 
@@ -43,27 +45,36 @@ async function callOpenAI(input: CoachProviderInput) {
     const systemTokens = estimateTokens(systemWithContext);
     const convTokens = estimateTokens(conversation.map(m => m.content).join(" "));
     const msgTokens = estimateTokens(input.message);
-    console.info(`[openai] model=${model} temp=${temperature} maxTokens=${maxTokens}`);
+    console.info(`[openai] model=${model} temp=${temperature} maxTokens=${maxTokens} stream=${stream}`);
     console.info(`[openai] tokens est: system=${systemTokens} conv=${convTokens} msg=${msgTokens} total=${systemTokens + convTokens + msgTokens}`);
   }
 
-  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      temperature,
-      max_tokens: maxTokens,
-      messages: [
-        { role: "system", content: systemWithContext },
-        ...conversation,
-        { role: "user", content: input.message },
-      ],
-    }),
-  });
+  return {
+    url: `${OPENAI_BASE_URL}/chat/completions`,
+    init: {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        stream,
+        messages: [
+          { role: "system", content: systemWithContext },
+          ...conversation,
+          { role: "user", content: input.message },
+        ],
+      }),
+    } satisfies RequestInit,
+  };
+}
+
+async function callOpenAI(input: CoachProviderInput) {
+  const { url, init } = buildRequest(input, false);
+  const response = await fetch(url, init);
 
   if (!response.ok) {
     const text = await response.text();
@@ -80,9 +91,22 @@ async function callOpenAI(input: CoachProviderInput) {
   return parseCoachOutput(content);
 }
 
+async function* streamOpenAI(input: CoachProviderInput): AsyncGenerator<string, void, void> {
+  const { url, init } = buildRequest(input, true);
+  const response = await fetch(url, init);
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenAI stream request failed: ${response.status} ${text}`);
+  }
+
+  yield* iterateChatCompletionStream(response);
+}
+
 export function createOpenAIProvider(): CoachProvider {
   return {
     id: "openai",
     generate: async (input) => callOpenAI(input),
+    generateStream: (input) => streamOpenAI(input),
   };
 }

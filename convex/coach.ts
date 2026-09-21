@@ -1,11 +1,12 @@
 import { v } from "convex/values";
-import { action, mutation, query } from "./_generated/server";
+import { action, mutation, query, type ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { buildContextPacket, hashContextPacket, summarizePacket, classifyIntent } from "./coach_internal";
 import { getCoachProvider } from "../lib/llm";
 import { buildCoachSystemPrompt } from "../lib/llm/prompt";
 import type { CoachOutput } from "../lib/llm/schema";
-import type { CoachContextPacket } from "../lib/llm/types";
+import type { CoachContextPacket, ConversationMode } from "../lib/llm/types";
+import type { Id } from "./_generated/dataModel";
 import { applyAntiLoopGuards } from "../lib/llm/antiLoopGuard";
 import { CoachProfileUpdateSchema, type CoachProfileUpdate } from "../lib/coach/profile";
 import { CoachFoundationUpdateSchema, type CoachFoundationUpdate } from "../lib/coach/foundation";
@@ -57,6 +58,193 @@ type ChatResponse = {
   transactionDrilldownRequest?: { reason: string; windowDays: number };
 };
 
+export type CoachTurnArgs = {
+  message: string;
+  clientContextHash?: string;
+  conversationMode?: ConversationMode;
+};
+
+/**
+ * Shared by `action` and `httpAction` contexts. Naming it lets the streaming
+ * endpoint reuse the orchestration below without introducing a second Convex
+ * function boundary (and a second copy of this logic that could drift).
+ */
+type CoachActionCtx = Pick<ActionCtx, "runMutation">;
+
+export type PreparedTurn = {
+  contextHash: string;
+  packet: CoachContextPacket;
+  packetWithKnowledge: CoachContextPacket;
+  systemPrompt: string;
+  provider: ReturnType<typeof getCoachProvider>["provider"];
+  usesExternal: boolean;
+  rawMode: boolean;
+  /** Set when the daily budget is exhausted; callers should short-circuit. */
+  budgetExceeded: boolean;
+};
+
+/** Everything that happens before the model is called. */
+export async function prepareCoachTurn(
+  ctx: CoachActionCtx,
+  userId: string,
+  args: CoachTurnArgs
+): Promise<PreparedTurn> {
+  const contextPacketResult: { hash: string; packet: CoachContextPacket } = await ctx.runMutation(
+    internal.coach_internal.getOrBuildContextPacket,
+    { userId, clientContextHash: args.clientContextHash }
+  );
+  const contextHash = contextPacketResult.hash;
+  const packet = contextPacketResult.packet;
+
+  const [knowledgeSnippets, memorySnippets] = await Promise.all([
+    ctx.runMutation(internal.coach_internal.getOrBuildKnowledgeSnippets, {
+      userId,
+      message: args.message,
+      topK: 4,
+    }),
+    ctx.runMutation(internal.coach_internal.getRelevantMemories, {
+      userId,
+      message: args.message,
+      topK: 6,
+    }),
+  ]);
+
+  const intent = classifyIntent(args.message);
+  const packetWithKnowledge: CoachContextPacket = {
+    ...packet,
+    knowledgeSnippets,
+    memorySnippets,
+    intent,
+    conversationMode: args.conversationMode ?? "default",
+  };
+
+  const { provider, usesExternal, selected, mockReason } = getCoachProvider();
+
+  const systemPrompt = buildCoachSystemPrompt({
+    healthSummary: packetWithKnowledge.healthSummary,
+    contextDepth: packetWithKnowledge.contextDepth,
+    intent: packetWithKnowledge.intent,
+    conversationMode: packetWithKnowledge.conversationMode,
+    dataFreshness: packetWithKnowledge.dataFreshness,
+  });
+
+  const rawMode = process.env.COACH_RAW_MODE === "true";
+  if (process.env.COACH_DEBUG === "true") {
+    console.info(
+      `[coach] provider=${selected}${mockReason ? ` (mock: ${mockReason})` : ""} external=${usesExternal} rawMode=${rawMode} mode=${packetWithKnowledge.conversationMode}`
+    );
+  }
+
+  let budgetExceeded = false;
+  if (usesExternal) {
+    const budget = await ctx.runMutation(internal.coach_internal.incrementDailyUsage, { userId });
+    budgetExceeded = !budget.allowed;
+  }
+
+  return {
+    contextHash,
+    packet,
+    packetWithKnowledge,
+    systemPrompt,
+    provider,
+    usesExternal,
+    rawMode,
+    budgetExceeded,
+  };
+}
+
+export const BUDGET_EXCEEDED_MESSAGE =
+  "I'm at my daily coaching limit right now. Please try again later today.";
+
+/** Everything that happens after the model returns. */
+export async function finalizeCoachTurn(
+  ctx: CoachActionCtx,
+  userId: string,
+  userMessage: string,
+  prepared: PreparedTurn,
+  output: CoachOutput
+): Promise<ChatResponse> {
+  const { contextHash, packet, rawMode } = prepared;
+
+  // In raw mode, skip all post-processing and just persist the response.
+  if (rawMode) {
+    await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
+      userId,
+      userMessage,
+      llmOutput: {
+        assistantMessage: output.assistantMessage,
+        summaryBullets: output.summaryBullets ?? [],
+        actions: output.actions ?? [],
+        openQuestions: output.openQuestions ?? [],
+        metricsUsed: output.metricsUsed ?? [],
+      },
+      contextHash,
+    });
+
+    return {
+      assistantMessage: output.assistantMessage,
+      actions: output.actions ?? [],
+      followUps: output.openQuestions ?? [],
+      contextHash,
+    };
+  }
+
+  const guardResult = applyAntiLoopGuards(output, { userMessage, contextPacket: packet });
+  const llmOutput = guardResult.output;
+
+  await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
+    userId,
+    userMessage,
+    llmOutput: {
+      assistantMessage: llmOutput.assistantMessage,
+      summaryBullets: llmOutput.summaryBullets,
+      actions: llmOutput.actions,
+      openQuestions: llmOutput.openQuestions,
+      metricsUsed: llmOutput.metricsUsed,
+    },
+    contextHash,
+  });
+
+  const fallbackSummary = llmOutput.summaryBullets.length
+    ? llmOutput.summaryBullets.join(" ")
+    : undefined;
+  const fallbackOpenLoops = llmOutput.openQuestions.length ? llmOutput.openQuestions : undefined;
+
+  await ctx.runMutation(internal.coach_internal.upsertSessionState, {
+    userId,
+    summary: llmOutput.memoryDelta?.summary ?? fallbackSummary,
+    openLoops: llmOutput.memoryDelta?.openLoops ?? fallbackOpenLoops,
+    slotLedger: guardResult.slotLedger,
+    establishedFacts: guardResult.establishedFacts,
+    frustrationDetectedAt: guardResult.frustrationDetectedAt ?? undefined,
+  });
+
+  if (llmOutput.memoryUpdates && llmOutput.memoryUpdates.length > 0) {
+    await ctx.runMutation(internal.coach_internal.upsertCoachMemory, {
+      userId,
+      memories: llmOutput.memoryUpdates,
+    });
+  }
+
+  if (llmOutput.profileUpdates || llmOutput.foundationUpdates) {
+    await ctx.runMutation(internal.coach_internal.upsertCoachDraft, {
+      userId,
+      profileUpdates: llmOutput.profileUpdates ?? undefined,
+      foundationUpdates: llmOutput.foundationUpdates ?? undefined,
+    });
+  }
+
+  return {
+    assistantMessage: llmOutput.assistantMessage,
+    actions: llmOutput.actions,
+    followUps: llmOutput.openQuestions,
+    contextHash,
+    profileUpdates: llmOutput.profileUpdates,
+    foundationUpdates: llmOutput.foundationUpdates,
+    transactionDrilldownRequest: llmOutput.transactionDrilldownRequest,
+  };
+}
+
 export const chat: ReturnType<typeof action> = action({
   args: {
     message: v.string(),
@@ -74,163 +262,35 @@ export const chat: ReturnType<typeof action> = action({
   },
   handler: async (ctx, args): Promise<ChatResponse> => {
     const userId = await requireUserId(ctx);
+    const prepared = await prepareCoachTurn(ctx, userId, args);
 
-    const contextPacketResult: { hash: string; packet: CoachContextPacket } = await ctx.runMutation(
-      internal.coach_internal.getOrBuildContextPacket,
-      {
-        userId,
-        clientContextHash: args.clientContextHash,
-      }
-    );
-    const contextHash = contextPacketResult.hash;
-    const packet = contextPacketResult.packet;
-
-    const knowledgeSnippets = await ctx.runMutation(
-      internal.coach_internal.getOrBuildKnowledgeSnippets,
-      { userId, message: args.message, topK: 4 }
-    );
-    const memorySnippets = await ctx.runMutation(
-      internal.coach_internal.getRelevantMemories,
-      { userId, message: args.message, topK: 6 }
-    );
-    const intent = classifyIntent(args.message);
-    const packetWithKnowledge: CoachContextPacket = {
-      ...packet,
-      knowledgeSnippets,
-      memorySnippets,
-      intent,
-      // Conversation mode from args (user-selected) or default to auto-detect
-      conversationMode: args.conversationMode ?? "default",
-    };
-
-    const { provider, usesExternal, selected } = getCoachProvider();
-    
-    // Dynamic system prompt based on user's health summary, context depth, intent, AND conversation mode
-    // Mode determines how data is used (learning = minimal, planning = heavy)
-    const systemPrompt = buildCoachSystemPrompt({
-      healthSummary: packetWithKnowledge.healthSummary,
-      contextDepth: packetWithKnowledge.contextDepth,
-      intent: packetWithKnowledge.intent,
-      conversationMode: packetWithKnowledge.conversationMode,
-      dataFreshness: packetWithKnowledge.dataFreshness,
-    });
-    
-    const rawMode = process.env.COACH_RAW_MODE === "true";
-    if (process.env.COACH_DEBUG === "true") {
-      console.info(`[coach.chat] provider=${selected} external=${usesExternal} rawMode=${rawMode} mode=${packetWithKnowledge.conversationMode}`);
-    }
-
-    if (usesExternal) {
-      const budget = await ctx.runMutation(internal.coach_internal.incrementDailyUsage, { userId });
-      if (!budget.allowed) {
-        return {
-          assistantMessage: "I'm at my daily coaching limit right now. Please try again later today.",
-          actions: [],
-          followUps: [],
-          contextHash,
-        };
-      }
+    if (prepared.budgetExceeded) {
+      return {
+        assistantMessage: BUDGET_EXCEEDED_MESSAGE,
+        actions: [],
+        followUps: [],
+        contextHash: prepared.contextHash,
+      };
     }
 
     let llmOutput: CoachOutput;
     try {
-      llmOutput = await provider.generate({
+      llmOutput = await prepared.provider.generate({
         message: args.message,
-        contextPacket: packetWithKnowledge,
-        systemPrompt,
+        contextPacket: prepared.packetWithKnowledge,
+        systemPrompt: prepared.systemPrompt,
       });
     } catch (err) {
       console.error(`[coach.chat] LLM provider error:`, err);
       const fallback = getCoachProvider({ forceMock: true });
       llmOutput = await fallback.provider.generate({
         message: args.message,
-        contextPacket: packetWithKnowledge,
-        systemPrompt,
+        contextPacket: prepared.packetWithKnowledge,
+        systemPrompt: prepared.systemPrompt,
       });
     }
 
-    // In raw mode, skip all post-processing and just return the LLM response
-    if (rawMode) {
-      await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
-        userId,
-        userMessage: args.message,
-        llmOutput: {
-          assistantMessage: llmOutput.assistantMessage,
-          summaryBullets: llmOutput.summaryBullets ?? [],
-          actions: llmOutput.actions ?? [],
-          openQuestions: llmOutput.openQuestions ?? [],
-          metricsUsed: llmOutput.metricsUsed ?? [],
-        },
-        contextHash,
-      });
-
-      return {
-        assistantMessage: llmOutput.assistantMessage,
-        actions: llmOutput.actions ?? [],
-        followUps: llmOutput.openQuestions ?? [],
-        contextHash,
-      };
-    }
-
-    // Apply anti-loop guards and get updated state
-    const guardResult = applyAntiLoopGuards(llmOutput, {
-      userMessage: args.message,
-      contextPacket: packet,
-    });
-    llmOutput = guardResult.output;
-
-    await ctx.runMutation(internal.coach_internal.storeCoachEvent, {
-      userId,
-      userMessage: args.message,
-      llmOutput: {
-        assistantMessage: llmOutput.assistantMessage,
-        summaryBullets: llmOutput.summaryBullets,
-        actions: llmOutput.actions,
-        openQuestions: llmOutput.openQuestions,
-        metricsUsed: llmOutput.metricsUsed,
-      },
-      contextHash,
-    });
-
-    const fallbackSummary = llmOutput.summaryBullets.length
-      ? llmOutput.summaryBullets.join(" ")
-      : undefined;
-    const fallbackOpenLoops = llmOutput.openQuestions.length ? llmOutput.openQuestions : undefined;
-
-    // Always update session state with slot ledger and established facts
-    await ctx.runMutation(internal.coach_internal.upsertSessionState, {
-      userId,
-      summary: llmOutput.memoryDelta?.summary ?? fallbackSummary,
-      openLoops: llmOutput.memoryDelta?.openLoops ?? fallbackOpenLoops,
-      slotLedger: guardResult.slotLedger,
-      establishedFacts: guardResult.establishedFacts,
-      frustrationDetectedAt: guardResult.frustrationDetectedAt ?? undefined,
-    });
-
-    if (llmOutput.memoryUpdates && llmOutput.memoryUpdates.length > 0) {
-      await ctx.runMutation(internal.coach_internal.upsertCoachMemory, {
-        userId,
-        memories: llmOutput.memoryUpdates,
-      });
-    }
-
-    if (llmOutput.profileUpdates || llmOutput.foundationUpdates) {
-      await ctx.runMutation(internal.coach_internal.upsertCoachDraft, {
-        userId,
-        profileUpdates: llmOutput.profileUpdates ?? undefined,
-        foundationUpdates: llmOutput.foundationUpdates ?? undefined,
-      });
-    }
-
-    return {
-      assistantMessage: llmOutput.assistantMessage,
-      actions: llmOutput.actions,
-      followUps: llmOutput.openQuestions,
-      contextHash,
-      profileUpdates: llmOutput.profileUpdates,
-      foundationUpdates: llmOutput.foundationUpdates,
-      transactionDrilldownRequest: llmOutput.transactionDrilldownRequest,
-    };
+    return finalizeCoachTurn(ctx, userId, args.message, prepared, llmOutput);
   },
 });
 
@@ -551,9 +611,9 @@ export const getConversation = query({
   handler: async (ctx, args) => {
     const userId = await requireUserId(ctx);
     
-    // Get the conversation's first event
-    const firstEvent = await ctx.db.get(args.conversationId as any);
-    if (!firstEvent || (firstEvent as any).userId !== userId) {
+    // The conversation id is the id of its first coachEvents row.
+    const firstEvent = await ctx.db.get(args.conversationId as Id<"coachEvents">);
+    if (!firstEvent || firstEvent.userId !== userId) {
       return null;
     }
 
