@@ -911,6 +911,31 @@ export const listInbox = query({
   },
 });
 
+/**
+ * Count of entries awaiting review, for nav badges.
+ *
+ * The nav bars used to call listInbox({ limit: 999 }) and read .length,
+ * shipping up to 200 full documents (the clamped limit) to render a number,
+ * in two components at once, and silently capping the badge at 200.
+ * Mirrors listInbox's filters so the badge and the list agree.
+ */
+export const countInbox = query({
+  args: { max: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    // Cap the scan so this stays cheap; the badge renders "99+" well before it.
+    const max = Math.min(Math.max(args.max ?? 100, 1), 500);
+    const rows = await ctx.db
+      .query("entries")
+      .withIndex("by_user_needsReview_date", q =>
+        q.eq("userId", userId).eq("needsReview", true)
+      )
+      .filter(q => q.neq(q.field("isArchived"), true))
+      .take(max);
+    return { count: rows.length, atLeast: rows.length >= max };
+  },
+});
+
 export const listEntries = query({
   args: {
     type: v.optional(v.union(v.literal("expense"), v.literal("income"))),

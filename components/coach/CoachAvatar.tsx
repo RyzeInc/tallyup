@@ -25,21 +25,18 @@ export default function CoachAvatar({
   size = "md",
   className = "" 
 }: CoachAvatarProps) {
-  const [dots, setDots] = useState("");
+  const [tick, setTick] = useState(0);
 
-  // Thinking animation - dots
+  // Thinking animation - dots. Only the tick counter is stateful; the rendered
+  // string is derived, so leaving "thinking" needs no state reset in the effect.
   useEffect(() => {
-    if (state !== "thinking") {
-      setDots("");
-      return;
-    }
+    if (state !== "thinking") return;
 
-    const interval = setInterval(() => {
-      setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
-    }, 400);
-
+    const interval = setInterval(() => setTick((prev) => prev + 1), 400);
     return () => clearInterval(interval);
   }, [state]);
+
+  const dots = state === "thinking" ? ".".repeat(tick % 4) : "";
 
   const sizeStyles = {
     sm: { width: 40, height: 40, fontSize: 20 },

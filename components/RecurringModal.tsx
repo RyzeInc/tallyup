@@ -31,10 +31,13 @@ export default function RecurringModal({
   const [merchant, setMerchant] = useState(entry.merchant ?? "");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>(entry.categoryId as string | undefined);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(entry.accountId as string | undefined);
-  // Initialize anchorDate from entry date
+  // Initialize anchorDate from entry date. A missing or non-finite date used
+  // to throw RangeError from toISOString() during render, taking the whole
+  // modal down; fall back to today instead.
   const [anchorDate, setAnchorDate] = useState(() => {
     const d = new Date(entry.date);
-    return d.toISOString().slice(0, 10);
+    const safe = Number.isFinite(d.getTime()) ? d : new Date();
+    return safe.toISOString().slice(0, 10);
   });
   const create = useMutation(api.recurring.createRecurringRule);
   const link = useMutation(api.recurring.linkEntriesToRule);

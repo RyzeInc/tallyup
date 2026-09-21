@@ -69,7 +69,7 @@ function detectRecurringPatterns(entries: Entry[]): RecurringCandidate[] {
     
     // Detect cadence from average interval
     const avgInterval = Math.round(intervals.reduce((a, b) => a + b) / intervals.length);
-    let cadence = detectCadence(avgInterval);
+    const cadence = detectCadence(avgInterval);
     
     // Calculate amount tolerance (variance)
     const amounts = sorted.map(e => e.amountCents);

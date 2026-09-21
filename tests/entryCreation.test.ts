@@ -68,7 +68,7 @@ class MockDB {
   // yield first — the source of an intermittent failure in this file.
   snapshots: Map<string, { accountId: string; balance: number; seq: number }> = new Map();
   private snapshotSeq = 0;
-  budgetDirtyQueue: any[] = [];
+  budgetDirtyQueue: Record<string, unknown>[] = [];
   
   insertEntry(entry: Omit<Entry, '_id'>): string {
     const id = `entry_${Date.now()}_${Math.random()}`;

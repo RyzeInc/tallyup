@@ -63,8 +63,10 @@ export default function CoachInsightsPage() {
     if (!snapshot?.snapshot) return [];
 
     const result: Insight[] = [];
-    const now = Date.now();
     const { cashflow, anomalies, topCategories, upcomingBills } = snapshot.snapshot;
+    // Anchored to when the snapshot was computed rather than Date.now(), which
+    // is impure during render and shifts on every re-render.
+    const now = snapshot.snapshot.updatedAt ?? 0;
 
     // Anomaly insights
     if (anomalies && anomalies.length > 0) {

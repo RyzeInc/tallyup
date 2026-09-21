@@ -12,5 +12,5 @@ vi.mock('convex/react', () => ({
   useQuery: vi.fn(),
   useMutation: vi.fn(),
   useAction: vi.fn(),
-  ConvexProvider: ({ children }: any) => children,
+  ConvexProvider: ({ children }: { children: React.ReactNode }) => children,
 }));

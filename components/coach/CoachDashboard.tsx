@@ -105,14 +105,16 @@ export default function CoachDashboard() {
     return "Good evening";
   }, []);
 
-  // Get recent conversations from coach events
+  // Get recent conversations from coach events.
+  // Anchored to when the snapshot was computed: reading Date.now() during
+  // render recomputed to different values on every re-render.
   const recentConversations = useMemo(() => {
     if (!snapshot?.snapshot) return [];
-    
-    // This would come from coach events - for now return placeholder
+
+    const anchor = snapshot.snapshot.updatedAt ?? 0;
     return snapshot.snapshot.recentSummaries?.map((summary, index) => ({
-      id: `conv-${index}`,
-      date: Date.now() - (index * 24 * 60 * 60 * 1000), // Mock dates
+      id: `conv-`,
+      date: anchor - index * 24 * 60 * 60 * 1000,
       summary,
       tags: [],
     })) || [];
