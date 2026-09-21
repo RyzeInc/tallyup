@@ -153,7 +153,10 @@
   --bottomnav-height: 72px;
   --content-max-width: 560px;
   --content-max-width-wide: 1400px;
-  
+  /* Bottom padding reserved for scrollable page content. The fixed BottomNav
+     only exists under the md breakpoint, so wider viewports need less. */
+  --bottom-nav-clearance: calc(var(--bottomnav-height) + 24px);
+
   /* -------- Shadows -------- */
   --shadow-card: var(--shadow-foam);
   --shadow-sm: 0 1px 2px 0 rgba(74, 89, 104, 0.04);
@@ -1908,6 +1911,19 @@ button, a, [role="button"] {
 @media (max-width: 640px) {
   :root {
     --text-kpi: 2rem;
+  }
+}
+
+/* BottomNav is md:hidden, so reclaim its reserved space on wider viewports. */
+@media (min-width: 768px) {
+  :root {
+    --bottom-nav-clearance: 24px;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

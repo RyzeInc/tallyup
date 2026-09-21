@@ -1,13 +1,16 @@
 import AppShell from "@/components/shell/AppShell";
-import { PersistentTabsProvider } from "@/components/PersistentTabs";
 import { QuickLogProvider } from "@/components/log";
+import ConvexClientProvider from "@/app/ConvexClientProvider";
+import AuthGate from "@/components/AuthGate";
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
   return (
-    <PersistentTabsProvider>
-      <QuickLogProvider>
-        <AppShell>{children}</AppShell>
-      </QuickLogProvider>
-    </PersistentTabsProvider>
+    <AuthGate>
+      <ConvexClientProvider>
+        <QuickLogProvider>
+          <AppShell>{children}</AppShell>
+        </QuickLogProvider>
+      </ConvexClientProvider>
+    </AuthGate>
   );
 }

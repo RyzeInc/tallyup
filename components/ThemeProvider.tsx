@@ -1,6 +1,12 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useCallback,
+  useSyncExternalStore,
+} from "react";
 
 /**
  * TallyUp Theme System
@@ -41,6 +47,109 @@ const DEFAULT_VISIBLE_NAV: CustomizableNavItem[] = ["activity", "budgeting", "re
 
 const NAV_PREFS_KEY = "tallyup.navItems";
 
+const THEME_KEY = "tallyup.theme";
+const DEFAULT_THEME: ThemeMode = "porcelain";
+
+/**
+ * Injected into <head> and run before first paint. Reading localStorage during
+ * render would either throw on the server or (worse) return a different value
+ * than the client, producing a hydration mismatch and a theme flash. Applying
+ * the class here keeps the server HTML and the client in agreement.
+ */
+export const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem(${JSON.stringify(
+  THEME_KEY
+)});var a=${JSON.stringify(THEME_CLASSES)};if(!t||a.indexOf(t)===-1)t=${JSON.stringify(
+  DEFAULT_THEME
+)};var e=document.documentElement;a.forEach(function(c){e.classList.remove(c)});e.classList.add(t)}catch(_){}})();`;
+
+/**
+ * localStorage-backed store read through useSyncExternalStore.
+ *
+ * This is the piece that makes the provider SSR-safe: `getServerSnapshot`
+ * returns the defaults so server HTML is deterministic, while `getSnapshot`
+ * returns the persisted values on the client. React reconciles the difference
+ * after hydration without a mismatch warning and without a setState-in-effect
+ * cascade. Snapshots are memoised because useSyncExternalStore requires a
+ * referentially stable result.
+ */
+const listeners = new Set<() => void>();
+
+function emitStoreChange() {
+  for (const listener of listeners) listener();
+}
+
+function subscribeToPrefs(listener: () => void) {
+  listeners.add(listener);
+  // Keep other tabs in sync.
+  window.addEventListener("storage", listener);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+let themeSnapshot: ThemeMode | undefined;
+let themeSnapshotRaw: string | null = null;
+
+function getThemeSnapshot(): ThemeMode {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(THEME_KEY);
+  } catch {
+    return DEFAULT_THEME;
+  }
+  if (raw !== themeSnapshotRaw || themeSnapshot === undefined) {
+    themeSnapshotRaw = raw;
+    themeSnapshot =
+      raw && THEME_CLASSES.includes(raw as ThemeMode) ? (raw as ThemeMode) : DEFAULT_THEME;
+  }
+  return themeSnapshot;
+}
+
+function getThemeServerSnapshot(): ThemeMode {
+  return DEFAULT_THEME;
+}
+
+let navSnapshot: CustomizableNavItem[] | undefined;
+let navSnapshotRaw: string | null = null;
+
+function getNavSnapshot(): CustomizableNavItem[] {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(NAV_PREFS_KEY);
+  } catch {
+    return DEFAULT_VISIBLE_NAV;
+  }
+  if (raw !== navSnapshotRaw || navSnapshot === undefined) {
+    navSnapshotRaw = raw;
+    if (!raw) {
+      navSnapshot = DEFAULT_VISIBLE_NAV;
+    } else {
+      try {
+        const parsed = JSON.parse(raw) as CustomizableNavItem[];
+        const validated = parsed.filter((item) => NAV_ITEM_CONFIG.some((c) => c.id === item));
+        // Migration: users with saved prefs predate the coach tab.
+        if (!validated.includes("coach")) validated.push("coach");
+        navSnapshot = validated;
+      } catch {
+        navSnapshot = DEFAULT_VISIBLE_NAV;
+      }
+    }
+  }
+  return navSnapshot;
+}
+
+function getNavServerSnapshot(): CustomizableNavItem[] {
+  return DEFAULT_VISIBLE_NAV;
+}
+
+function writePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+  emitStoreChange();
+}
+
 const ThemeContext = createContext<{
   theme: ThemeMode;
   setTheme: (mode: ThemeMode) => void;
@@ -51,72 +160,38 @@ const ThemeContext = createContext<{
 } | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  // Light-first: default to light, never auto-switch to dark
-  const [theme, setThemeState] = useState<ThemeMode>(() => {
-    try {
-      const saved = localStorage.getItem("tallyup.theme") as ThemeMode | null;
-      if (saved && THEME_CLASSES.includes(saved)) return saved;
-      return "porcelain";
-    } catch {
-      return "porcelain";
-    }
-  });
+  const theme = useSyncExternalStore(
+    subscribeToPrefs,
+    getThemeSnapshot,
+    getThemeServerSnapshot
+  );
+  const visibleNavItems = useSyncExternalStore(
+    subscribeToPrefs,
+    getNavSnapshot,
+    getNavServerSnapshot
+  );
 
-  // Navigation customization state
-  const [visibleNavItems, setVisibleNavItemsState] = useState<CustomizableNavItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(NAV_PREFS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as CustomizableNavItem[];
-        // Validate items
-        const validated = parsed.filter((item) => NAV_ITEM_CONFIG.some((c) => c.id === item));
-        // Migration: Add coach if user has saved prefs but coach isn't included yet
-        // This ensures existing users get the coach tab added to their nav
-        if (!validated.includes("coach")) {
-          validated.push("coach");
-          // Persist the migration
-          localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(validated));
-        }
-        return validated;
-      }
-      return DEFAULT_VISIBLE_NAV;
-    } catch {
-      return DEFAULT_VISIBLE_NAV;
-    }
-  });
-
-  // Apply theme to document
+  // Mirror the theme onto <html>. THEME_INIT_SCRIPT already applied the right
+  // class before first paint, so this only matters for subsequent changes.
   useEffect(() => {
-    // Remove all theme classes first
     THEME_CLASSES.forEach((cls) => document.documentElement.classList.remove(cls));
-    // Add the current theme class
     document.documentElement.classList.add(theme);
   }, [theme]);
 
-  function setTheme(newTheme: ThemeMode) {
-    setThemeState(newTheme);
-    try {
-      localStorage.setItem("tallyup.theme", newTheme);
-    } catch {}
-  }
+  const setTheme = useCallback((newTheme: ThemeMode) => {
+    writePref(THEME_KEY, newTheme);
+  }, []);
 
   const setVisibleNavItems = useCallback((items: CustomizableNavItem[]) => {
-    setVisibleNavItemsState(items);
-    try {
-      localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(items));
-    } catch {}
+    writePref(NAV_PREFS_KEY, JSON.stringify(items));
   }, []);
 
   const toggleNavItem = useCallback((item: CustomizableNavItem) => {
-    setVisibleNavItemsState((prev) => {
-      const next = prev.includes(item)
-        ? prev.filter((i) => i !== item)
-        : [...prev, item];
-      try {
-        localStorage.setItem(NAV_PREFS_KEY, JSON.stringify(next));
-      } catch {}
-      return next;
-    });
+    const current = getNavSnapshot();
+    const next = current.includes(item)
+      ? current.filter((i) => i !== item)
+      : [...current, item];
+    writePref(NAV_PREFS_KEY, JSON.stringify(next));
   }, []);
 
   const isNavItemVisible = useCallback((item: CustomizableNavItem) => {

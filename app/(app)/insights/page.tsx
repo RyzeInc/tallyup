@@ -12,7 +12,7 @@ import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTabs } from "@/components/PersistentTabs";
+import { useTabs } from "@/components/navigation/tabs";
 import {
   ResponsiveContainer,
   LineChart,

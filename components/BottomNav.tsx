@@ -1,25 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import * as Lucide from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useTabs } from "./PersistentTabs";
+import { useTabs, TAB_HREF, type TabId } from "./navigation/tabs";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Doc } from "convex/_generated/dataModel";
 
 /**
  * BottomNav - Fixed bottom tab bar (Rocket Money style)
- * 
+ *
  * Design rules:
  * - Fixed to bottom with safe area padding
  * - 5 primary tabs visible at all times
  * - Active tab has colored underline indicator
- * - Icons change from outline to filled when active
  * - Labels always visible below icons
  * - Minimum tap target 44px
+ * - Mobile only; the scrollable TopNav covers wider viewports
  */
-
-type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts" | "auto-sort";
 
 interface BottomTab {
   id: TabId;
@@ -29,11 +27,10 @@ interface BottomTab {
 }
 
 export default function BottomNav() {
-  const { activeTab, setActiveTab } = useTabs();
+  const { activeTab } = useTabs();
 
-  // Get review count for badge
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
-  const reviewCount = inbox?.length ?? 0;
+  const inboxCount = useQuery(api.entries.countInbox, {});
+  const reviewCount = inboxCount?.count ?? 0;
 
   // Primary bottom tabs (matching Rocket Money's 5-tab pattern)
   const bottomTabs: BottomTab[] = [
@@ -46,7 +43,8 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 safe-area-inset-bottom"
+      className="fixed bottom-0 left-0 right-0 z-50 safe-area-inset-bottom md:hidden"
+      aria-label="Primary"
       style={{
         background: "var(--surface)",
         borderTop: "1px solid var(--border)",
@@ -66,9 +64,10 @@ export default function BottomNav() {
           const Icon = tab.icon;
 
           return (
-            <button
+            <Link
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              href={TAB_HREF[tab.id]}
+              prefetch
               className="flex flex-col items-center justify-center relative"
               style={{
                 flex: 1,
@@ -78,6 +77,7 @@ export default function BottomNav() {
                 border: "none",
                 cursor: "pointer",
                 padding: "8px 4px",
+                textDecoration: "none",
                 transition: "all var(--motion-fast, 100ms) ease-out",
               }}
               aria-current={isActive ? "page" : undefined}
@@ -128,7 +128,7 @@ export default function BottomNav() {
               >
                 {tab.label}
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>

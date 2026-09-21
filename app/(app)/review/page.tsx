@@ -14,7 +14,7 @@ import { CONTEXT_TAGS } from "@/lib/constants";
 import { useToast } from "@/components/ToastProvider";
 import EmptyState from "@/components/ui/EmptyState";
 import * as Lucide from "lucide-react";
-import { useTabs } from "@/components/PersistentTabs";
+import { useTabs } from "@/components/navigation/tabs";
 import Link from "next/link";
 import type { Doc, Id } from "convex/_generated/dataModel";
 

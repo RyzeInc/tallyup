@@ -9,7 +9,7 @@ import type { Doc } from "convex/_generated/dataModel";
 import { centsToDollars, getCategoryDisplayName } from "@/components/utils";
 import * as Lucide from "lucide-react";
 import EditEntryModal from "@/components/EditEntryModal";
-import { useTabs } from "@/components/PersistentTabs";
+import { useTabs } from "@/components/navigation/tabs";
 import GlobalDateRangePicker from "@/components/GlobalDateRangePicker";
 import { useTimeRange } from "@/components/TimeRangeProvider";
 import { countsInCashflow, reportingAmount } from "@/lib/finance/semantics";
@@ -168,7 +168,7 @@ export default function DashboardPage() {
   });
 
   const entries = usePeriodEntries(startDate, endDate);
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Entry[] | undefined;
+  const inboxCount = useQuery(api.entries.countInbox, {});
   const expenseCategories = useQuery(api.categories.listCategories, { categoryType: "expense" });
   const incomeCategories = useQuery(api.categories.listCategories, { categoryType: "income" });
   const allCustomCategories = useMemo(() => {
@@ -216,7 +216,7 @@ export default function DashboardPage() {
     return { income, expense, net, bucketFinal, topCategory };
   }, [entries, allCustomCategories]);
 
-  const reviewCount = inbox?.length ?? 0;
+  const reviewCount = inboxCount?.count ?? 0;
 
   // Widget handlers
   const handleToggleEditMode = useCallback(() => {
@@ -386,7 +386,7 @@ export default function DashboardPage() {
         </SignedOut>
 
         <SignedIn>
-          {!entries || !inbox ? (
+          {!entries || inboxCount === undefined ? (
             <div className="space-y-4">
               <div className="h-16 rounded-lg animate-pulse" style={{ backgroundColor: "var(--surface-subtle)" }} />
               <div className="grid grid-cols-2 gap-3">

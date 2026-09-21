@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "convex/_generated/api";
-import type { Doc } from "convex/_generated/dataModel";
 import * as Lucide from "lucide-react";
-import { useTabs } from "./PersistentTabs";
+import { useTabs, TAB_HREF, type TabId } from "./navigation/tabs";
 import { useQuickLog } from "./log/QuickLogProvider";
 import { useTheme, type CustomizableNavItem } from "./ThemeProvider";
 
@@ -30,8 +30,6 @@ interface NavTab {
   customizableId?: CustomizableNavItem; // If set, this tab can be hidden by user
 }
 
-type TabId = "dashboard" | "activity" | "budgeting" | "recurring" | "goals" | "insights" | "help" | "more" | "calendar" | "review" | "accounts" | "auto-sort" | "coach";
-
 const iconMap = {
   LayoutDashboard: Lucide.LayoutDashboard,
   Activity: Lucide.Activity,
@@ -49,7 +47,7 @@ const iconMap = {
 };
 
 export default function TopNav() {
-  const { activeTab, setActiveTab } = useTabs();
+  const { activeTab } = useTabs();
   const { open: openQuickLog } = useQuickLog();
   const { visibleNavItems } = useTheme();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -57,8 +55,8 @@ export default function TopNav() {
   const [showRightFade, setShowRightFade] = useState(true);
 
   // Get review count for badge
-  const inbox = useQuery(api.entries.listInbox, { limit: 999 }) as Doc<"entries">[] | undefined;
-  const reviewCount = inbox?.length ?? 0;
+  const inboxCount = useQuery(api.entries.countInbox, {});
+  const reviewCount = inboxCount?.count ?? 0;
 
   // All possible tabs (order matters)
   const allTabs: NavTab[] = [
@@ -126,14 +124,14 @@ export default function TopNav() {
         className="flex items-center justify-between px-4"
         style={{ height: "var(--topbar-height)" }}
       >
-        <button
-          onClick={() => setActiveTab("more")}
+        <Link
+          href={TAB_HREF.more}
           className="text-lg font-semibold hover:opacity-80 transition-opacity"
-          style={{ color: "var(--header-text)", letterSpacing: "-0.01em", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          style={{ color: "var(--header-text)", letterSpacing: "-0.01em", textDecoration: "none", padding: 0 }}
           aria-label="Open menu"
         >
           TallyUp
-        </button>
+        </Link>
         
         {/* Quick Log Button - white on gradient */}
         <button
@@ -201,16 +199,18 @@ export default function TopNav() {
               const Icon = iconMap[tab.iconName];
 
               return (
-                <button
+                <Link
                   key={tab.id}
+                  href={TAB_HREF[tab.tabId]}
+                  prefetch
                   data-tab-id={tab.tabId}
-                  onClick={() => setActiveTab(tab.tabId)}
                   className="flex items-center gap-2 px-4 py-2.5 whitespace-nowrap relative"
                   style={{
                     scrollSnapAlign: "center",
                     minHeight: 44,
                     /* White text on gradient, opacity for inactive */
                     backgroundColor: "transparent",
+                    textDecoration: "none",
                     color: isActive ? "var(--header-text)" : "var(--header-text-muted, rgba(255,255,255,0.75))",
                     fontWeight: isActive ? 600 : 500,
                     transition: "all var(--motion-medium, 150ms) var(--ease-wave, ease-out)",
@@ -239,7 +239,7 @@ export default function TopNav() {
                       }}
                     />
                   )}
-                </button>
+                </Link>
               );
             })}
           </div>
