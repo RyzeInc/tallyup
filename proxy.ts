@@ -1,10 +1,15 @@
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { NextRequest, NextResponse as NextResponseType } from "next/server";
 
 /**
- * Security middleware that adds recommended security headers to all responses.
- * 
- * Headers added:
+ * Edge proxy: authentication + security headers.
+ *
+ * Auth was previously enforced only by a client component in the root layout,
+ * which meant every route was publicly reachable and `auth()` was unavailable
+ * on the server. Protection now happens here, before any page renders.
+ *
+ * Security headers added:
  * - X-Content-Type-Options: Prevents MIME type sniffing
  * - X-Frame-Options: Prevents clickjacking
  * - X-XSS-Protection: Legacy XSS protection for older browsers
@@ -12,33 +17,31 @@ import type { NextRequest } from "next/server";
  * - Permissions-Policy: Restricts browser features
  * - Strict-Transport-Security: Forces HTTPS (only in production)
  */
-export function proxy(request: NextRequest) {
-  const response = NextResponse.next();
 
-  // Prevent MIME type sniffing
+/** Marketing, auth screens, and PWA assets stay reachable when signed out. */
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/manifest.webmanifest",
+  "/sw.js",
+  "/icons/(.*)",
+]);
+
+function applySecurityHeaders(request: NextRequest, response: NextResponseType) {
   response.headers.set("X-Content-Type-Options", "nosniff");
-
-  // Prevent clickjacking - deny all framing
   response.headers.set("X-Frame-Options", "DENY");
-
-  // Legacy XSS protection for older browsers
   response.headers.set("X-XSS-Protection", "1; mode=block");
-
-  // Control referrer information
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-
-  // Restrict browser features we don't need
   response.headers.set(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=()"
   );
 
-  // HSTS - only enable in production with HTTPS
   const isProduction = process.env.NODE_ENV === "production";
   const isHttps = request.nextUrl.protocol === "https:";
-  
+
   if (isProduction && isHttps) {
-    // 1 year, include subdomains, allow preload list submission
     response.headers.set(
       "Strict-Transport-Security",
       "max-age=31536000; includeSubDomains; preload"
@@ -54,7 +57,8 @@ export function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.convex.cloud https://*.clerk.accounts.dev wss://*.convex.cloud https://plaid.com https://*.plaid.com",
+    // *.convex.site carries Convex HTTP actions, including the coach SSE stream.
+    "connect-src 'self' https://*.convex.cloud https://*.convex.site wss://*.convex.cloud https://*.clerk.accounts.dev https://plaid.com https://*.plaid.com",
     "frame-src 'self' https://*.clerk.accounts.dev https://cdn.plaid.com",
     "object-src 'none'",
     "base-uri 'self'",
@@ -70,7 +74,13 @@ export function proxy(request: NextRequest) {
   return response;
 }
 
-// Apply middleware to all routes except static assets and API routes that need flexibility
+export const proxy = clerkMiddleware(async (auth, request) => {
+  if (!isPublicRoute(request)) {
+    await auth.protect();
+  }
+  return applySecurityHeaders(request as NextRequest, NextResponse.next());
+});
+
 export const config = {
   matcher: [
     /*
